@@ -9,6 +9,7 @@ import { pickNextTask, generateDayPlan } from '@/lib/scheduler';
 import { Task } from '@/types/task';
 import { FocusTimer } from '@/components/FocusTimer';
 import { Auth } from '@/components/Auth';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { Zap, CalendarRange } from 'lucide-react';
 
 import Link from 'next/link';
@@ -38,14 +39,17 @@ export default function Home() {
   const todoTasks = tasks.filter(t => t.status !== 'done');
 
   return (
-    <div className="min-h-screen bg-[#fafafa] text-gray-900 font-sans pb-20">
+    <div className="min-h-screen bg-[#fafafa] dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans pb-20">
       <main className="max-w-xl mx-auto px-4 py-8">
         <header className="mb-8 flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight mb-1">My Dashboard</h1>
-            <p className="text-gray-500 text-sm">Design your day, master your time. <Link href="/features" className="underline hover:text-black">Features</Link></p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">Design your day, master your time. <Link href="/features" className="underline hover:text-black dark:hover:text-white">Features</Link></p>
           </div>
-          <Auth />
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Auth />
+          </div>
         </header>
 
         {/* Now Panel */}
@@ -61,7 +65,7 @@ export default function Home() {
                 onStop={() => setIsFocusing(false)}
               />
             ) : (
-                <div className="bg-black text-white p-6 rounded-2xl shadow-lg relative overflow-hidden">
+                <div className="bg-black dark:bg-gray-800 text-white p-6 rounded-2xl shadow-lg relative overflow-hidden">
                    <div className="absolute top-0 right-0 p-4 opacity-10">
                      <Zap size={100} />
                    </div>
@@ -106,16 +110,16 @@ export default function Home() {
           {!showPlan ? (
             <button 
               onClick={handleGeneratePlan}
-              className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-all"
+              className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 transition-all"
             >
               <CalendarRange size={18} />
               Generate Today&apos;s Plan
             </button>
           ) : (
-            <div className="bg-white p-4 rounded-xl border border-gray-200">
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
                <div className="flex items-center justify-between mb-4">
-                 <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">Today&apos;s Schedule</h2>
-                 <button onClick={() => setShowPlan(false)} className="text-xs text-gray-400 hover:text-gray-600">Close</button>
+                 <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Today&apos;s Schedule</h2>
+                 <button onClick={() => setShowPlan(false)} className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
                </div>
                {dayPlan.length > 0 ? (
                  <div className="space-y-4">
@@ -143,7 +147,7 @@ export default function Home() {
 
         <section>
           <div className="flex items-center justify-between mb-4">
-             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">All Tasks ({todoTasks.length})</h2>
+             <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">All Tasks ({todoTasks.length})</h2>
           </div>
           <TaskList 
             tasks={tasks} 

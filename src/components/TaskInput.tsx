@@ -51,13 +51,13 @@ export const TaskInput = ({ onAddTask }: TaskInputProps) => {
   };
 
   return (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6">
+    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 mb-6">
       <form onSubmit={handleSubmit}>
         <div className="flex gap-2">
           <input
             type="text"
             placeholder="What needs to be done?"
-            className="flex-1 text-lg font-medium p-2 border-none focus:ring-0 placeholder-gray-400 outline-none"
+            className="flex-1 text-lg font-medium p-2 border-none focus:ring-0 placeholder-gray-400 dark:placeholder-gray-500 outline-none bg-transparent text-gray-900 dark:text-gray-100"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onFocus={() => setIsExpanded(true)}
@@ -65,7 +65,7 @@ export const TaskInput = ({ onAddTask }: TaskInputProps) => {
           <button
             type="submit"
             disabled={!title.trim()}
-            className="bg-black text-white px-4 py-2 rounded-lg font-medium disabled:opacity-50 hover:bg-gray-800 transition-colors"
+            className="bg-black dark:bg-white text-white dark:text-black px-4 py-2 rounded-lg font-medium disabled:opacity-50 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
           >
             Add
           </button>
@@ -76,11 +76,11 @@ export const TaskInput = ({ onAddTask }: TaskInputProps) => {
              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                {/* Category */}
                <div>
-                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Category</label>
+                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Category</label>
                  <select
                    value={category}
                    onChange={(e) => setCategory(e.target.value as TaskCategory)}
-                   className="w-full p-2 bg-gray-50 rounded-md text-sm border-none focus:ring-2 focus:ring-gray-200"
+                   className="w-full p-2 bg-gray-50 dark:bg-gray-700 rounded-md text-sm border-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-600 text-gray-900 dark:text-gray-100"
                  >
                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                  </select>
@@ -88,7 +88,7 @@ export const TaskInput = ({ onAddTask }: TaskInputProps) => {
 
                {/* Priority */}
                <div>
-                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Priority (1-5)</label>
+                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Priority (1-5)</label>
                  <div className="flex gap-1">
                    {([1, 2, 3, 4, 5] as TaskPriority[]).map((p) => (
                      <button
@@ -98,8 +98,8 @@ export const TaskInput = ({ onAddTask }: TaskInputProps) => {
                        className={clsx(
                          "flex-1 py-1 rounded-md text-sm font-medium transition-colors",
                          priority === p ? 
-                           (p >= 4 ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700") 
-                           : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                           (p >= 4 ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" : "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400") 
+                           : "bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600"
                        )}
                      >
                        {p}
@@ -110,7 +110,7 @@ export const TaskInput = ({ onAddTask }: TaskInputProps) => {
 
                {/* Energy */}
                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Energy</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Energy</label>
                   <div className="flex gap-1">
                     {(['low', 'medium', 'high'] as TaskEnergyLevel[]).map((l) => (
                       <button
@@ -119,7 +119,7 @@ export const TaskInput = ({ onAddTask }: TaskInputProps) => {
                         onClick={() => setEnergyLevel(l)}
                         className={clsx(
                           "flex-1 py-1 rounded-md text-sm font-medium capitalize transition-colors",
-                          energyLevel === l ? "bg-green-100 text-green-700" : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                          energyLevel === l ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" : "bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600"
                         )}
                       >
                         {l}
@@ -130,12 +130,12 @@ export const TaskInput = ({ onAddTask }: TaskInputProps) => {
 
                {/* Duration */}
                <div>
-                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Est. Minutes</label>
+                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Est. Minutes</label>
                  <input
                    type="number"
                    value={estimatedMinutes}
                    onChange={(e) => setEstimatedMinutes(parseInt(e.target.value) || 0)}
-                   className="w-full p-2 bg-gray-50 rounded-md text-sm border-none focus:ring-2 focus:ring-gray-200"
+                   className="w-full p-2 bg-gray-50 dark:bg-gray-700 rounded-md text-sm border-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-600 text-gray-900 dark:text-gray-100"
                    min="5"
                    step="5"
                  />
@@ -146,17 +146,17 @@ export const TaskInput = ({ onAddTask }: TaskInputProps) => {
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <textarea
                   placeholder="Notes / Description..."
-                  className="w-full p-3 bg-gray-50 rounded-md text-sm border-none focus:ring-2 focus:ring-gray-200 min-h-[80px]"
+                  className="w-full p-3 bg-gray-50 dark:bg-gray-700 rounded-md text-sm border-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-600 min-h-[80px] text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                 />
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Deadline (Optional)</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Deadline (Optional)</label>
                   <input
                     type="datetime-local"
                     value={deadline}
                     onChange={(e) => setDeadline(e.target.value)}
-                    className="w-full p-2 bg-gray-50 rounded-md text-sm border-none focus:ring-2 focus:ring-gray-200"
+                    className="w-full p-2 bg-gray-50 dark:bg-gray-700 rounded-md text-sm border-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-600 text-gray-900 dark:text-gray-100"
                   />
                 </div>
              </div>
