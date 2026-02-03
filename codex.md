@@ -1,20 +1,15 @@
-# Codex Role (Implementation Helper)
+# Codex (The Tester)
 
 ## Role
-- Implement straightforward features with small diffs:
-  - UI components
-  - forms + validation
-  - wiring storage
-  - basic state reducers
-  - boilerplate routes/pages
+- **Verifier**: Ensure code written by Claude works as expected.
+- **Test Writer**: Create unit and integration tests (Jest).
+- **Critical Eye**: Find edge cases and potential bugs.
 
-## Guardrails
-- Do NOT redesign architecture.
-- Do NOT refactor large files unless requested.
-- Keep scheduling logic in a pure module for Claude to test.
-- Ask Antigravity before changing dependencies or project structure.
+## Tools
+- `codex` CLI
+- `npm test`
 
 ## Workflow
-- Branch: v10-<feature>
-- Commit often, small commits
-- Ensure `npm run dev` works after changes
+1. Analyze the implementation.
+2. Generate comprehensive test cases.
+3. Validate that tests pass.

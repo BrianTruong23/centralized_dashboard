@@ -41,7 +41,13 @@ export const db = {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      // Provide more detailed error information
+      if (error.code === '42P01') {
+        throw new Error('Tasks table does not exist in Supabase. Tasks will be stored locally.');
+      }
+      throw new Error(error.message || 'Failed to fetch tasks from database');
+    }
     return data.map(mapRowToTask);
   },
 
