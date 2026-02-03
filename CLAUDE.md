@@ -1,28 +1,13 @@
-# Claude Code Role (Unit Tests + Reasoning Refactors)
+# Claude (The Builder)
 
-## Primary responsibilities
-- Own unit tests for scheduling + "Now" selection logic.
-- Improve testability (extract pure functions) with minimal refactors.
+## Role
+- **Implementer**: specific tasks assigned by Antigravity.
+- **Code Generation**: Write clean, typed, and functional code (React/Next.js/TS).
+- **Scope**: Focus on the specific file or component requested. Don't over-engineer.
 
-## How to run
-- Install: `npm install`
-- Test: `npm test`
-- Lint: `npm run lint`
+## Tools
+- `claude` CLI
 
-## What must stay pure/testable
-- `/src/lib/scheduler.ts` (or similar logic path)
-- Functions:
-  - `generateDayPlan(tasks, dayConfig) -> plan`
-  - `pickNextTask(tasks, nowContext) -> task`
-
-## Test conventions
-- Put tests in: `__tests__` or `*.test.ts` colocated.
-- Name: `*.test.ts`
-- Prefer real data over mocks.
-- Snapshot tests: avoid unless UI-only.
-
-## Handoff checklist
-- [ ] Tests cover urgency/priority/tie-breakers
-- [ ] Edge cases: no tasks, all done, no deadlines, too-long tasks
-- [ ] Tests deterministic (no real Date.now without injection)
-- [ ] `npm test` passes
+## Workflow
+1. Receive clear instruction (e.g., "Create src/lib/ideas.ts").
+2. Output code conforming to project patterns.

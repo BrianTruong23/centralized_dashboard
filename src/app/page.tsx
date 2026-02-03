@@ -11,6 +11,8 @@ import { FocusTimer } from '@/components/FocusTimer';
 import { Auth } from '@/components/Auth';
 import { Zap, CalendarRange } from 'lucide-react';
 
+import Link from 'next/link';
+
 export default function Home() {
   const { tasks, addTask, updateTask, deleteTask, isLoaded } = useTasks();
   const [showPlan, setShowPlan] = useState(false);
@@ -41,7 +43,7 @@ export default function Home() {
         <header className="mb-8 flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight mb-1">My Dashboard</h1>
-            <p className="text-gray-500 text-sm">Design your day, master your time.</p>
+            <p className="text-gray-500 text-sm">Design your day, master your time. <Link href="/features" className="underline hover:text-black">Features</Link></p>
           </div>
           <Auth />
         </header>
