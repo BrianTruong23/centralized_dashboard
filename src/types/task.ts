@@ -15,6 +15,7 @@ export type TaskCategory =
 
 export interface Task {
   id: string;
+  user_id?: string;
   title: string;
   description: string;
   category: TaskCategory;

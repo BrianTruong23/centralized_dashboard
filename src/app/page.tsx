@@ -7,6 +7,7 @@ import { TaskList } from '@/components/TaskList';
 import { TaskItem } from '@/components/TaskItem';
 import { pickNextTask, generateDayPlan } from '@/lib/scheduler';
 import { Task } from '@/types/task';
+import { Auth } from '@/components/Auth';
 import { Zap, CalendarRange } from 'lucide-react';
 
 export default function Home() {
@@ -34,9 +35,12 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#fafafa] text-gray-900 font-sans pb-20">
       <main className="max-w-xl mx-auto px-4 py-8">
-        <header className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight mb-1">My Dashboard</h1>
-          <p className="text-gray-500 text-sm">Design your day, master your time.</p>
+        <header className="mb-8 flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight mb-1">My Dashboard</h1>
+            <p className="text-gray-500 text-sm">Design your day, master your time.</p>
+          </div>
+          <Auth />
         </header>
 
         {/* Now Panel */}
