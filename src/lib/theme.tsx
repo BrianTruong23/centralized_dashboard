@@ -17,15 +17,45 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
   const [mounted, setMounted] = useState(false);
 
+  // Initialize theme on mount
   useEffect(() => {
-    setMounted(true);
-    // Load theme from localStorage
-    const savedTheme = localStorage.getItem('theme') as Theme | null;
-    if (savedTheme && ['light', 'dark', 'system'].includes(savedTheme)) {
-      setThemeState(savedTheme);
+    // Safety check for browser environment
+    if (typeof window === 'undefined') return;
+
+    try {
+      // Load theme from localStorage
+      const savedTheme = localStorage.getItem('theme') as Theme | null;
+      const initialTheme = (savedTheme && ['light', 'dark', 'system'].includes(savedTheme)) 
+        ? savedTheme 
+        : 'system';
+      
+      setThemeState(initialTheme);
+      setMounted(true);
+
+      // Apply initial theme immediately to prevent flash
+      const getResolvedTheme = (): 'light' | 'dark' => {
+        if (initialTheme === 'system') {
+          return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        return initialTheme;
+      };
+
+      const resolved = getResolvedTheme();
+      setResolvedTheme(resolved);
+      
+      const root = document.documentElement;
+      if (resolved === 'dark') {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
+    } catch (error) {
+      console.error('Error initializing theme:', error);
+      setMounted(true); // Still mark as mounted to prevent blocking
     }
   }, []);
 
+  // Update theme when it changes
   useEffect(() => {
     if (!mounted) return;
 

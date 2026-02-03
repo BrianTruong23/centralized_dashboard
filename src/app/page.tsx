@@ -33,7 +33,7 @@ export default function Home() {
   };
 
   if (!isLoaded) {
-    return <div className="flex items-center justify-center min-h-screen text-gray-400">Loading dashboard...</div>;
+    return <div className="flex items-center justify-center min-h-screen text-gray-400 dark:text-gray-500">Loading dashboard...</div>;
   }
 
   const todoTasks = tasks.filter(t => t.status !== 'done');
