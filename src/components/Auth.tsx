@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 
 export function Auth() {
@@ -14,6 +14,12 @@ export function Auth() {
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
+    // If Supabase is not configured, don't try to auth
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+
     // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
@@ -30,6 +36,10 @@ export function Auth() {
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!supabase) {
+      setError('Authentication is not configured');
+      return;
+    }
     setLoading(true);
     setError(null);
 
@@ -57,10 +67,16 @@ export function Auth() {
   };
 
   const handleLogout = async () => {
+    if (!supabase) return;
     await supabase.auth.signOut();
   };
 
   if (loading) return <div className="text-xs text-gray-400">Loading auth...</div>;
+
+  // Don't show auth UI if Supabase is not configured
+  if (!isSupabaseConfigured) {
+    return null;
+  }
 
   if (user) {
     return (
