@@ -35,16 +35,18 @@ const mapRowToTask = (row: any): Task => ({
 
 export const db = {
   async fetchTasks() {
+    if (!supabase) throw new Error('Supabase not configured');
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
       .order('created_at', { ascending: false });
-      
+
     if (error) throw error;
     return data.map(mapRowToTask);
   },
 
   async addTask(task: Task) {
+    if (!supabase) throw new Error('Supabase not configured');
     const { error } = await supabase.from('tasks').insert({
       id: task.id,
       user_id: task.user_id,
@@ -63,6 +65,7 @@ export const db = {
   },
 
   async updateTask(task: Task) {
+    if (!supabase) throw new Error('Supabase not configured');
     const { error } = await supabase
       .from('tasks')
       .update({
@@ -81,6 +84,7 @@ export const db = {
   },
 
   async deleteTask(taskId: string) {
+    if (!supabase) throw new Error('Supabase not configured');
     const { error } = await supabase.from('tasks').delete().eq('id', taskId);
     if (error) throw error;
   }
