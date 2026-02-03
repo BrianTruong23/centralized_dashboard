@@ -11,6 +11,8 @@ export const useTasks = () => {
 
   useEffect(() => {
     // Check auth state
+    let timeoutId: NodeJS.Timeout | null = null;
+    
     const checkUser = async () => {
       try {
         // If Supabase is not configured, just load from local storage
@@ -22,7 +24,7 @@ export const useTasks = () => {
         }
 
         // Add timeout to prevent infinite loading
-        const timeoutId = setTimeout(() => {
+        timeoutId = setTimeout(() => {
           console.warn('Auth check timeout, using local storage');
           const stored = loadTasks();
           setTasks(stored);
@@ -31,16 +33,20 @@ export const useTasks = () => {
 
         const { data: { session }, error } = await supabase.auth.getSession();
         
+        // Clear timeout on success or error response
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        
         if (error) {
           console.warn('Auth session error, using local storage:', error);
-          clearTimeout(timeoutId);
           const stored = loadTasks();
           setTasks(stored);
           setIsLoaded(true);
           return;
         }
 
-        clearTimeout(timeoutId);
         setUser(session?.user ?? null);
 
         // Load tasks based on auth
@@ -60,6 +66,11 @@ export const useTasks = () => {
         }
         setIsLoaded(true);
       } catch (error) {
+        // Clear timeout if async operation throws (prevents memory leak)
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
         console.error('Error in checkUser:', error);
         // Fallback to local storage on any error
         const stored = loadTasks();
@@ -71,7 +82,14 @@ export const useTasks = () => {
     checkUser();
 
     // Only set up auth listener if Supabase is configured
-    if (!supabase) return;
+    if (!supabase) {
+      // Cleanup function to clear timeout on unmount
+      return () => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      };
+    }
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -97,7 +115,13 @@ export const useTasks = () => {
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Cleanup function: unsubscribe from auth changes and clear timeout
+    return () => {
+      subscription.unsubscribe();
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
   }, []);
 
   // Sync to LocalStorage if not logged in
