@@ -8,8 +8,8 @@ import { TaskItem } from '@/components/TaskItem';
 import { pickNextTask, generateDayPlan } from '@/lib/scheduler';
 import { Task } from '@/types/task';
 import { FocusTimer } from '@/components/FocusTimer';
-
-// ... (imports)
+import { Auth } from '@/components/Auth';
+import { Zap, CalendarRange } from 'lucide-react';
 
 export default function Home() {
   const { tasks, addTask, updateTask, deleteTask, isLoaded } = useTasks();
@@ -17,7 +17,34 @@ export default function Home() {
   const [dayPlan, setDayPlan] = useState<Task[]>([]);
   const [isFocusing, setIsFocusing] = useState(false);
 
-// ... (inside component)
+  /* Logic restored */
+  const suggestedTask = useMemo(() => {
+    if (!isLoaded || tasks.length === 0) return null;
+    return pickNextTask(tasks, { now: new Date(), energyLevel: 'medium' });
+  }, [tasks, isLoaded]);
+
+  const handleGeneratePlan = () => {
+    const plan = generateDayPlan(tasks, { now: new Date(), energyLevel: 'medium', availableTimeMinutes: 480 });
+    setDayPlan(plan);
+    setShowPlan(true);
+  };
+
+  if (!isLoaded) {
+    return <div className="flex items-center justify-center min-h-screen text-gray-400">Loading dashboard...</div>;
+  }
+
+  const todoTasks = tasks.filter(t => t.status !== 'done');
+
+  return (
+    <div className="min-h-screen bg-[#fafafa] text-gray-900 font-sans pb-20">
+      <main className="max-w-xl mx-auto px-4 py-8">
+        <header className="mb-8 flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight mb-1">My Dashboard</h1>
+            <p className="text-gray-500 text-sm">Design your day, master your time.</p>
+          </div>
+          <Auth />
+        </header>
 
         {/* Now Panel */}
         {suggestedTask && (
@@ -80,12 +107,12 @@ export default function Home() {
               className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-all"
             >
               <CalendarRange size={18} />
-              Generate Today's Plan
+              Generate Today&apos;s Plan
             </button>
           ) : (
             <div className="bg-white p-4 rounded-xl border border-gray-200">
                <div className="flex items-center justify-between mb-4">
-                 <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">Today's Schedule</h2>
+                 <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">Today&apos;s Schedule</h2>
                  <button onClick={() => setShowPlan(false)} className="text-xs text-gray-400 hover:text-gray-600">Close</button>
                </div>
                {dayPlan.length > 0 ? (
