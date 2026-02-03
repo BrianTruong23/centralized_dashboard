@@ -12,33 +12,60 @@ export const useTasks = () => {
   useEffect(() => {
     // Check auth state
     const checkUser = async () => {
-      // If Supabase is not configured, just load from local storage
-      if (!supabase) {
-        const stored = loadTasks();
-        setTasks(stored);
-        setIsLoaded(true);
-        return;
-      }
+      try {
+        // If Supabase is not configured, just load from local storage
+        if (!supabase) {
+          const stored = loadTasks();
+          setTasks(stored);
+          setIsLoaded(true);
+          return;
+        }
 
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user ?? null);
+        // Add timeout to prevent infinite loading
+        const timeoutId = setTimeout(() => {
+          console.warn('Auth check timeout, using local storage');
+          const stored = loadTasks();
+          setTasks(stored);
+          setIsLoaded(true);
+        }, 5000); // 5 second timeout
 
-      // Load tasks based on auth
-      if (session?.user) {
-        try {
-          const dbTasks = await db.fetchTasks();
-          setTasks(dbTasks);
-        } catch (e: any) {
-          // If tasks table doesn't exist or other DB error, fall back to local storage
-          console.warn('Tasks table not available, using local storage:', e?.message || e?.code || 'Unknown error');
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.warn('Auth session error, using local storage:', error);
+          clearTimeout(timeoutId);
+          const stored = loadTasks();
+          setTasks(stored);
+          setIsLoaded(true);
+          return;
+        }
+
+        clearTimeout(timeoutId);
+        setUser(session?.user ?? null);
+
+        // Load tasks based on auth
+        if (session?.user) {
+          try {
+            const dbTasks = await db.fetchTasks();
+            setTasks(dbTasks);
+          } catch (e: any) {
+            // If tasks table doesn't exist or other DB error, fall back to local storage
+            console.warn('Tasks table not available, using local storage:', e?.message || e?.code || 'Unknown error');
+            const stored = loadTasks();
+            setTasks(stored);
+          }
+        } else {
           const stored = loadTasks();
           setTasks(stored);
         }
-      } else {
+        setIsLoaded(true);
+      } catch (error) {
+        console.error('Error in checkUser:', error);
+        // Fallback to local storage on any error
         const stored = loadTasks();
         setTasks(stored);
+        setIsLoaded(true);
       }
-      setIsLoaded(true);
     };
 
     checkUser();
