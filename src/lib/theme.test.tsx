@@ -43,11 +43,26 @@ describe('ThemeProvider', () => {
   });
 
   it('should default to system theme', () => {
+    // Mock matchMedia to return false (light mode) for this test
+    const mockMatchMedia = jest.fn().mockImplementation(query => ({
+      matches: false, // System prefers light
+      media: query,
+      onchange: null,
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      dispatchEvent: jest.fn(),
+    }));
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: mockMatchMedia,
+    });
+
     render(
       <ThemeProvider>
         <div>Test</div>
       </ThemeProvider>
     );
+    // System theme with light preference should not have dark class
     expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 
@@ -73,24 +88,31 @@ describe('ThemeProvider', () => {
 
   it('should remove dark class when theme is light', () => {
     localStorageMock.setItem('theme', 'dark');
-    const { rerender } = render(
-      <ThemeProvider>
-        <TestComponent />
-      </ThemeProvider>
-    );
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
     
-    // Change to light
+    // Component that can change theme via button
     const TestComponent = () => {
       const { setTheme } = useTheme();
-      setTheme('light');
-      return null;
+      return (
+        <button onClick={() => setTheme('light')} data-testid="change-theme">
+          Change to Light
+        </button>
+      );
     };
-    rerender(
+    
+    render(
       <ThemeProvider>
         <TestComponent />
       </ThemeProvider>
     );
+    
+    // Initially should be dark
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    
+    // Click button to change to light
+    const button = screen.getByTestId('change-theme');
+    fireEvent.click(button);
+    
+    // Should remove dark class
     expect(document.documentElement.classList.contains('dark')).toBe(false);
   });
 });
@@ -124,6 +146,7 @@ describe('ThemeToggle', () => {
   });
 
   it('should cycle through themes', () => {
+    // Start with system theme (default)
     render(
       <ThemeProvider>
         <ThemeToggle />
@@ -133,14 +156,14 @@ describe('ThemeToggle', () => {
     const button = screen.getByRole('button');
     expect(button).toBeInTheDocument();
     
-    // Click to cycle
+    // Click to cycle: system -> light -> dark -> system
+    fireEvent.click(button);
+    expect(localStorageMock.getItem('theme')).toBe('light');
+    
     fireEvent.click(button);
     expect(localStorageMock.getItem('theme')).toBe('dark');
     
     fireEvent.click(button);
     expect(localStorageMock.getItem('theme')).toBe('system');
-    
-    fireEvent.click(button);
-    expect(localStorageMock.getItem('theme')).toBe('light');
   });
 });
