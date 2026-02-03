@@ -7,76 +7,64 @@ import { TaskList } from '@/components/TaskList';
 import { TaskItem } from '@/components/TaskItem';
 import { pickNextTask, generateDayPlan } from '@/lib/scheduler';
 import { Task } from '@/types/task';
-import { Auth } from '@/components/Auth';
-import { Zap, CalendarRange } from 'lucide-react';
+import { FocusTimer } from '@/components/FocusTimer';
+
+// ... (imports)
 
 export default function Home() {
   const { tasks, addTask, updateTask, deleteTask, isLoaded } = useTasks();
   const [showPlan, setShowPlan] = useState(false);
   const [dayPlan, setDayPlan] = useState<Task[]>([]);
+  const [isFocusing, setIsFocusing] = useState(false);
 
-  const suggestedTask = useMemo(() => {
-    if (!isLoaded || tasks.length === 0) return null;
-    return pickNextTask(tasks, { now: new Date(), energyLevel: 'medium' });
-  }, [tasks, isLoaded]);
-
-  const handleGeneratePlan = () => {
-    const plan = generateDayPlan(tasks, { now: new Date(), energyLevel: 'medium', availableTimeMinutes: 480 });
-    setDayPlan(plan);
-    setShowPlan(true);
-  };
-
-  if (!isLoaded) {
-    return <div className="flex items-center justify-center min-h-screen text-gray-400">Loading dashboard...</div>;
-  }
-
-  const todoTasks = tasks.filter(t => t.status !== 'done');
-
-  return (
-    <div className="min-h-screen bg-[#fafafa] text-gray-900 font-sans pb-20">
-      <main className="max-w-xl mx-auto px-4 py-8">
-        <header className="mb-8 flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight mb-1">My Dashboard</h1>
-            <p className="text-gray-500 text-sm">Design your day, master your time.</p>
-          </div>
-          <Auth />
-        </header>
+// ... (inside component)
 
         {/* Now Panel */}
         {suggestedTask && (
           <section className="mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
-            <div className="bg-black text-white p-6 rounded-2xl shadow-lg relative overflow-hidden">
-               <div className="absolute top-0 right-0 p-4 opacity-10">
-                 <Zap size={100} />
-               </div>
-               <div className="relative z-10">
-                 <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Focus Now</h2>
-                 <h3 className="text-2xl font-bold mb-2">{suggestedTask.title}</h3>
-                 <p className="text-gray-400 text-sm mb-4 line-clamp-2">
-                   {suggestedTask.description || 'No description provided.'}
-                 </p>
-                 <div className="flex items-center gap-3">
-                    <span className="text-xs bg-gray-800 px-2 py-1 rounded border border-gray-700">
-                      {suggestedTask.estimatedMinutes}m
-                    </span>
-                    <span className="text-xs bg-gray-800 px-2 py-1 rounded border border-gray-700 capitalize">
-                      {suggestedTask.category}
-                    </span>
-                    {suggestedTask.deadline && (
-                      <span className="text-xs text-red-400 font-medium">
-                        Due soon
-                      </span>
-                    )}
-                 </div>
-                 <button 
-                   onClick={() => updateTask({ ...suggestedTask, status: 'done' })}
-                   className="mt-6 w-full bg-white text-black font-bold py-2 rounded-lg hover:bg-gray-100 transition-colors"
-                 >
-                   Mark as Done
-                 </button>
-               </div>
-            </div>
+            {isFocusing ? (
+              <FocusTimer 
+                task={suggestedTask} 
+                onComplete={(t) => {
+                  updateTask({ ...t, status: 'done' });
+                  setIsFocusing(false);
+                }}
+                onStop={() => setIsFocusing(false)}
+              />
+            ) : (
+                <div className="bg-black text-white p-6 rounded-2xl shadow-lg relative overflow-hidden">
+                   <div className="absolute top-0 right-0 p-4 opacity-10">
+                     <Zap size={100} />
+                   </div>
+                   <div className="relative z-10">
+                     <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Focus Now</h2>
+                     <h3 className="text-2xl font-bold mb-2">{suggestedTask.title}</h3>
+                     <p className="text-gray-400 text-sm mb-4 line-clamp-2">
+                       {suggestedTask.description || 'No description provided.'}
+                     </p>
+                     <div className="flex items-center gap-3">
+                        <span className="text-xs bg-gray-800 px-2 py-1 rounded border border-gray-700">
+                          {suggestedTask.estimatedMinutes}m
+                        </span>
+                        <span className="text-xs bg-gray-800 px-2 py-1 rounded border border-gray-700 capitalize">
+                          {suggestedTask.category}
+                        </span>
+                        {suggestedTask.deadline && (
+                          <span className="text-xs text-red-400 font-medium">
+                            Due soon
+                          </span>
+                        )}
+                     </div>
+                     <button 
+                       onClick={() => setIsFocusing(true)}
+                       className="mt-6 w-full bg-white text-black font-bold py-2 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center gap-2"
+                     >
+                       <Zap size={16} fill="currentColor" />
+                       Start Focus Session
+                     </button>
+                   </div>
+                </div>
+            )}
           </section>
         )}
 
