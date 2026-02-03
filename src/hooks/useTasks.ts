@@ -12,9 +12,17 @@ export const useTasks = () => {
   useEffect(() => {
     // Check auth state
     const checkUser = async () => {
+      // If Supabase is not configured, just load from local storage
+      if (!supabase) {
+        const stored = loadTasks();
+        setTasks(stored);
+        setIsLoaded(true);
+        return;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
-      
+
       // Load tasks based on auth
       if (session?.user) {
         try {
@@ -32,11 +40,14 @@ export const useTasks = () => {
 
     checkUser();
 
+    // Only set up auth listener if Supabase is configured
+    if (!supabase) return;
+
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const newUser = session?.user ?? null;
       setUser(newUser);
-      
+
       if (newUser) {
         // If logging in, fetch DB tasks.
         // Optional: Merge local tasks? For now, just switch context.
