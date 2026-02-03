@@ -40,24 +40,44 @@ export function Auth() {
       setError('Authentication is not configured');
       return;
     }
+    
+    // Store in local constant so TypeScript knows it's not null
+    const supabaseClient = supabase;
     setLoading(true);
     setError(null);
 
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabaseClient.auth.signUp({
           email,
           password,
         });
         if (error) throw error;
-        alert('Check your email for the confirmation link!');
+        
+        // If email confirmation is disabled in Supabase, signUp returns a session immediately
+        // Check if we have a session (means user is logged in)
+        if (data.session) {
+          // User is automatically logged in (email confirmation disabled)
+          setIsOpen(false);
+          setEmail('');
+          setPassword('');
+        } else if (data.user) {
+          // User created but no session (email confirmation required)
+          // This means email confirmation is still enabled in Supabase settings
+          setError('Account created. Please check your email to confirm your account, or disable email confirmation in Supabase settings.');
+        } else {
+          // Unexpected case
+          setError('Account created but could not log in. Please try logging in.');
+        }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { error } = await supabaseClient.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
         setIsOpen(false);
+        setEmail('');
+        setPassword('');
       }
     } catch (err: any) {
       setError(err.message);

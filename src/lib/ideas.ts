@@ -4,6 +4,8 @@ import { Idea, IdeaStatus } from '@/types/idea';
 
 export const ideasDb = {
   async fetchIdeas(): Promise<Idea[]> {
+    if (!supabase) throw new Error('Supabase not configured');
+    
     const { data, error } = await supabase
       .from('ideas')
       .select('*')
@@ -20,6 +22,8 @@ export const ideasDb = {
   },
 
   async addIdea(idea: Omit<Idea, 'id' | 'created_at' | 'user_id'> & { user_id: string }): Promise<Idea> {
+    if (!supabase) throw new Error('Supabase not configured');
+    
     const { data, error } = await supabase
       .from('ideas')
       .insert({
@@ -39,6 +43,8 @@ export const ideasDb = {
   },
 
   async updateIdeaStatus(id: string, status: IdeaStatus): Promise<void> {
+    if (!supabase) throw new Error('Supabase not configured');
+    
     const { error } = await supabase
       .from('ideas')
       .update({ status })
@@ -48,6 +54,8 @@ export const ideasDb = {
   },
 
   async deleteIdea(id: string): Promise<void> {
+    if (!supabase) throw new Error('Supabase not configured');
+    
     const { error } = await supabase
       .from('ideas')
       .delete()
