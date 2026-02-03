@@ -25,15 +25,21 @@ export const KanbanBoard = ({ initialIdeas, userId }: KanbanBoardProps) => {
   const [newIdeaDesc, setNewIdeaDesc] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const handleAdd = async (e: React.FormEvent) => {
+  // Update ideas when initialIdeas prop changes
+  useEffect(() => {
+    setIdeas(initialIdeas);
+  }, [initialIdeas]);
+
+  const handleAdd = async (e: React.FormEvent, status: IdeaStatus = 'backlog') => {
     e.preventDefault();
     if (!newIdeaTitle.trim()) return;
 
+    setError(null);
     try {
       const newIdea = await ideasDb.addIdea({
         title: newIdeaTitle,
         description: newIdeaDesc,
-        status: 'backlog',
+        status: status,
         user_id: userId,
       });
       setIdeas(prev => [newIdea, ...prev]);
@@ -41,7 +47,7 @@ export const KanbanBoard = ({ initialIdeas, userId }: KanbanBoardProps) => {
       setNewIdeaDesc('');
       setIsAdding(false);
     } catch (err: any) {
-      setError('Failed to add idea');
+      setError(err.message || 'Failed to add idea. Please try again.');
       console.error(err);
     }
   };
@@ -91,29 +97,72 @@ export const KanbanBoard = ({ initialIdeas, userId }: KanbanBoardProps) => {
        </div>
 
        {isAdding && (
-         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-           <div className="bg-white p-6 rounded-xl w-full max-w-md">
-             <h3 className="text-lg font-bold mb-4">Add New Feature Idea</h3>
-             <form onSubmit={handleAdd} className="space-y-4">
-               <input 
-                 className="w-full border p-2 rounded" 
-                 placeholder="Title" 
-                 value={newIdeaTitle}
-                 onChange={e => setNewIdeaTitle(e.target.value)}
-                 autoFocus
-               />
-               <textarea 
-                 className="w-full border p-2 rounded h-24" 
-                 placeholder="Description" 
-                 value={newIdeaDesc}
-                 onChange={e => setNewIdeaDesc(e.target.value)}
-               />
-               <div className="flex justify-end gap-2">
-                 <button type="button" onClick={() => setIsAdding(false)} className="px-4 py-2 text-gray-500">Cancel</button>
-                 <button type="submit" className="px-4 py-2 bg-black text-white rounded">Add</button>
+         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setIsAdding(false)}>
+           <div className="bg-white p-6 rounded-xl w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
+             <div className="flex items-center justify-between mb-4">
+               <h3 className="text-lg font-bold">Add New Feature</h3>
+               <button 
+                 onClick={() => setIsAdding(false)}
+                 className="text-gray-400 hover:text-gray-600"
+               >
+                 <X size={20} />
+               </button>
+             </div>
+             <form onSubmit={(e) => handleAdd(e, 'backlog')} className="space-y-4">
+               <div>
+                 <label className="block text-xs font-medium text-gray-700 mb-1">Feature Title *</label>
+                 <input 
+                   className="w-full border border-gray-200 p-2.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/10" 
+                   placeholder="e.g., Add dark mode support" 
+                   value={newIdeaTitle}
+                   onChange={e => setNewIdeaTitle(e.target.value)}
+                   autoFocus
+                   required
+                 />
+               </div>
+               <div>
+                 <label className="block text-xs font-medium text-gray-700 mb-1">Description (optional)</label>
+                 <textarea 
+                   className="w-full border border-gray-200 p-2.5 rounded-lg h-24 focus:outline-none focus:ring-2 focus:ring-black/10 resize-none" 
+                   placeholder="Describe the feature in detail..." 
+                   value={newIdeaDesc}
+                   onChange={e => setNewIdeaDesc(e.target.value)}
+                 />
+               </div>
+               {error && (
+                 <div className="p-2 bg-red-50 border border-red-200 rounded text-xs text-red-600">
+                   {error}
+                 </div>
+               )}
+               <div className="flex justify-end gap-2 pt-2">
+                 <button 
+                   type="button" 
+                   onClick={() => {
+                     setIsAdding(false);
+                     setNewIdeaTitle('');
+                     setNewIdeaDesc('');
+                     setError(null);
+                   }} 
+                   className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                 >
+                   Cancel
+                 </button>
+                 <button 
+                   type="submit" 
+                   className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-medium"
+                 >
+                   Add Feature
+                 </button>
                </div>
              </form>
            </div>
+         </div>
+       )}
+
+       {/* Error Display */}
+       {error && (
+         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+           {error}
          </div>
        )}
 
@@ -129,6 +178,29 @@ export const KanbanBoard = ({ initialIdeas, userId }: KanbanBoardProps) => {
                  </span>
                </div>
                <div className="p-2 flex-1 overflow-y-auto space-y-2">
+                 {/* Quick Add Button in Backlog Column */}
+                 {col.id === 'backlog' && (
+                   <button
+                     onClick={() => setIsAdding(true)}
+                     className="w-full p-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-400 hover:border-gray-400 hover:text-gray-600 transition-colors flex items-center justify-center gap-2 text-sm font-medium mb-2"
+                   >
+                     <Plus size={16} />
+                     Add Feature
+                   </button>
+                 )}
+                 {/* Empty state - only show in backlog when no ideas at all */}
+                 {ideas.length === 0 && col.id === 'backlog' && (
+                   <div className="text-center py-8 text-gray-400 text-sm">
+                     <p className="mb-1">No features yet</p>
+                     <p className="text-xs">Click "Add Feature" above to get started</p>
+                   </div>
+                 )}
+                 {/* Show message if this column is empty but other columns have items */}
+                 {ideas.length > 0 && ideas.filter(i => i.status === col.id).length === 0 && (
+                   <div className="text-center py-4 text-gray-400 text-xs">
+                     No items in {col.title.toLowerCase()}
+                   </div>
+                 )}
                  {ideas.filter(i => i.status === col.id).map(idea => (
                    <div key={idea.id} className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 group relative">
                       <button 
