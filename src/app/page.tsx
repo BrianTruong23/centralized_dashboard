@@ -10,11 +10,37 @@ import { Task } from '@/types/task';
 import { FocusTimer } from '@/components/FocusTimer';
 import { Auth } from '@/components/Auth';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { Zap, CalendarRange } from 'lucide-react';
+import { Zap, CalendarRange, Loader2 } from 'lucide-react';
 import { DailyNotes } from '@/components/DailyNotes';
 import { supabase } from '@/lib/supabase';
 
 import Link from 'next/link';
+
+const loadingMessages = [
+  'Loading dashboard...',
+  'Hang tight...',
+  'Almost there...',
+  'Getting things ready...',
+  'Just a moment...',
+];
+
+function LoadingScreen() {
+  const [messageIndex, setMessageIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMessageIndex((prev) => (prev + 1) % loadingMessages.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen text-gray-400 dark:text-gray-500">
+      <Loader2 size={32} className="animate-spin mb-3" />
+      <span className="transition-opacity duration-300">{loadingMessages[messageIndex]}</span>
+    </div>
+  );
+}
 
 export default function Home() {
   const { tasks, addTask, updateTask, deleteTask, isLoaded } = useTasks();
@@ -58,7 +84,7 @@ export default function Home() {
   };
 
   if (!isLoaded) {
-    return <div className="flex items-center justify-center min-h-screen text-gray-400 dark:text-gray-500">Loading dashboard...</div>;
+    return <LoadingScreen />;
   }
 
   const todoTasks = tasks.filter(t => t.status !== 'done');
@@ -172,7 +198,7 @@ export default function Home() {
 
         {/* Daily Notes Section */}
         <section className="mb-8">
-            <DailyNotes userId={userId} />
+            <DailyNotes userId={userId} onAddTask={addTask} />
         </section>
 
         <section>
