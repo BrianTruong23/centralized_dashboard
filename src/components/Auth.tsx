@@ -6,7 +6,8 @@ import { User } from '@supabase/supabase-js';
 
 export function Auth() {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [isAuthProcessing, setIsAuthProcessing] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -16,14 +17,25 @@ export function Auth() {
   useEffect(() => {
     // If Supabase is not configured, don't try to auth
     if (!supabase) {
-      setLoading(false);
+      setIsCheckingSession(false);
       return;
     }
 
+    // Add timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      console.warn('Auth session check timeout');
+      setIsCheckingSession(false);
+    }, 5000);
+
     // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      clearTimeout(timeoutId);
       setUser(session?.user ?? null);
-      setLoading(false);
+    }).catch((err) => {
+      clearTimeout(timeoutId);
+      console.error('Auth session check failed:', err);
+    }).finally(() => {
+      setIsCheckingSession(false);
     });
 
     // Listen for changes
@@ -31,7 +43,10 @@ export function Auth() {
       setUser(session?.user ?? null);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(timeoutId);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -42,8 +57,9 @@ export function Auth() {
     }
     
     // Store in local constant so TypeScript knows it's not null
+    // Store in local constant so TypeScript knows it's not null
     const supabaseClient = supabase;
-    setLoading(true);
+    setIsAuthProcessing(true);
     setError(null);
 
     try {
@@ -82,7 +98,7 @@ export function Auth() {
     } catch (err: any) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      setIsAuthProcessing(false);
     }
   };
 
@@ -91,7 +107,7 @@ export function Auth() {
     await supabase.auth.signOut();
   };
 
-  if (loading) return <div className="text-xs text-gray-400">Loading auth...</div>;
+  if (isCheckingSession) return <div className="text-xs text-gray-400">Loading auth...</div>;
 
   // Don't show auth UI if Supabase is not configured
   if (!isSupabaseConfigured) {
@@ -170,10 +186,10 @@ export function Auth() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={isAuthProcessing}
             className="w-full bg-black text-white font-bold py-2.5 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
           >
-            {loading ? 'Processing...' : (isSignUp ? 'Sign Up' : 'Log In')}
+            {isAuthProcessing ? 'Processing...' : (isSignUp ? 'Sign Up' : 'Log In')}
           </button>
         </form>
 

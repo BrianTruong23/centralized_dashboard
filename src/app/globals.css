@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Configure Tailwind v4 to use class-based dark mode */
+@custom-variant dark (&:is(.dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -12,7 +15,7 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* Dark mode support - Tailwind v4 uses class strategy by default */
+/* Dark mode CSS variables */
 .dark {
   --background: #0a0a0a;
   --foreground: #ededed;
