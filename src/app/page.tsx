@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useTasks } from '@/hooks/useTasks';
 import { TaskInput } from '@/components/TaskInput';
 import { TaskList } from '@/components/TaskList';
@@ -11,6 +11,8 @@ import { FocusTimer } from '@/components/FocusTimer';
 import { Auth } from '@/components/Auth';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Zap, CalendarRange } from 'lucide-react';
+import { DailyNotes } from '@/components/DailyNotes';
+import { supabase } from '@/lib/supabase';
 
 import Link from 'next/link';
 
@@ -19,6 +21,29 @@ export default function Home() {
   const [showPlan, setShowPlan] = useState(false);
   const [dayPlan, setDayPlan] = useState<Task[]>([]);
   const [isFocusing, setIsFocusing] = useState(false);
+  const [userId, setUserId] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+        if (!supabase) return;
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) setUserId(user.id);
+    };
+    fetchUser();
+
+    // Listen for auth changes
+    const { data: authListener } = supabase?.auth.onAuthStateChange((event, session) => {
+        if (session?.user) {
+            setUserId(session.user.id);
+        } else {
+            setUserId(undefined);
+        }
+    }) || { data: { subscription: { unsubscribe: () => {} } } };
+
+    return () => {
+        authListener?.subscription.unsubscribe();
+    };
+  }, []);
 
   /* Logic restored */
   const suggestedTask = useMemo(() => {
@@ -143,6 +168,11 @@ export default function Home() {
                )}
             </div>
           )}
+        </section>
+
+        {/* Daily Notes Section */}
+        <section className="mb-8">
+            <DailyNotes userId={userId} />
         </section>
 
         <section>
