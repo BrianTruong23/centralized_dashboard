@@ -22,18 +22,18 @@ export function ThemeToggle() {
     return <Monitor size={18} />;
   };
 
-  const getLabel = () => {
-    if (theme === 'light') return 'Light';
-    if (theme === 'dark') return 'Dark';
-    return 'System';
+  const getTooltip = () => {
+    if (theme === 'light') return 'Light mode (click for dark)';
+    if (theme === 'dark') return 'Dark mode (click for auto)';
+    return 'Auto mode - follows your system theme';
   };
 
   return (
     <button
       onClick={cycleTheme}
       className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-      aria-label={`Current theme: ${getLabel()}. Click to cycle theme.`}
-      title={`Theme: ${getLabel()}`}
+      aria-label={getTooltip()}
+      title={getTooltip()}
     >
       {getIcon()}
     </button>
