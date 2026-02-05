@@ -12,6 +12,7 @@ import { Auth } from '@/components/Auth';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Zap, CalendarRange, Loader2 } from 'lucide-react';
 import { DailyNotes } from '@/components/DailyNotes';
+import { AmbientSound } from '@/components/AmbientSound';
 import { supabase } from '@/lib/supabase';
 
 import Link from 'next/link';
@@ -212,6 +213,7 @@ export default function Home() {
           />
         </section>
       </main>
+      <AmbientSound />
     </div>
   );
 }
