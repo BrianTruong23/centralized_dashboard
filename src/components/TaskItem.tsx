@@ -178,7 +178,7 @@ export const TaskItem = ({ task, onUpdate, onDelete }: TaskItemProps) => {
 
       <button
         onClick={() => setIsEditing(true)}
-        className="opacity-0 group-hover:opacity-100 p-2 text-gray-300 dark:text-gray-600 hover:text-indigo-500 dark:hover:text-indigo-400 transition-all"
+        className="p-2 text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-all"
         title="Edit task"
       >
         <Pencil size={18} />
@@ -186,7 +186,7 @@ export const TaskItem = ({ task, onUpdate, onDelete }: TaskItemProps) => {
 
       <button
         onClick={() => onDelete(task.id)}
-        className="opacity-0 group-hover:opacity-100 p-2 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 transition-all"
+        className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-all"
         title="Delete task"
       >
         <Trash2 size={18} />
