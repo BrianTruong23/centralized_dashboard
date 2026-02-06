@@ -157,10 +157,22 @@ export default function Home() {
           <TaskInput onAddTask={addTask} />
         </section>
 
+        {/* All Tasks Section */}
+        <section className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+             <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">All Tasks ({todoTasks.length})</h2>
+          </div>
+          <TaskList
+            tasks={tasks}
+            onUpdateTask={updateTask}
+            onDeleteTask={deleteTask}
+          />
+        </section>
+
         {/* Day Plan Generator */}
         <section className="mb-8">
           {!showPlan ? (
-            <button 
+            <button
               onClick={handleGeneratePlan}
               className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 transition-all"
             >
@@ -200,17 +212,6 @@ export default function Home() {
         {/* Daily Notes Section */}
         <section className="mb-8">
             <DailyNotes userId={userId} onAddTask={addTask} />
-        </section>
-
-        <section>
-          <div className="flex items-center justify-between mb-4">
-             <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">All Tasks ({todoTasks.length})</h2>
-          </div>
-          <TaskList 
-            tasks={tasks} 
-            onUpdateTask={updateTask} 
-            onDeleteTask={deleteTask} 
-          />
         </section>
       </main>
       <AmbientSound />
