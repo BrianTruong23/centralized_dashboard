@@ -104,12 +104,12 @@ export default function Home() {
           </div>
         </header>
 
-        {/* Now Panel */}
+        {/* Section 1: Focused Session (REQUIRED FIRST) */}
         {suggestedTask && (
           <section className="mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
             {isFocusing ? (
-              <FocusTimer 
-                task={suggestedTask} 
+              <FocusTimer
+                task={suggestedTask}
                 onComplete={(t) => {
                   updateTask({ ...t, status: 'done' });
                   setIsFocusing(false);
@@ -140,7 +140,7 @@ export default function Home() {
                           </span>
                         )}
                      </div>
-                     <button 
+                     <button
                        onClick={() => setIsFocusing(true)}
                        className="mt-6 w-full bg-white text-black font-bold py-2 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center gap-2"
                      >
@@ -153,14 +153,27 @@ export default function Home() {
           </section>
         )}
 
+        {/* Section 2: Quick Task Input */}
         <section className="mb-8">
           <TaskInput onAddTask={addTask} />
         </section>
 
-        {/* Day Plan Generator */}
+        {/* Section 3: All Tasks (moved up from bottom for better UX) */}
+        <section className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+             <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">All Tasks ({todoTasks.length})</h2>
+          </div>
+          <TaskList
+            tasks={tasks}
+            onUpdateTask={updateTask}
+            onDeleteTask={deleteTask}
+          />
+        </section>
+
+        {/* Section 4: Day Plan Generator */}
         <section className="mb-8">
           {!showPlan ? (
-            <button 
+            <button
               onClick={handleGeneratePlan}
               className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 transition-all"
             >
@@ -197,20 +210,9 @@ export default function Home() {
           )}
         </section>
 
-        {/* Daily Notes Section */}
+        {/* Section 5: Daily Notes & AI Dump (moved down to reduce cognitive load) */}
         <section className="mb-8">
             <DailyNotes userId={userId} onAddTask={addTask} />
-        </section>
-
-        <section>
-          <div className="flex items-center justify-between mb-4">
-             <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">All Tasks ({todoTasks.length})</h2>
-          </div>
-          <TaskList 
-            tasks={tasks} 
-            onUpdateTask={updateTask} 
-            onDeleteTask={deleteTask} 
-          />
         </section>
       </main>
       <AmbientSound />
