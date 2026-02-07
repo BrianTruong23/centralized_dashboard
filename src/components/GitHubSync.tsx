@@ -36,16 +36,14 @@ export function GitHubSync({ userId, onSyncComplete }: GitHubSyncProps) {
         console.error('Failed to load GitHub config:', err);
       }
       
-      // Also check localStorage as fallback
+      // Load saved repo from localStorage (token is never persisted for security)
       if (typeof window !== 'undefined') {
         const savedRepo = localStorage.getItem('github_repo');
-        const savedToken = localStorage.getItem('github_token');
         if (savedRepo) {
           setRepo(prev => prev || savedRepo);
         }
-        if (savedToken) {
-          setToken(savedToken);
-        }
+        // SECURITY: Never load tokens from localStorage to prevent XSS vulnerabilities
+        // Tokens should only be entered manually or configured via environment variables
       }
     };
     
@@ -108,12 +106,9 @@ export function GitHubSync({ userId, onSyncComplete }: GitHubSyncProps) {
       setPreviewIssues(issues);
       setShowPreview(true);
       setSuccess(`Found ${issues.length} issues`);
-      
-      // Save to localStorage
+
+      // Save only the repo to localStorage (never save tokens for security)
       localStorage.setItem('github_repo', repo);
-      if (token.trim()) {
-        localStorage.setItem('github_token', token);
-      }
     } catch (err: any) {
       setError(err.message || 'Failed to fetch issues from GitHub');
     } finally {
@@ -382,6 +377,9 @@ export function GitHubSync({ userId, onSyncComplete }: GitHubSyncProps) {
                       Create a token here
                     </a>
                     {' '}(needs `repo` scope for private repos)
+                  </p>
+                  <p className="text-xs text-amber-600 mt-1 bg-amber-50 p-2 rounded border border-amber-200">
+                    🔒 Security: Tokens are never stored in your browser for security. Use environment variables for persistent configuration.
                   </p>
                 </div>
 
