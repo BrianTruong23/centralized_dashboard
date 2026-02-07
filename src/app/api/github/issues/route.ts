@@ -17,9 +17,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get token from environment variable
+    // Get token from environment variable (server-side only)
     // Support both GITHUB_APIKEY and GITHUB-APIKEY (though underscores are standard)
-    const token = process.env.GITHUB_APIKEY || process.env['GITHUB-APIKEY'] || process.env.NEXT_PUBLIC_GITHUB_APIKEY;
+    const token = process.env.GITHUB_APIKEY || process.env['GITHUB-APIKEY'];
 
     if (!token) {
       // Don't fail in production if token is missing - return helpful error
