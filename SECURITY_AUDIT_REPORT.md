@@ -87,9 +87,9 @@ const token = process.env.GITHUB_APIKEY || process.env['GITHUB-APIKEY'];
 ```
 
 **localStorage Usage:**
-- `src/components/GitHubSync.tsx:113-115` stores `github_token` in localStorage
-- **Risk:** Tokens stored in localStorage are vulnerable to XSS attacks
-- **Recommendation:** Consider using httpOnly cookies or session storage with encryption, or remove localStorage persistence entirely since the app already supports environment variables
+- ✅ **RESOLVED:** GitHub tokens are no longer stored in localStorage (Issue #18)
+- Only repository name is persisted in localStorage (safe, non-sensitive data)
+- Users must re-enter tokens manually or use environment variables for persistent configuration
 
 ---
 
@@ -233,7 +233,7 @@ None
 
 ### 🟡 Medium Priority
 1. Remove `NEXT_PUBLIC_GITHUB_APIKEY` fallback from API routes
-2. Consider removing GitHub token from localStorage
+2. ✅ **COMPLETED:** GitHub token removed from localStorage (Issue #18)
 3. Implement rate limiting on API endpoints
 
 ### 🟢 Low Priority
