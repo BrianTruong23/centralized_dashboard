@@ -6,9 +6,9 @@ import { NextRequest, NextResponse } from 'next/server';
  */
 export async function POST(request: NextRequest) {
   try {
-    // Get repo and token from environment variables
+    // Get repo and token from environment variables (server-side only)
     const repo = process.env.GITHUB_REPO || process.env['GITHUB-REPO'];
-    const token = process.env.GITHUB_APIKEY || process.env['GITHUB-APIKEY'] || process.env.NEXT_PUBLIC_GITHUB_APIKEY;
+    const token = process.env.GITHUB_APIKEY || process.env['GITHUB-APIKEY'];
 
     if (!repo) {
       return NextResponse.json(
