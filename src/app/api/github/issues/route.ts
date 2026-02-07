@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimit, RateLimitPresets } from '@/lib/rate-limit';
 
 /**
  * API route to fetch GitHub issues
  * This keeps the GitHub token secure on the server side
  */
 export async function GET(request: NextRequest) {
+  // Apply standard rate limiting (30 requests per minute)
+  const rateLimitResult = await rateLimit(request, RateLimitPresets.standard);
+  if (rateLimitResult) {
+    return rateLimitResult;
+  }
   try {
     const searchParams = request.nextUrl.searchParams;
     const owner = searchParams.get('owner');

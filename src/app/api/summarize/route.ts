@@ -1,6 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { rateLimit, RateLimitPresets } from '@/lib/rate-limit';
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  // Apply strict rate limiting (10 requests per minute)
+  const rateLimitResult = await rateLimit(req, RateLimitPresets.strict);
+  if (rateLimitResult) {
+    return rateLimitResult;
+  }
   const startTime = Date.now();
   const log = (msg: string) => console.log(`[API ${Date.now() - startTime}ms] ${msg}`);
 

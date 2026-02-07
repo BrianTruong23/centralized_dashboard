@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimit, RateLimitPresets } from '@/lib/rate-limit';
 
 /**
  * API route to sync GitHub issues directly
  * Uses GITHUB_REPO and GITHUB_APIKEY from environment variables
  */
 export async function POST(request: NextRequest) {
+  // Apply standard rate limiting (30 requests per minute)
+  const rateLimitResult = await rateLimit(request, RateLimitPresets.standard);
+  if (rateLimitResult) {
+    return rateLimitResult;
+  }
   try {
     // Get repo and token from environment variables
     const repo = process.env.GITHUB_REPO || process.env['GITHUB-REPO'];
@@ -87,7 +93,12 @@ export async function POST(request: NextRequest) {
 /**
  * GET endpoint to retrieve configured repo from env
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Apply generous rate limiting (100 requests per minute)
+  const rateLimitResult = await rateLimit(request, RateLimitPresets.generous);
+  if (rateLimitResult) {
+    return rateLimitResult;
+  }
   try {
     const repo = process.env.GITHUB_REPO || process.env['GITHUB-REPO'];
     
