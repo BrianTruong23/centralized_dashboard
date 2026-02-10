@@ -13,7 +13,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { Zap, CalendarRange, Loader2 } from 'lucide-react';
 import { DailyNotes } from '@/components/DailyNotes';
 import { AmbientSound } from '@/components/AmbientSound';
-import { supabase } from '@/lib/supabase';
+import { supabase, authReady } from '@/lib/supabase';
 
 import Link from 'next/link';
 
@@ -53,6 +53,7 @@ export default function Home() {
   useEffect(() => {
     const fetchUser = async () => {
         if (!supabase) return;
+        await authReady;
         const { data: { user } } = await supabase.auth.getUser();
         if (user) setUserId(user.id);
     };

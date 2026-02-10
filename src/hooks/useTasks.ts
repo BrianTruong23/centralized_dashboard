@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Task } from '@/types/task';
 import { loadTasks, saveTasks } from '@/lib/storage';
-import { supabase } from '@/lib/supabase';
+import { supabase, authReady } from '@/lib/supabase';
 import { db } from '@/lib/db';
 
 export const useTasks = () => {
@@ -29,7 +29,10 @@ export const useTasks = () => {
           const stored = loadTasks();
           setTasks(stored);
           setIsLoaded(true);
-        }, 5000); // 5 second timeout
+        }, 8000); // 8 second timeout (allows for manual auth recovery)
+
+        // Wait for auth recovery (including manual fallback) before checking session
+        await authReady;
 
         const { data: { session }, error } = await supabase.auth.getSession();
         
