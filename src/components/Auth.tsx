@@ -1,9 +1,41 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase, isSupabaseConfigured, authReady } from '@/lib/supabase';
-import { User } from '@supabase/supabase-js';
+import { useState, useEffect, useRef } from 'react';
+import { supabase, isSupabaseConfigured, SESSION_KEY, resolveAuthReady } from '@/lib/supabase';
+import { User, Session } from '@supabase/supabase-js';
 
+// ── localStorage helpers ────────────────────────────────────────────
+function persistSession(session: Session) {
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+      user: session.user,
+      expires_at: session.expires_at,
+    }));
+  } catch { /* quota / SSR */ }
+}
+
+function dropSession() {
+  try { localStorage.removeItem(SESSION_KEY); } catch { /* SSR */ }
+}
+
+function readSession(): {
+  access_token: string;
+  refresh_token: string;
+  user: User;
+  expires_at?: number;
+} | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw);
+    if (p?.access_token && p?.refresh_token && p?.user) return p;
+    return null;
+  } catch { return null; }
+}
+
+// ── Component ───────────────────────────────────────────────────────
 export function Auth() {
   const [user, setUser] = useState<User | null>(null);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
@@ -13,42 +45,66 @@ export function Auth() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const authReadyFired = useRef(false);
 
   useEffect(() => {
-    // If Supabase is not configured, don't try to auth
+    // No Supabase → resolve immediately so other hooks proceed
     if (!supabase) {
       setIsCheckingSession(false);
+      if (!authReadyFired.current) { authReadyFired.current = true; resolveAuthReady(); }
       return;
     }
 
-    // Add timeout to prevent infinite loading
-    const timeoutId = setTimeout(() => {
-      console.warn('Auth session check timeout');
-      setIsCheckingSession(false);
-    }, 8000);
+    const client = supabase;
 
-    // Wait for auth recovery (including manual fallback) then check session
-    const client = supabase; // local const for TS null narrowing
-    authReady.then(async () => {
-      const { data: { session } } = await client.auth.getSession();
-      clearTimeout(timeoutId);
-      setUser(session?.user ?? null);
-    }).catch((err) => {
-      clearTimeout(timeoutId);
-      console.error('Auth session check failed:', err);
-    }).finally(() => {
-      setIsCheckingSession(false);
+    // 1. Instant restore from localStorage (synchronous, no network)
+    const cached = readSession();
+    if (cached?.user) {
+      setUser(cached.user);
+      setIsCheckingSession(false); // show email immediately
+    }
+
+    // 2. Validate / refresh tokens in the background
+    (async () => {
+      try {
+        if (cached?.access_token && cached?.refresh_token) {
+          const { data, error: err } = await client.auth.setSession({
+            access_token: cached.access_token,
+            refresh_token: cached.refresh_token,
+          });
+          if (err) {
+            console.warn('Session recovery failed:', err.message);
+            dropSession();
+            setUser(null);
+          } else if (data.session) {
+            persistSession(data.session);
+            setUser(data.session.user);
+          }
+        }
+      } catch (err) {
+        console.warn('Session recovery error:', err);
+        dropSession();
+        setUser(null);
+      } finally {
+        setIsCheckingSession(false);
+        if (!authReadyFired.current) { authReadyFired.current = true; resolveAuthReady(); }
+      }
+    })();
+
+    // 3. Keep localStorage in sync for token refreshes / sign-outs
+    const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        dropSession();
+        setUser(null);
+      } else if (session) {
+        // SIGNED_IN, TOKEN_REFRESHED, USER_UPDATED
+        persistSession(session);
+        setUser(session.user);
+      }
+      // Ignore INITIAL_SESSION(null) fired by persistSession:false
     });
 
-    // Listen for changes (also catches manual recovery via refreshSession)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => {
-      clearTimeout(timeoutId);
-      subscription.unsubscribe();
-    };
+    return () => { subscription.unsubscribe(); };
   }, []);
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -57,9 +113,7 @@ export function Auth() {
       setError('Authentication is not configured');
       return;
     }
-    
-    // Store in local constant so TypeScript knows it's not null
-    // Store in local constant so TypeScript knows it's not null
+
     const supabaseClient = supabase;
     setIsAuthProcessing(true);
     setError(null);
@@ -71,28 +125,25 @@ export function Auth() {
           password,
         });
         if (error) throw error;
-        
-        // If email confirmation is disabled in Supabase, signUp returns a session immediately
-        // Check if we have a session (means user is logged in)
+
         if (data.session) {
-          // User is automatically logged in (email confirmation disabled)
+          persistSession(data.session);
           setIsOpen(false);
           setEmail('');
           setPassword('');
         } else if (data.user) {
-          // User created but no session (email confirmation required)
-          // This means email confirmation is still enabled in Supabase settings
           setError('Account created. Please check your email to confirm your account, or disable email confirmation in Supabase settings.');
         } else {
-          // Unexpected case
           setError('Account created but could not log in. Please try logging in.');
         }
       } else {
-        const { error } = await supabaseClient.auth.signInWithPassword({
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
+        // Persist tokens immediately so reload works
+        if (data.session) persistSession(data.session);
         setIsOpen(false);
         setEmail('');
         setPassword('');
@@ -106,6 +157,7 @@ export function Auth() {
 
   const handleLogout = async () => {
     if (!supabase) return;
+    dropSession();
     await supabase.auth.signOut();
   };
 
