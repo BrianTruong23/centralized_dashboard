@@ -89,20 +89,24 @@ export function DailyNotes({ userId, onAddTask }: DailyNotesProps) {
 
     log('Starting summarization...');
     try {
-      // First save current state
-      log('Saving notes first...');
-      await handleSave();
-      log('Notes saved successfully');
+      // Save in background - don't block the AI call
+      log('Saving notes in background...');
+      handleSave().catch(err => log(`Background save failed: ${err.message}`));
 
       log('Calling /api/summarize...');
       const fetchStart = Date.now();
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 35000);
 
       const res = await fetch('/api/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ noteContent }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
       log(`API responded in ${Date.now() - fetchStart}ms. Status: ${res.status}`);
 
       if (!res.ok) {
@@ -120,17 +124,21 @@ export function DailyNotes({ userId, onAddTask }: DailyNotesProps) {
       setActionItems(data.actionItems || []);
       setAddedItems(new Set()); // Reset added items
 
-      // Update the note with the new summary
+      // Save summary in background - don't block the UI
       if (currentNoteId && userId) {
-        log('Saving summary to database...');
-        await notesDb.updateNote(currentNoteId, { summary: data.summary });
-        log('Summary saved to database');
+        log('Saving summary to database in background...');
+        notesDb.updateNote(currentNoteId, { summary: data.summary })
+          .then(() => log('Summary saved to database'))
+          .catch(err => log(`Failed to save summary: ${err.message}`));
       }
 
       log(`Total time: ${Date.now() - startTime}ms`);
     } catch (err: any) {
-      log(`ERROR: ${err.message}`);
-      setError(err.message);
+      const message = err.name === 'AbortError'
+        ? 'Request timed out. Please try again.'
+        : (err.message || 'An unexpected error occurred');
+      log(`ERROR: ${message}`);
+      setError(message);
     } finally {
       setIsLoading(false);
     }
