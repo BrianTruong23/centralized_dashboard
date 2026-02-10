@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured, authReady } from '@/lib/supabase';
 import { User } from '@supabase/supabase-js';
 
 export function Auth() {
@@ -25,10 +25,12 @@ export function Auth() {
     const timeoutId = setTimeout(() => {
       console.warn('Auth session check timeout');
       setIsCheckingSession(false);
-    }, 5000);
+    }, 8000);
 
-    // Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Wait for auth recovery (including manual fallback) then check session
+    const client = supabase; // local const for TS null narrowing
+    authReady.then(async () => {
+      const { data: { session } } = await client.auth.getSession();
       clearTimeout(timeoutId);
       setUser(session?.user ?? null);
     }).catch((err) => {
@@ -38,7 +40,7 @@ export function Auth() {
       setIsCheckingSession(false);
     });
 
-    // Listen for changes
+    // Listen for changes (also catches manual recovery via refreshSession)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
