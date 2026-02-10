@@ -51,6 +51,7 @@ export const useTasks = () => {
         }
 
         setUser(session?.user ?? null);
+        console.log('[useTasks] Auth resolved. user:', session?.user?.id ?? 'NULL');
 
         // Load tasks based on auth
         if (session?.user) {
@@ -137,43 +138,56 @@ export const useTasks = () => {
   }, [tasks, isLoaded, user]);
 
   const addTask = async (task: Task) => {
-    // Optimistic update
+    console.log('[useTasks.addTask] taskId:', task.id, '| user:', user?.id ?? 'NULL');
     const taskWithUser = { ...task, user_id: user?.id };
     setTasks((prev) => [taskWithUser, ...prev]);
 
     if (user) {
       try {
+        console.log('[useTasks.addTask] Calling db.addTask...');
         await db.addTask(taskWithUser);
-      } catch (e) {
-        console.error('Failed to add task to DB:', e);
-        // Revert? Or show error.
+        console.log('[useTasks.addTask] DB insert succeeded');
+      } catch (e: any) {
+        console.error('[useTasks.addTask] DB insert FAILED:', e?.message || e?.code || e);
       }
+    } else {
+      console.warn('[useTasks.addTask] Skipped DB insert — no authenticated user.');
     }
   };
 
   const updateTask = async (updatedTask: Task) => {
+    console.log('[useTasks.updateTask] taskId:', updatedTask.id, '| user:', user?.id ?? 'NULL');
     setTasks((prev) =>
       prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
     );
 
     if (user) {
       try {
+        console.log('[useTasks.updateTask] Calling db.updateTask...');
         await db.updateTask(updatedTask);
-      } catch (e) {
-        console.error('Failed to update task in DB:', e);
+        console.log('[useTasks.updateTask] DB update succeeded');
+      } catch (e: any) {
+        console.error('[useTasks.updateTask] DB update FAILED:', e?.message || e?.code || e);
       }
+    } else {
+      console.warn('[useTasks.updateTask] Skipped DB update — no authenticated user.');
     }
   };
 
   const deleteTask = async (taskId: string) => {
+    console.log('[useTasks.deleteTask] taskId:', taskId, '| user:', user?.id ?? 'NULL (local-only mode)');
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
 
     if (user) {
       try {
+        console.log('[useTasks.deleteTask] Calling db.deleteTask...');
         await db.deleteTask(taskId);
-      } catch (e) {
-        console.error('Failed to delete task in DB:', e);
+        console.log('[useTasks.deleteTask] DB delete succeeded');
+      } catch (e: any) {
+        console.error('[useTasks.deleteTask] DB delete FAILED:', e?.message || e?.code || e);
       }
+    } else {
+      console.warn('[useTasks.deleteTask] Skipped DB delete — no authenticated user. Task only removed from local state.');
     }
   };
 
