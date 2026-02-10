@@ -57,6 +57,8 @@ export const useTasks = () => {
           try {
             const dbTasks = await db.fetchTasks();
             setTasks(dbTasks);
+            // Keep localStorage in sync so it's not stale if auth fails later
+            saveTasks(dbTasks);
           } catch (e: any) {
             // If tasks table doesn't exist or other DB error, fall back to local storage
             console.warn('Tasks table not available, using local storage:', e?.message || e?.code || 'Unknown error');
@@ -100,11 +102,11 @@ export const useTasks = () => {
       setUser(newUser);
 
       if (newUser) {
-        // If logging in, fetch DB tasks.
-        // Optional: Merge local tasks? For now, just switch context.
+        // If logging in, fetch DB tasks and keep localStorage in sync
         try {
           const dbTasks = await db.fetchTasks();
           setTasks(dbTasks);
+          saveTasks(dbTasks);
         } catch (e: any) {
           // If tasks table doesn't exist, fall back to local storage
           console.warn('Tasks table not available, using local storage:', e?.message || e?.code || 'Unknown error');
