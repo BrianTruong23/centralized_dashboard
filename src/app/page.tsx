@@ -13,7 +13,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { Zap, CalendarRange, Loader2 } from 'lucide-react';
 import { DailyNotes } from '@/components/DailyNotes';
 import { AmbientSound } from '@/components/AmbientSound';
-import { supabase, authReady } from '@/lib/supabase';
+import { supabase, authReady, SESSION_KEY } from '@/lib/supabase';
 
 import Link from 'next/link';
 
@@ -54,8 +54,18 @@ export default function Home() {
     const fetchUser = async () => {
         if (!supabase) return;
         await authReady;
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) setUserId(user.id);
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) { setUserId(user.id); return; }
+        } catch { /* network error */ }
+        // Fallback: read cached user when Supabase is unreachable
+        try {
+          const raw = localStorage.getItem(SESSION_KEY);
+          if (raw) {
+            const cached = JSON.parse(raw);
+            if (cached?.user?.id) setUserId(cached.user.id);
+          }
+        } catch { /* ignore */ }
     };
     fetchUser();
 
