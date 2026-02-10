@@ -91,7 +91,12 @@ export const db = {
 
   async deleteTask(taskId: string) {
     if (!supabase) throw new Error('Supabase not configured');
-    const { error } = await supabase.from('tasks').delete().eq('id', taskId);
-    if (error) throw error;
+    console.log('[db.deleteTask] Sending DELETE to Supabase for taskId:', taskId);
+    const { error, count } = await supabase.from('tasks').delete({ count: 'exact' }).eq('id', taskId);
+    if (error) {
+      console.error('[db.deleteTask] Supabase error:', error.code, error.message, error.details);
+      throw error;
+    }
+    console.log('[db.deleteTask] Supabase response OK. Rows deleted:', count);
   }
 };
