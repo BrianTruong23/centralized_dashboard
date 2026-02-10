@@ -73,7 +73,8 @@ export function Auth() {
             refresh_token: cached.refresh_token,
           });
           if (err) {
-            console.warn('Session recovery failed:', err.message);
+            // Server explicitly rejected tokens → clear everything
+            console.warn('Session recovery failed (auth error):', err.message);
             dropSession();
             setUser(null);
           } else if (data.session) {
@@ -81,10 +82,19 @@ export function Auth() {
             setUser(data.session.user);
           }
         }
-      } catch (err) {
-        console.warn('Session recovery error:', err);
-        dropSession();
-        setUser(null);
+      } catch (err: any) {
+        // Network error (Supabase unreachable) vs auth error
+        const isNetworkError = err?.message?.includes('Failed to fetch')
+          || err?.message?.includes('NetworkError')
+          || err?.message?.includes('ERR_CONNECTION');
+        if (isNetworkError && cached?.user) {
+          // Keep cached user — tokens may still be valid when network returns
+          console.warn('Session validation skipped (network down). Using cached user.');
+        } else {
+          console.warn('Session recovery error:', err);
+          dropSession();
+          setUser(null);
+        }
       } finally {
         setIsCheckingSession(false);
         if (!authReadyFired.current) { authReadyFired.current = true; resolveAuthReady(); }
