@@ -18,9 +18,10 @@ interface ActionItem {
 interface DailyNotesProps {
   userId?: string;
   onAddTask?: (task: Task) => void;
+  showHistory?: boolean;
 }
 
-export function DailyNotes({ userId, onAddTask }: DailyNotesProps) {
+export function DailyNotes({ userId, onAddTask, showHistory = false }: DailyNotesProps) {
   const [noteContent, setNoteContent] = useState('');
   const [summary, setSummary] = useState('');
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
@@ -31,6 +32,7 @@ export function DailyNotes({ userId, onAddTask }: DailyNotesProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pastNotes, setPastNotes] = useState<Note[]>([]);
 
   const categories: TaskCategory[] = ['Research', 'Coding', 'Admin', 'Health', 'Life', 'Finance', 'Social', 'Content', 'UX'];
   const energyLevels: TaskEnergyLevel[] = ['low', 'medium', 'high'];
@@ -45,11 +47,29 @@ export function DailyNotes({ userId, onAddTask }: DailyNotesProps) {
     try {
       const notes = await notesDb.fetchNotes();
       if (notes && notes.length > 0) {
-        // Just grab the most recent one for now
-        const latest = notes[0];
-        setNoteContent(latest.content);
-        setSummary(latest.summary || '');
-        setCurrentNoteId(latest.id);
+        // Filter for TODAY's note only
+        const today = new Date();
+        const todaysNote = notes.find(note => {
+            const d = new Date(note.createdAt);
+            return d.getDate() === today.getDate() && 
+                   d.getMonth() === today.getMonth() && 
+                   d.getFullYear() === today.getFullYear();
+        });
+
+        if (todaysNote) {
+            setNoteContent(todaysNote.content);
+            setSummary(todaysNote.summary || '');
+            setCurrentNoteId(todaysNote.id);
+        } else {
+            // Reset if no note for today
+            setNoteContent('');
+            setSummary('');
+            setCurrentNoteId(null);
+        }
+
+        // Filter out today's note from history
+        const history = notes.filter(n => n.id !== todaysNote?.id).sort((a, b) => b.createdAt - a.createdAt);
+        setPastNotes(history);
       }
     } catch (err) {
       console.error('Failed to load notes', err);
@@ -434,6 +454,35 @@ export function DailyNotes({ userId, onAddTask }: DailyNotesProps) {
             </div>
         </div>
       </div>
+
+      {showHistory && pastNotes.length > 0 && (
+        <div className="mt-12 pt-8 border-t border-gray-100 dark:border-gray-800 space-y-6">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1">Previous Days</h3>
+            <div className="space-y-6">
+                {pastNotes.map(note => (
+                    <div key={note.id} className="group relative pl-4 border-l-2 border-gray-100 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-600 transition-colors">
+                        <div className="absolute -left-[5px] top-0 w-2.5 h-2.5 rounded-full bg-gray-200 dark:bg-gray-700 group-hover:bg-indigo-500 transition-colors" />
+                        <div className="mb-2">
+                            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                {new Date(note.createdAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                            </span>
+                        </div>
+                        <div className="prose dark:prose-invert max-w-none text-sm text-gray-600 dark:text-gray-400 mb-3">
+                            <p className="whitespace-pre-wrap line-clamp-3 group-hover:line-clamp-none transition-all duration-300">{note.content}</p>
+                        </div>
+                        {note.summary && (
+                            <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-3 rounded-lg border border-indigo-100 dark:border-indigo-900/30">
+                                <p className="text-xs text-indigo-700 dark:text-indigo-300 italic">
+                                    <Sparkles size={12} className="inline mr-1.5 -mt-0.5" />
+                                    {note.summary}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+        </div>
+      )}
     </div>
   );
 }

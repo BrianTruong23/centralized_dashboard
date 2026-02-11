@@ -4,26 +4,51 @@
 @variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #ffffff;
+  /* Warm/Neutral Off-white background */
+  --background: #fafafa;
   --foreground: #171717;
+  
+  /* Subtle borders */
+  --border: #e5e5e5;
+  
+  /* Minimalist accents (black/white or very subtle gray) */
+  --primary: #171717;
+  --primary-foreground: #ffffff;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  
+  --font-sans: var(--font-geist-sans), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 /* Dark mode CSS variables */
 .dark {
   --background: #0a0a0a;
   --foreground: #ededed;
+  --border: #262626;
+  --primary: #ffffff;
+  --primary-foreground: #000000;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-  transition: background-color 0.2s, color 0.2s;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Utilities for scrollbar hiding if needed */
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
