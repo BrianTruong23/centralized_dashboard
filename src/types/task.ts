@@ -26,4 +26,11 @@ export interface Task {
   status: TaskStatus;
   tags: string[];
   createdAt: number; // timestamp
+
+  // Weekly planning fields
+  source?: 'user' | 'agent';
+  suggestedStart?: string;
+  suggestedEnd?: string;
+  planningWeekId?: string;
+  planningMetadata?: Record<string, any>;
 }
