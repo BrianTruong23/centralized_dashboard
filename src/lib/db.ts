@@ -1,25 +1,14 @@
-
 import { supabase } from './supabase';
 import { Task } from '@/types/task';
 
-// Map database row to Task object
+// Map database row → Task object.
+// Supports both old schema (completed boolean) and new schema (status text).
 const mapRowToTask = (row: any): Task => ({
   id: row.id,
   user_id: row.user_id,
-  title: row.text, // 'text' column in DB maps to 'title' in app
-  description: row.description || '', // assuming we add description col or map it
-  status: row.completed ? 'done' : 'todo', // basic mapping, ideally DB has status enum
-  // We need to decide: does DB have all these fields? 
-  // The plan said: text, completed.
-  // We have complex Task object. We should probably expand the DB schema or map heavily.
-  // For now, let's assume we store the full JSON or expand columns.
-  // Best practice: Store structured data.
-  // Let's stick to the plan's schema for now, but strictly it's insufficient for 'energyLevel', 'priority', 'category'.
-  // I will update the plan/code to use a JSONB column 'data' or expand columns.
-  // FOR NOW: I will start with a robust `data` jsonb column in the proposal or code.
-  // Wait, I can't change the plan easily now without user, but I can make the code robust.
-  // I'll assume the DB table 'tasks' has a 'json_content' or similar, OR I just add columns.
-  // Let's assume we adding columns.
+  title: row.text,
+  description: row.description || '',
+  status: row.status || (row.completed ? 'done' : 'todo'),
   category: row.category || 'Life',
   priority: row.priority || 3,
   estimatedMinutes: row.estimated_minutes || 60,
@@ -29,30 +18,29 @@ const mapRowToTask = (row: any): Task => ({
   createdAt: new Date(row.created_at).getTime(),
 });
 
-// Since the plan had a simple schema, I should probably update it to support all fields.
-// I'll make the `db.ts` helper that assumes the table has these fields.
-// I'll notify the user to run a more complete SQL.
-
 export const db = {
   async fetchTasks() {
     if (!supabase) throw new Error('Supabase not configured');
+    console.log('[db.fetchTasks] Fetching tasks from Supabase...');
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
       .order('created_at', { ascending: false });
 
     if (error) {
-      // Provide more detailed error information
+      console.error('[db.fetchTasks] Error:', error.code, error.message);
       if (error.code === '42P01') {
         throw new Error('Tasks table does not exist in Supabase. Tasks will be stored locally.');
       }
       throw new Error(error.message || 'Failed to fetch tasks from database');
     }
+    console.log('[db.fetchTasks] Fetched', data.length, 'tasks');
     return data.map(mapRowToTask);
   },
 
   async addTask(task: Task) {
     if (!supabase) throw new Error('Supabase not configured');
+    console.log('[db.addTask] Inserting task:', task.id);
     const { error } = await supabase.from('tasks').insert({
       id: task.id,
       user_id: task.user_id,
@@ -65,13 +53,19 @@ export const db = {
       deadline: task.deadline,
       tags: task.tags,
       completed: task.status === 'done',
+      status: task.status,
       created_at: new Date(task.createdAt).toISOString(),
     });
-    if (error) throw error;
+    if (error) {
+      console.error('[db.addTask] Error:', error.code, error.message, error.details);
+      throw error;
+    }
+    console.log('[db.addTask] Insert succeeded');
   },
 
   async updateTask(task: Task) {
     if (!supabase) throw new Error('Supabase not configured');
+    console.log('[db.updateTask] Updating task:', task.id);
     const { error } = await supabase
       .from('tasks')
       .update({
@@ -84,19 +78,24 @@ export const db = {
         deadline: task.deadline,
         tags: task.tags,
         completed: task.status === 'done',
+        status: task.status,
       })
       .eq('id', task.id);
-    if (error) throw error;
+    if (error) {
+      console.error('[db.updateTask] Error:', error.code, error.message, error.details);
+      throw error;
+    }
+    console.log('[db.updateTask] Update succeeded');
   },
 
   async deleteTask(taskId: string) {
     if (!supabase) throw new Error('Supabase not configured');
-    console.log('[db.deleteTask] Sending DELETE to Supabase for taskId:', taskId);
+    console.log('[db.deleteTask] Deleting task:', taskId);
     const { error, count } = await supabase.from('tasks').delete({ count: 'exact' }).eq('id', taskId);
     if (error) {
-      console.error('[db.deleteTask] Supabase error:', error.code, error.message, error.details);
+      console.error('[db.deleteTask] Error:', error.code, error.message, error.details);
       throw error;
     }
-    console.log('[db.deleteTask] Supabase response OK. Rows deleted:', count);
+    console.log('[db.deleteTask] Rows deleted:', count);
   }
 };
