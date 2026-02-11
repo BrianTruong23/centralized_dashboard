@@ -15,6 +15,7 @@ create table tasks (
   deadline timestamp with time zone,
   tags text[] default '{}',
   completed boolean default false,
+  status text default 'todo',
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
@@ -33,3 +34,11 @@ create policy "Users can update their own tasks" on tasks
 
 create policy "Users can delete their own tasks" on tasks
   for delete using (auth.uid() = user_id);
+
+/**
+ * MIGRATION: If you already have the tasks table without the status column,
+ * run this instead:
+ *
+ *   ALTER TABLE tasks ADD COLUMN status text DEFAULT 'todo';
+ *   UPDATE tasks SET status = CASE WHEN completed THEN 'done' ELSE 'todo' END;
+ */
