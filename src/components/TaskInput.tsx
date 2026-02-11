@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Task, TaskPriority, TaskEnergyLevel, TaskCategory } from '@/types/task';
 import { generateId } from '@/lib/utils';
 import clsx from 'clsx';
+import { Plus } from 'lucide-react';
 
 interface TaskInputProps {
   onAddTask: (task: Task) => void;
@@ -51,115 +52,88 @@ export const TaskInput = ({ onAddTask }: TaskInputProps) => {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 mb-6">
-      <form onSubmit={handleSubmit}>
-        <div className="flex gap-2">
+    <div className="mb-8">
+      <form onSubmit={handleSubmit} className="relative">
+        <div className="flex items-center gap-3 border-b border-gray-200 dark:border-gray-800 pb-2 focus-within:border-gray-400 dark:focus-within:border-gray-600 transition-colors">
+          <div className="text-gray-400">
+             <Plus size={20} />
+          </div>
           <input
             type="text"
-            placeholder="What needs to be done?"
-            className="flex-1 text-lg font-medium p-2 border-none focus:ring-0 placeholder-gray-400 dark:placeholder-gray-500 outline-none bg-transparent text-gray-900 dark:text-gray-100"
+            placeholder="Add new task..."
+            className="flex-1 text-lg bg-transparent border-none outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onFocus={() => setIsExpanded(true)}
           />
-          <button
-            type="submit"
-            disabled={!title.trim()}
-            className="bg-black dark:bg-white text-white dark:text-black px-4 py-2 rounded-lg font-medium disabled:opacity-50 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
-          >
-            Add
-          </button>
+          {title.trim() && (
+             <button
+                type="submit"
+                className="text-sm font-semibold text-black dark:text-white hover:opacity-70"
+             >
+                Enter
+             </button>
+          )}
         </div>
 
         {isExpanded && (
-          <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-               {/* Category */}
-               <div>
-                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Category</label>
-                 <select
-                   value={category}
-                   onChange={(e) => setCategory(e.target.value as TaskCategory)}
-                   className="w-full p-2 bg-gray-50 dark:bg-gray-700 rounded-md text-sm border-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-600 text-gray-900 dark:text-gray-100"
-                 >
-                   {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                 </select>
-               </div>
-
-               {/* Priority */}
-               <div>
-                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Priority (1-5)</label>
-                 <div className="flex gap-1">
-                   {([1, 2, 3, 4, 5] as TaskPriority[]).map((p) => (
-                     <button
-                       key={p}
-                       type="button"
-                       onClick={() => setPriority(p)}
-                       className={clsx(
-                         "flex-1 py-1 rounded-md text-sm font-medium transition-colors",
-                         priority === p ? 
-                           (p >= 4 ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" : "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400") 
-                           : "bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600"
-                       )}
-                     >
-                       {p}
-                     </button>
-                   ))}
-                 </div>
-               </div>
-
-               {/* Energy */}
-               <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Energy</label>
-                  <div className="flex gap-1">
-                    {(['low', 'medium', 'high'] as TaskEnergyLevel[]).map((l) => (
-                      <button
-                        key={l}
-                        type="button"
-                        onClick={() => setEnergyLevel(l)}
-                        className={clsx(
-                          "flex-1 py-1 rounded-md text-sm font-medium capitalize transition-colors",
-                          energyLevel === l ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" : "bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600"
-                        )}
-                      >
-                        {l}
-                      </button>
-                    ))}
-                  </div>
-               </div>
-
-               {/* Duration */}
-               <div>
-                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Est. Minutes</label>
-                 <input
-                   type="number"
-                   value={estimatedMinutes}
-                   onChange={(e) => setEstimatedMinutes(parseInt(e.target.value) || 0)}
-                   className="w-full p-2 bg-gray-50 dark:bg-gray-700 rounded-md text-sm border-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-600 text-gray-900 dark:text-gray-100"
-                   min="5"
-                   step="5"
-                 />
-               </div>
+          <div className="mt-3 pl-8 flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-1">
+             {/* Quick select priority */}
+             <div className="flex bg-gray-100 dark:bg-gray-800 rounded-md p-0.5">
+                 {([1, 2, 3] as TaskPriority[]).map(p => (
+                   <button
+                     key={p}
+                     type="button"
+                     onClick={() => setPriority(p)}
+                     className={clsx(
+                       "px-2 py-0.5 text-xs font-medium rounded transition-colors",
+                       priority === p ? "bg-white dark:bg-black shadow-sm text-black dark:text-white" : "text-gray-500 hover:text-gray-800"
+                     )}
+                   >
+                     P{p}
+                   </button>
+                 ))}
              </div>
-             
-             {/* Optional Details */}
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <textarea
-                  placeholder="Notes / Description..."
-                  className="w-full p-3 bg-gray-50 dark:bg-gray-700 rounded-md text-sm border-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-600 min-h-[80px] text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+
+             {/* Duration Input */}
+             <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-md px-2 py-0.5">
+                <span className="text-[10px] text-gray-400 uppercase font-bold">MINS</span>
+                <input 
+                  type="number"
+                  value={estimatedMinutes}
+                  onChange={(e) => setEstimatedMinutes(parseInt(e.target.value)||0)}
+                  className="w-12 bg-transparent text-xs outline-none border-none text-center font-medium"
                 />
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Deadline (Optional)</label>
-                  <input
-                    type="datetime-local"
-                    value={deadline}
-                    onChange={(e) => setDeadline(e.target.value)}
-                    className="w-full p-2 bg-gray-50 dark:bg-gray-700 rounded-md text-sm border-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-600 text-gray-900 dark:text-gray-100"
-                  />
-                </div>
              </div>
+
+             {/* Category Select - Simple */}
+             <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as TaskCategory)}
+                className="bg-gray-100 dark:bg-gray-800 text-xs font-medium rounded-md px-2 py-1 outline-none border-none"
+             >
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+             </select>
+
+             {/* Date Picker Input */}
+             <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-md px-2 py-0.5">
+                <span className="text-[10px] text-gray-400 uppercase font-bold">DUE</span>
+                <input 
+                  type="date"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  className="bg-transparent text-xs outline-none border-none font-medium text-gray-600 dark:text-gray-300 w-24"
+                />
+             </div>
+
+             {/* Cancel/Collapse */}
+             <button 
+                type="button" 
+                onClick={() => setIsExpanded(false)}
+                className="ml-auto text-xs text-gray-400 hover:text-gray-600"
+             >
+                Close
+             </button>
           </div>
         )}
       </form>
