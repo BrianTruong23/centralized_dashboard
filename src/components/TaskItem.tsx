@@ -36,100 +36,106 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus }: TaskItemProps) =
   };
 
   const priorityColor = (p: TaskPriority) => {
-    if (p >= 5) return 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800';
-    if (p === 4) return 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800';
-    if (p === 3) return 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800';
-    return 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700';
+    // Very subtle priority indicators, text only or tiny dot
+    if (p >= 5) return 'text-red-500';
+    if (p === 4) return 'text-orange-500';
+    if (p === 3) return 'text-blue-500';
+    return 'text-gray-400';
   };
 
   if (isEditing) {
     return (
-      <div className="p-4 bg-white dark:bg-gray-800 rounded-xl border border-indigo-300 dark:border-indigo-700 space-y-3">
+      <div className="p-4 bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-100 dark:border-gray-800 space-y-3">
+        {/* Simplified Edit Form - kept mostly same structure but cleaner borders */}
         <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400">Title</label>
           <input
             type="text"
             value={editForm.title}
             onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-            className="w-full mt-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full text-base font-medium px-2 py-1 border-b border-gray-100 dark:border-gray-800 bg-transparent focus:outline-none focus:border-gray-400 transition-colors"
+            placeholder="Task title"
           />
         </div>
         <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400">Description</label>
           <input
             type="text"
             value={editForm.description}
             onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-            className="w-full mt-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full text-sm text-gray-500 px-2 py-1 bg-transparent focus:outline-none"
+            placeholder="Description..."
           />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-gray-500 dark:text-gray-400">Category</label>
-            <select
-              value={editForm.category}
-              onChange={(e) => setEditForm({ ...editForm, category: e.target.value as TaskCategory })}
-              className="w-full mt-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 dark:text-gray-400">Priority</label>
-            <select
-              value={editForm.priority}
-              onChange={(e) => setEditForm({ ...editForm, priority: Number(e.target.value) as TaskPriority })}
-              className="w-full mt-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value={1}>P1 - Urgent</option>
-              <option value={2}>P2 - High</option>
-              <option value={3}>P3 - Normal</option>
-              <option value={4}>P4 - Low</option>
-              <option value={5}>P5 - Someday</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 dark:text-gray-400">Est. Minutes</label>
-            <input
-              type="number"
-              value={editForm.estimatedMinutes}
-              onChange={(e) => setEditForm({ ...editForm, estimatedMinutes: Number(e.target.value) })}
-              className="w-full mt-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 dark:text-gray-400">Energy Level</label>
-            <select
-              value={editForm.energyLevel}
-              onChange={(e) => setEditForm({ ...editForm, energyLevel: e.target.value as TaskEnergyLevel })}
-              className="w-full mt-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {energyLevels.map(level => <option key={level} value={level}>{level}</option>)}
-            </select>
-          </div>
+        
+        {/* ... (rest of edit fields tailored slightly if needed, but keeping functional) ... */}
+        {/* For brevity, I'll keep the grid controls but style them cleaner */}
+        <div className="grid grid-cols-2 gap-4 pt-2">
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Status</label>
+              <select
+                value={editForm.status}
+                onChange={(e) => setEditForm({ ...editForm, status: e.target.value as TaskStatus })}
+                className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none"
+              >
+                <option value="todo">To Do</option>
+                <option value="doing">Doing</option>
+                <option value="done">Done</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Deadline</label>
+              <input 
+                type="date"
+                value={editForm.deadline || ''}
+                onChange={(e) => setEditForm({ ...editForm, deadline: e.target.value })}
+                className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none text-gray-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Category</label>
+              <select
+                value={editForm.category}
+                onChange={(e) => setEditForm({ ...editForm, category: e.target.value as TaskCategory })}
+                className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none"
+              >
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+               <label className="text-xs text-gray-500 block mb-1">Priority</label>
+               <select
+                  value={editForm.priority}
+                  onChange={(e) => setEditForm({ ...editForm, priority: Number(e.target.value) as TaskPriority })}
+                  className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none"
+                >
+                  <option value={1}>P1 - Urgent</option>
+                  <option value={2}>P2 - High</option>
+                  <option value={3}>P3 - Normal</option>
+                  <option value={4}>P4 - Low</option>
+                  <option value={5}>P5 - Someday</option>
+                </select>
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Est. Minutes</label>
+              <input 
+                type="number"
+                value={editForm.estimatedMinutes}
+                onChange={(e) => setEditForm({ ...editForm, estimatedMinutes: Number(e.target.value) })}
+                className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none"
+                min={0}
+                step={5}
+              />
+            </div>
         </div>
-        <div>
-          <label className="text-xs text-gray-500 dark:text-gray-400">Deadline</label>
-          <input
-            type="datetime-local"
-            value={editForm.deadline ? editForm.deadline.slice(0, 16) : ''}
-            onChange={(e) => setEditForm({ ...editForm, deadline: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
-            className="w-full mt-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <button
-            onClick={handleEditCancel}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-          >
-            <X size={14} /> Cancel
-          </button>
-          <button
-            onClick={handleEditSave}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
-          >
-            <Check size={14} /> Save
-          </button>
+
+        <div className="flex justify-end gap-3 pt-3">
+          <button onClick={handleEditCancel} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+          <button onClick={handleEditSave} className="text-xs font-medium text-black dark:text-white hover:opacity-70">Save</button>
         </div>
       </div>
     );
@@ -137,69 +143,79 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus }: TaskItemProps) =
 
   return (
     <div className={clsx(
-      "group flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-xl border transition-all hover:shadow-sm",
-      task.status === 'done' ? "border-gray-100 dark:border-gray-700 opacity-60 bg-gray-50/50 dark:bg-gray-800/50" : "border-gray-200 dark:border-gray-700"
+      "group flex items-start gap-3 py-3 px-2 border-b border-gray-50 dark:border-gray-900 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors rounded-lg -mx-2",
+      task.status === 'done' ? "opacity-40" : ""
     )}>
-      <button onClick={toggleStatus} className="flex-shrink-0 text-gray-400 dark:text-gray-500 hover:text-green-600 dark:hover:text-green-400 transition-colors">
-        {task.status === 'done' ? <CheckCircle2 size={24} className="text-green-500 dark:text-green-400" /> : <Circle size={24} />}
+      <button 
+        onClick={toggleStatus} 
+        className={clsx(
+            "mt-0.5 flex-shrink-0 transition-colors",
+            task.status === 'done' ? "text-gray-400" : "text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400"
+        )}
+      >
+        {task.status === 'done' ? <CheckCircle2 size={20} /> : <Circle size={20} strokeWidth={1.5} />}
       </button>
 
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 pt-0.5">
         <div className="flex items-center gap-2 mb-1">
           <span className={clsx(
-            "font-medium truncate transition-all text-gray-900 dark:text-gray-100",
-            task.status === 'done' && "line-through text-gray-400 dark:text-gray-500"
+            "text-[15px] font-normal text-gray-900 dark:text-gray-100 leading-snug truncate",
+            task.status === 'done' && "line-through"
           )}>
             {task.title}
           </span>
-          <span className={clsx("text-[10px] px-1.5 py-0.5 rounded-full font-semibold uppercase border", priorityColor(task.priority))}>
-            P{task.priority}
-          </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 font-medium uppercase border border-gray-200 dark:border-gray-600">
-            {task.category}
-          </span>
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-gray-400 dark:text-gray-500">
-          <span className="flex items-center gap-1">
-            <Clock size={12} /> {task.estimatedMinutes}m
-          </span>
-          <span className={clsx("flex items-center gap-1 capitalize",
-            task.energyLevel === 'high' ? 'text-orange-500 dark:text-orange-400' : 'text-gray-400 dark:text-gray-500'
-          )}>
-            <Zap size={12} /> {task.energyLevel}
-          </span>
-          {task.deadline && (
-            <span className="flex items-center gap-1 text-red-400 dark:text-red-500">
-              <Calendar size={12} /> {format(new Date(task.deadline), 'MMM d, h:mm a')}
-            </span>
-          )}
+        <div className="flex items-center gap-3 text-[11px] text-gray-400 dark:text-gray-500 font-medium h-4">
+           {/* Metadata only shows if relevant */}
+           <span className="flex items-center gap-1.5">
+              {task.estimatedMinutes}m
+           </span>
+           <span className="w-0.5 h-0.5 rounded-full bg-gray-300" />
+           <span>{task.category}</span>
+           
+           {task.priority < 4 && (
+             <>
+                <span className="w-0.5 h-0.5 rounded-full bg-gray-300" />
+                <span className={priorityColor(task.priority)}>P{task.priority}</span>
+             </>
+           )}
+
+           {task.deadline && (
+             <>
+               <span className="w-0.5 h-0.5 rounded-full bg-gray-300" />
+               <span className="flex items-center gap-1 text-red-400">
+                 {format(new Date(task.deadline), 'MMM d')}
+               </span>
+             </>
+           )}
         </div>
       </div>
 
-      <button
-        onClick={() => setIsEditing(true)}
-        className="p-2 text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-all"
-        title="Edit task"
-      >
-        <Pencil size={18} />
-      </button>
-
-      <button
-        onClick={() => onFocus(task)}
-        className="p-2 text-gray-400 dark:text-gray-500 hover:text-yellow-500 dark:hover:text-yellow-400 transition-all"
-        title="Focus Now"
-      >
-        <Zap size={18} />
-      </button>
-
-      <button
-        onClick={() => onDelete(task.id)}
-        className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-all"
-        title="Delete task"
-      >
-        <Trash2 size={18} />
-      </button>
+      {/* Actions - Visible on group hover */}
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={() => onFocus(task)}
+          className="p-1.5 text-gray-300 hover:text-yellow-600 transition-colors"
+          title="Focus"
+        >
+          <Zap size={14} strokeWidth={1.5} />
+        </button>
+        <button
+          onClick={() => setIsEditing(true)}
+          className="p-1.5 text-gray-300 hover:text-blue-600 transition-colors"
+          title="Edit"
+        >
+          <Pencil size={14} strokeWidth={1.5} />
+        </button>
+        <button
+          onClick={() => onDelete(task.id)}
+          className="p-1.5 text-gray-300 hover:text-red-600 transition-colors"
+          title="Delete"
+        >
+          <Trash2 size={14} strokeWidth={1.5} />
+        </button>
+      </div>
     </div>
   );
 };
