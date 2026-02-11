@@ -145,7 +145,19 @@ export const useTasks = () => {
   }, [tasks, isLoaded]);
 
   const addTask = async (task: Task) => {
-    const currentUser = userRef.current;
+    let currentUser = userRef.current;
+    
+    // Double-check auth if userRef is missing (race condition protection)
+    if (!currentUser && supabase) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            console.log('[useTasks.addTask] Recovered user from strict auth check:', user.id);
+            currentUser = user;
+            // Update ref for future calls
+            userRef.current = user; 
+        }
+    }
+
     console.log('[useTasks.addTask] taskId:', task.id, '| user:', currentUser?.id ?? 'NULL');
     const taskWithUser = { ...task, user_id: currentUser?.id };
 
@@ -194,7 +206,18 @@ export const useTasks = () => {
   };
 
   const deleteTask = async (taskId: string) => {
-    const currentUser = userRef.current;
+    let currentUser = userRef.current;
+
+    // Double-check auth if userRef is missing
+    if (!currentUser && supabase) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            console.log('[useTasks.deleteTask] Recovered user from strict auth check:', user.id);
+            currentUser = user; 
+            userRef.current = user;
+        }
+    }
+
     console.log('[useTasks.deleteTask] taskId:', taskId, '| user:', currentUser?.id ?? 'NULL');
 
     setTasks((prev) => {
