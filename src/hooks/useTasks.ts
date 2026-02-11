@@ -1,21 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Task } from '@/types/task';
 import { loadTasks, saveTasks } from '@/lib/storage';
-import { supabase } from '@/lib/supabase';
+import { supabase, authReady, SESSION_KEY } from '@/lib/supabase';
 import { db } from '@/lib/db';
 
 export const useTasks = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [user, setUser] = useState<any>(null);
+  // Ref keeps the latest user for async CRUD functions (avoids stale closures)
+  const userRef = useRef<any>(null);
+  const setUserAndRef = (u: any) => { userRef.current = u; setUser(u); };
 
   useEffect(() => {
-    // Check auth state
     let timeoutId: NodeJS.Timeout | null = null;
-    
+
     const checkUser = async () => {
       try {
-        // If Supabase is not configured, just load from local storage
         if (!supabase) {
           const stored = loadTasks();
           setTasks(stored);
@@ -23,40 +24,56 @@ export const useTasks = () => {
           return;
         }
 
-        // Add timeout to prevent infinite loading
         timeoutId = setTimeout(() => {
-          console.warn('Auth check timeout, using local storage');
+          console.warn('[useTasks] Auth check timeout, using local storage');
           const stored = loadTasks();
           setTasks(stored);
           setIsLoaded(true);
-        }, 5000); // 5 second timeout
+        }, 8000);
+
+        await authReady;
 
         const { data: { session }, error } = await supabase.auth.getSession();
-        
-        // Clear timeout on success or error response
+
         if (timeoutId) {
           clearTimeout(timeoutId);
           timeoutId = null;
         }
-        
+
         if (error) {
-          console.warn('Auth session error, using local storage:', error);
+          console.warn('[useTasks] Auth session error, using local storage:', error);
           const stored = loadTasks();
           setTasks(stored);
           setIsLoaded(true);
           return;
         }
 
-        setUser(session?.user ?? null);
+        // If Supabase is down, getSession() returns null even though we have
+        // cached tokens. Fall back to the cached user so DB ops are attempted.
+        let resolvedUser = session?.user ?? null;
+        if (!resolvedUser) {
+          try {
+            const raw = localStorage.getItem(SESSION_KEY);
+            if (raw) {
+              const cached = JSON.parse(raw);
+              if (cached?.user) {
+                resolvedUser = cached.user;
+                console.log('[useTasks] No in-memory session, using cached user:', cached.user.id);
+              }
+            }
+          } catch { /* ignore */ }
+        }
 
-        // Load tasks based on auth
-        if (session?.user) {
+        setUserAndRef(resolvedUser);
+        console.log('[useTasks] Auth resolved. user:', resolvedUser?.id ?? 'NULL');
+
+        if (resolvedUser) {
           try {
             const dbTasks = await db.fetchTasks();
             setTasks(dbTasks);
+            saveTasks(dbTasks);
           } catch (e: any) {
-            // If tasks table doesn't exist or other DB error, fall back to local storage
-            console.warn('Tasks table not available, using local storage:', e?.message || e?.code || 'Unknown error');
+            console.warn('[useTasks] DB fetch failed, using local storage:', e?.message || e?.code || 'Unknown error');
             const stored = loadTasks();
             setTasks(stored);
           }
@@ -66,13 +83,11 @@ export const useTasks = () => {
         }
         setIsLoaded(true);
       } catch (error) {
-        // Clear timeout if async operation throws (prevents memory leak)
         if (timeoutId) {
           clearTimeout(timeoutId);
           timeoutId = null;
         }
-        console.error('Error in checkUser:', error);
-        // Fallback to local storage on any error
+        console.error('[useTasks] Error in checkUser:', error);
         const stored = loadTasks();
         setTasks(stored);
         setIsLoaded(true);
@@ -81,94 +96,146 @@ export const useTasks = () => {
 
     checkUser();
 
-    // Only set up auth listener if Supabase is configured
     if (!supabase) {
-      // Cleanup function to clear timeout on unmount
       return () => {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
+        if (timeoutId) clearTimeout(timeoutId);
       };
     }
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    // Listen for auth changes (ignore INITIAL_SESSION(null) from persistSession:false)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'INITIAL_SESSION' && !session) {
+        console.log('[useTasks] Ignoring INITIAL_SESSION(null)');
+        return;
+      }
+
       const newUser = session?.user ?? null;
-      setUser(newUser);
+      console.log('[useTasks] onAuthStateChange:', event, '| user:', newUser?.id ?? 'NULL');
+      setUserAndRef(newUser);
 
       if (newUser) {
-        // If logging in, fetch DB tasks.
-        // Optional: Merge local tasks? For now, just switch context.
         try {
           const dbTasks = await db.fetchTasks();
           setTasks(dbTasks);
+          saveTasks(dbTasks);
         } catch (e: any) {
-          // If tasks table doesn't exist, fall back to local storage
-          console.warn('Tasks table not available, using local storage:', e?.message || e?.code || 'Unknown error');
+          console.warn('[useTasks] DB fetch failed on auth change:', e?.message || e?.code || 'Unknown error');
           const stored = loadTasks();
           setTasks(stored);
         }
-      } else {
-        // If logging out, revert to local tasks
+      } else if (event === 'SIGNED_OUT') {
         const stored = loadTasks();
         setTasks(stored);
       }
     });
 
-    // Cleanup function: unsubscribe from auth changes and clear timeout
     return () => {
       subscription.unsubscribe();
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, []);
 
-  // Sync to LocalStorage if not logged in
+  // Always keep localStorage in sync — acts as backup for both
+  // logged-in users (in case auth fails on next reload) and
+  // anonymous users (localStorage is their only persistence).
   useEffect(() => {
-    if (isLoaded && !user) {
+    if (isLoaded) {
       saveTasks(tasks);
     }
-  }, [tasks, isLoaded, user]);
+  }, [tasks, isLoaded]);
 
   const addTask = async (task: Task) => {
-    // Optimistic update
-    const taskWithUser = { ...task, user_id: user?.id };
-    setTasks((prev) => [taskWithUser, ...prev]);
+    let currentUser = userRef.current;
+    
+    // Double-check auth if userRef is missing (race condition protection)
+    if (!currentUser && supabase) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            console.log('[useTasks.addTask] Recovered user from strict auth check:', user.id);
+            currentUser = user;
+            // Update ref for future calls
+            userRef.current = user; 
+        }
+    }
 
-    if (user) {
+    console.log('[useTasks.addTask] taskId:', task.id, '| user:', currentUser?.id ?? 'NULL');
+    const taskWithUser = { ...task, user_id: currentUser?.id };
+
+    // Update state AND save to localStorage immediately (synchronous,
+    // survives page close / tab kill before the useEffect fires)
+    setTasks((prev) => {
+      const next = [taskWithUser, ...prev];
+      saveTasks(next);
+      return next;
+    });
+
+    if (currentUser) {
       try {
+        console.log('[useTasks.addTask] Calling db.addTask...');
         await db.addTask(taskWithUser);
-      } catch (e) {
-        console.error('Failed to add task to DB:', e);
-        // Revert? Or show error.
+        console.log('[useTasks.addTask] DB insert succeeded');
+      } catch (e: any) {
+        console.error('[useTasks.addTask] DB insert FAILED:', e?.message || e?.code || e);
       }
+    } else {
+      console.warn('[useTasks.addTask] No auth — task saved to localStorage only.');
     }
   };
 
   const updateTask = async (updatedTask: Task) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
-    );
+    const currentUser = userRef.current;
+    console.log('[useTasks.updateTask] taskId:', updatedTask.id, '| user:', currentUser?.id ?? 'NULL');
 
-    if (user) {
+    setTasks((prev) => {
+      const next = prev.map((t) => (t.id === updatedTask.id ? updatedTask : t));
+      saveTasks(next);
+      return next;
+    });
+
+    if (currentUser) {
       try {
+        console.log('[useTasks.updateTask] Calling db.updateTask...');
         await db.updateTask(updatedTask);
-      } catch (e) {
-        console.error('Failed to update task in DB:', e);
+        console.log('[useTasks.updateTask] DB update succeeded');
+      } catch (e: any) {
+        console.error('[useTasks.updateTask] DB update FAILED:', e?.message || e?.code || e);
       }
+    } else {
+      console.warn('[useTasks.updateTask] No auth — update saved to localStorage only.');
     }
   };
 
   const deleteTask = async (taskId: string) => {
-    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    let currentUser = userRef.current;
 
-    if (user) {
+    // Double-check auth if userRef is missing
+    if (!currentUser && supabase) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            console.log('[useTasks.deleteTask] Recovered user from strict auth check:', user.id);
+            currentUser = user; 
+            userRef.current = user;
+        }
+    }
+
+    console.log('[useTasks.deleteTask] taskId:', taskId, '| user:', currentUser?.id ?? 'NULL');
+
+    setTasks((prev) => {
+      const next = prev.filter((t) => t.id !== taskId);
+      saveTasks(next);
+      return next;
+    });
+
+    if (currentUser) {
       try {
+        console.log('[useTasks.deleteTask] Calling db.deleteTask...');
         await db.deleteTask(taskId);
-      } catch (e) {
-        console.error('Failed to delete task in DB:', e);
+        console.log('[useTasks.deleteTask] DB delete succeeded');
+      } catch (e: any) {
+        console.error('[useTasks.deleteTask] DB delete FAILED:', e?.message || e?.code || e);
       }
+    } else {
+      console.warn('[useTasks.deleteTask] No auth — delete saved to localStorage only.');
     }
   };
 

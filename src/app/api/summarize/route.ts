@@ -42,6 +42,7 @@ export async function POST(req: Request) {
         signal: controller.signal,
         body: JSON.stringify({
           model: 'google/gemini-2.5-flash-lite',
+          max_tokens: 1024,
           messages: [
             {
               role: 'system',

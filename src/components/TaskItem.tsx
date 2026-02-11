@@ -8,12 +8,13 @@ interface TaskItemProps {
   task: Task;
   onUpdate: (task: Task) => void;
   onDelete: (id: string) => void;
+  onFocus: (task: Task) => void;
 }
 
 const categories: TaskCategory[] = ['Research', 'Coding', 'Admin', 'Health', 'Life', 'Finance', 'Social', 'Content', 'UX'];
 const energyLevels: TaskEnergyLevel[] = ['low', 'medium', 'high'];
 
-export const TaskItem = ({ task, onUpdate, onDelete }: TaskItemProps) => {
+export const TaskItem = ({ task, onUpdate, onDelete, onFocus }: TaskItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Task>(task);
 
@@ -182,6 +183,14 @@ export const TaskItem = ({ task, onUpdate, onDelete }: TaskItemProps) => {
         title="Edit task"
       >
         <Pencil size={18} />
+      </button>
+
+      <button
+        onClick={() => onFocus(task)}
+        className="p-2 text-gray-400 dark:text-gray-500 hover:text-yellow-500 dark:hover:text-yellow-400 transition-all"
+        title="Focus Now"
+      >
+        <Zap size={18} />
       </button>
 
       <button

@@ -11,7 +11,7 @@ interface FocusTimerProps {
 }
 
 export const FocusTimer = ({ task, onComplete, onStop }: FocusTimerProps) => {
-  const [isActive, setIsActive] = useState(false);
+  const [isActive, setIsActive] = useState(true);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -27,6 +27,12 @@ export const FocusTimer = ({ task, onComplete, onStop }: FocusTimerProps) => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [isActive]);
+
+  // Reset timer when task changes
+  useEffect(() => {
+    setIsActive(true);
+    setElapsedSeconds(0);
+  }, [task.id]);
 
   const formatTime = (seconds: number) => {
     const mm = Math.floor(seconds / 60).toString().padStart(2, '0');

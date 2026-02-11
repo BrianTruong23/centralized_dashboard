@@ -5,9 +5,10 @@ interface TaskListProps {
   tasks: Task[];
   onUpdateTask: (task: Task) => void;
   onDeleteTask: (id: string) => void;
+  onFocusTask: (task: Task) => void;
 }
 
-export const TaskList = ({ tasks, onUpdateTask, onDeleteTask }: TaskListProps) => {
+export const TaskList = ({ tasks, onUpdateTask, onDeleteTask, onFocusTask }: TaskListProps) => {
   if (tasks.length === 0) {
     return (
       <div className="text-center py-12 text-gray-400">
@@ -32,6 +33,7 @@ export const TaskList = ({ tasks, onUpdateTask, onDeleteTask }: TaskListProps) =
           task={task} 
           onUpdate={onUpdateTask} 
           onDelete={onDeleteTask} 
+          onFocus={onFocusTask}
         />
       ))}
     </div>
