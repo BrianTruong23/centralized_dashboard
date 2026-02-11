@@ -78,6 +78,7 @@ export function Auth() {
             dropSession();
             setUser(null);
           } else if (data.session) {
+            // console.log('Session restored successfully:', data.session.user.email);
             persistSession(data.session);
             setUser(data.session.user);
           }
@@ -103,6 +104,7 @@ export function Auth() {
 
     // 3. Keep localStorage in sync for token refreshes / sign-outs
     const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
+      // console.log('Auth state change:', event);
       if (event === 'SIGNED_OUT') {
         dropSession();
         setUser(null);
@@ -138,6 +140,7 @@ export function Auth() {
 
         if (data.session) {
           persistSession(data.session);
+          // setUser(data.session.user); // onAuthStateChange handles this usually, but safe to set
           setIsOpen(false);
           setEmail('');
           setPassword('');
@@ -153,7 +156,11 @@ export function Auth() {
         });
         if (error) throw error;
         // Persist tokens immediately so reload works
-        if (data.session) persistSession(data.session);
+        if (data.session) {
+            persistSession(data.session);
+            // Force user update immediately for better UX
+            setUser(data.session.user);
+        }
         setIsOpen(false);
         setEmail('');
         setPassword('');
@@ -167,8 +174,16 @@ export function Auth() {
 
   const handleLogout = async () => {
     if (!supabase) return;
+    
+    // Optimistic logout: clear state immediately
     dropSession();
-    await supabase.auth.signOut();
+    setUser(null); 
+    
+    try {
+        await supabase.auth.signOut();
+    } catch (err) {
+        console.warn('Supabase signOut failed (likely network), but local session cleared.', err);
+    }
   };
 
   if (isCheckingSession) return <div className="text-xs text-gray-400">Loading auth...</div>;

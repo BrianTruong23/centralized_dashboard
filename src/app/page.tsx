@@ -49,6 +49,8 @@ export default function Home() {
   const [dayPlan, setDayPlan] = useState<Task[]>([]);
   const [isFocusing, setIsFocusing] = useState(false);
   const [userId, setUserId] = useState<string | undefined>(undefined);
+  // Track manually selected focus task
+  const [manualFocusTaskId, setManualFocusTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -86,13 +88,26 @@ export default function Home() {
   /* Logic restored */
   const suggestedTask = useMemo(() => {
     if (!isLoaded || tasks.length === 0) return null;
+    
+    // If user manually selected a task to focus on, return that one
+    if (manualFocusTaskId) {
+        const found = tasks.find(t => t.id === manualFocusTaskId);
+        if (found && found.status !== 'done') return found;
+    }
+
     return pickNextTask(tasks, { now: new Date(), energyLevel: 'medium' });
-  }, [tasks, isLoaded]);
+  }, [tasks, isLoaded, manualFocusTaskId]);
 
   const handleGeneratePlan = () => {
     const plan = generateDayPlan(tasks, { now: new Date(), energyLevel: 'medium', availableTimeMinutes: 480 });
     setDayPlan(plan);
     setShowPlan(true);
+  };
+
+  const handleFocusTask = (task: Task) => {
+    setManualFocusTaskId(task.id);
+    // Optionally scroll to top smoothly
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   if (!isLoaded) {
@@ -106,7 +121,7 @@ export default function Home() {
       <main className="max-w-xl mx-auto px-4 py-8">
         <header className="mb-8 flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight mb-1">My Dashboard</h1>
+            <h1 className="text-3xl font-bold tracking-tighter mb-1 font-mono uppercase">Minima</h1>
             <p className="text-gray-500 dark:text-gray-400 text-sm">Design your day, master your time. <Link href="/features" className="underline hover:text-black dark:hover:text-white">Features</Link></p>
           </div>
           <div className="flex items-center gap-2">
@@ -124,6 +139,7 @@ export default function Home() {
                 onComplete={(t) => {
                   updateTask({ ...t, status: 'done' });
                   setIsFocusing(false);
+                  setManualFocusTaskId(null); // Reset manual selection
                 }}
                 onStop={() => setIsFocusing(false)}
               />
@@ -177,6 +193,7 @@ export default function Home() {
             tasks={tasks}
             onUpdateTask={updateTask}
             onDeleteTask={deleteTask}
+            onFocusTask={handleFocusTask}
           />
         </section>
 
@@ -205,7 +222,12 @@ export default function Home() {
                          {idx + 1}
                        </div>
                        <div className="flex-1 pb-1">
-                          <TaskItem task={task} onUpdate={updateTask} onDelete={deleteTask} />
+                          <TaskItem 
+                            task={task} 
+                            onUpdate={updateTask} 
+                            onDelete={deleteTask} 
+                            onFocus={handleFocusTask}
+                          />
                        </div>
                      </div>
                    ))}
