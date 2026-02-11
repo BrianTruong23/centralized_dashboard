@@ -202,15 +202,15 @@ export const KanbanBoard = ({ initialIdeas, userId }: KanbanBoardProps) => {
                    </div>
                  )}
                  {ideas.filter(i => i.status === col.id).map(idea => (
-                   <div key={idea.id} className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 group relative">
+                   <div key={idea.id} className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 group relative" draggable={false}>
                       <button 
                         onClick={() => handleDelete(idea.id)}
                         className="absolute top-2 right-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         <X size={14} />
                       </button>
-                      <h4 className="font-bold text-sm mb-1">{idea.title}</h4>
-                      {idea.description && <p className="text-xs text-gray-500 line-clamp-3 mb-3">{idea.description}</p>}
+                      <h4 className="font-bold text-sm mb-1" draggable={false}>{idea.title}</h4>
+                      {idea.description && <p className="text-xs text-gray-500 line-clamp-3 mb-3" draggable={false}>{idea.description}</p>}
                       
                       <div className="flex justify-between mt-auto pt-2 border-t border-gray-50">
                         {colIdx > 0 ? (
