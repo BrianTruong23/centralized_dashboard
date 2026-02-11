@@ -2,6 +2,17 @@ import { Task, TaskCategory, TaskEnergyLevel, TaskPriority } from '@/types/task'
 import { PlanningConstraints, PlanItem, WeeklyPlan } from '@/types/plan';
 import { addDays, differenceInHours, format, parseISO, setHours, setMinutes, startOfDay } from 'date-fns';
 
+const generateUUID = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
 interface PlanContext {
   constraints: PlanningConstraints;
   existingTasks: Task[];
@@ -221,7 +232,7 @@ function allocateTasksToTimeBlocks(
 
       if (!existingItem) {
         planItems.push({
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           taskId: task.id,
           title: task.title,
           description: task.description,
@@ -265,7 +276,7 @@ export function generateWeeklyPlan(
   const planItems = allocateTasksToTimeBlocks(incompleteTasks, constraints);
 
   const plan: WeeklyPlan = {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     userId,
     title: `Week of ${format(parseISO(constraints.startDate), 'MMM d')}`,
     dateRangeStart: constraints.startDate,
