@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { Task } from '@/types/task';
+import { logActivity } from './activity';
 
 // Map database row → Task object.
 // Supports both old schema (completed boolean) and new schema (status text).
@@ -61,9 +62,26 @@ export const db = {
       throw error;
     }
     console.log('[db.addTask] Insert succeeded');
+
+    // Log activity (non-blocking)
+    if (task.user_id) {
+      logActivity({
+        userId: task.user_id,
+        actor: 'user',
+        actionType: 'TASK_CREATED',
+        entityType: 'task',
+        entityId: task.id,
+        summary: `Created task: ${task.title}`,
+        metadata: {
+          category: task.category,
+          priority: task.priority,
+          estimatedMinutes: task.estimatedMinutes,
+        },
+      });
+    }
   },
 
-  async updateTask(task: Task) {
+  async updateTask(task: Task, previousStatus?: string) {
     if (!supabase) throw new Error('Supabase not configured');
     console.log('[db.updateTask] Updating task:', task.id);
     const { error } = await supabase
@@ -86,9 +104,57 @@ export const db = {
       throw error;
     }
     console.log('[db.updateTask] Update succeeded');
+
+    // Log activity (non-blocking)
+    if (task.user_id) {
+      // Check if this is a status change to completed/uncompleted
+      if (previousStatus && previousStatus !== task.status) {
+        if (task.status === 'done') {
+          logActivity({
+            userId: task.user_id,
+            actor: 'user',
+            actionType: 'TASK_COMPLETED',
+            entityType: 'task',
+            entityId: task.id,
+            summary: `Completed task: ${task.title}`,
+            metadata: { previousStatus },
+          });
+        } else if (previousStatus === 'done') {
+          logActivity({
+            userId: task.user_id,
+            actor: 'user',
+            actionType: 'TASK_UNCOMPLETED',
+            entityType: 'task',
+            entityId: task.id,
+            summary: `Uncompleted task: ${task.title}`,
+            metadata: { newStatus: task.status },
+          });
+        } else {
+          logActivity({
+            userId: task.user_id,
+            actor: 'user',
+            actionType: 'TASK_UPDATED',
+            entityType: 'task',
+            entityId: task.id,
+            summary: `Updated task: ${task.title}`,
+            metadata: { previousStatus, newStatus: task.status },
+          });
+        }
+      } else {
+        // General update
+        logActivity({
+          userId: task.user_id,
+          actor: 'user',
+          actionType: 'TASK_UPDATED',
+          entityType: 'task',
+          entityId: task.id,
+          summary: `Updated task: ${task.title}`,
+        });
+      }
+    }
   },
 
-  async deleteTask(taskId: string) {
+  async deleteTask(taskId: string, userId?: string, taskTitle?: string) {
     if (!supabase) throw new Error('Supabase not configured');
     console.log('[db.deleteTask] Deleting task:', taskId);
     const { error, count } = await supabase.from('tasks').delete({ count: 'exact' }).eq('id', taskId);
@@ -97,5 +163,17 @@ export const db = {
       throw error;
     }
     console.log('[db.deleteTask] Rows deleted:', count);
+
+    // Log activity (non-blocking)
+    if (userId) {
+      logActivity({
+        userId,
+        actor: 'user',
+        actionType: 'TASK_DELETED',
+        entityType: 'task',
+        entityId: taskId,
+        summary: `Deleted task${taskTitle ? `: ${taskTitle}` : ''}`,
+      });
+    }
   }
 };
