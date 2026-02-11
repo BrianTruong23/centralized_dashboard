@@ -14,6 +14,7 @@ import { Zap, CalendarRange, Loader2 } from 'lucide-react';
 import { DailyNotes } from '@/components/DailyNotes';
 import { AmbientSound } from '@/components/AmbientSound';
 import { supabase, authReady, SESSION_KEY } from '@/lib/supabase';
+import { WeeklyPlanner } from '@/components/WeeklyPlanner';
 
 import Link from 'next/link';
 
@@ -51,6 +52,8 @@ export default function Home() {
   const [userId, setUserId] = useState<string | undefined>(undefined);
   // Track manually selected focus task
   const [manualFocusTaskId, setManualFocusTaskId] = useState<string | null>(null);
+  // Weekly planner state
+  const [showWeeklyPlanner, setShowWeeklyPlanner] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -242,12 +245,33 @@ export default function Home() {
           )}
         </section>
 
+        {/* Auto-Plan My Week Section */}
+        <section className="mb-8">
+          <button
+            onClick={() => setShowWeeklyPlanner(true)}
+            className="w-full flex items-center justify-center gap-2 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl shadow-md hover:shadow-lg hover:from-indigo-700 hover:to-purple-700 transition-all font-semibold"
+          >
+            <CalendarRange size={20} />
+            Auto-Plan My Week
+          </button>
+        </section>
+
         {/* Daily Notes Section */}
         <section className="mb-8">
             <DailyNotes userId={userId} onAddTask={addTask} />
         </section>
       </main>
       <AmbientSound />
+
+      {/* Weekly Planner Modal */}
+      {showWeeklyPlanner && (
+        <WeeklyPlanner
+          userId={userId}
+          tasks={tasks}
+          onAddTask={addTask}
+          onClose={() => setShowWeeklyPlanner(false)}
+        />
+      )}
     </div>
   );
 }
