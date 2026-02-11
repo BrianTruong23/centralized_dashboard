@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Task } from '@/types/task';
 import { loadTasks, saveTasks } from '@/lib/storage';
 import { supabase, authReady, SESSION_KEY } from '@/lib/supabase';
@@ -8,6 +8,9 @@ export const useTasks = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [user, setUser] = useState<any>(null);
+  // Ref keeps the latest user for async CRUD functions (avoids stale closures)
+  const userRef = useRef<any>(null);
+  const setUserAndRef = (u: any) => { userRef.current = u; setUser(u); };
 
   useEffect(() => {
     // Check auth state
@@ -66,7 +69,7 @@ export const useTasks = () => {
           } catch { /* ignore */ }
         }
 
-        setUser(resolvedUser);
+        setUserAndRef(resolvedUser);
         console.log('[useTasks] Auth resolved. user:', resolvedUser?.id ?? 'NULL');
 
         // Load tasks based on auth
@@ -113,25 +116,28 @@ export const useTasks = () => {
       };
     }
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    // Listen for auth changes (ignore INITIAL_SESSION(null) from persistSession:false)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'INITIAL_SESSION' && !session) {
+        console.log('[useTasks] Ignoring INITIAL_SESSION(null)');
+        return;
+      }
+
       const newUser = session?.user ?? null;
-      setUser(newUser);
+      console.log('[useTasks] onAuthStateChange:', event, '| user:', newUser?.id ?? 'NULL');
+      setUserAndRef(newUser);
 
       if (newUser) {
-        // If logging in, fetch DB tasks and keep localStorage in sync
         try {
           const dbTasks = await db.fetchTasks();
           setTasks(dbTasks);
           saveTasks(dbTasks);
         } catch (e: any) {
-          // If tasks table doesn't exist, fall back to local storage
           console.warn('Tasks table not available, using local storage:', e?.message || e?.code || 'Unknown error');
           const stored = loadTasks();
           setTasks(stored);
         }
-      } else {
-        // If logging out, revert to local tasks
+      } else if (event === 'SIGNED_OUT') {
         const stored = loadTasks();
         setTasks(stored);
       }
@@ -154,11 +160,12 @@ export const useTasks = () => {
   }, [tasks, isLoaded, user]);
 
   const addTask = async (task: Task) => {
-    console.log('[useTasks.addTask] taskId:', task.id, '| user:', user?.id ?? 'NULL');
-    const taskWithUser = { ...task, user_id: user?.id };
+    const currentUser = userRef.current;
+    console.log('[useTasks.addTask] taskId:', task.id, '| user:', currentUser?.id ?? 'NULL');
+    const taskWithUser = { ...task, user_id: currentUser?.id };
     setTasks((prev) => [taskWithUser, ...prev]);
 
-    if (user) {
+    if (currentUser) {
       try {
         console.log('[useTasks.addTask] Calling db.addTask...');
         await db.addTask(taskWithUser);
@@ -172,12 +179,13 @@ export const useTasks = () => {
   };
 
   const updateTask = async (updatedTask: Task) => {
-    console.log('[useTasks.updateTask] taskId:', updatedTask.id, '| user:', user?.id ?? 'NULL');
+    const currentUser = userRef.current;
+    console.log('[useTasks.updateTask] taskId:', updatedTask.id, '| user:', currentUser?.id ?? 'NULL');
     setTasks((prev) =>
       prev.map((t) => (t.id === updatedTask.id ? updatedTask : t))
     );
 
-    if (user) {
+    if (currentUser) {
       try {
         console.log('[useTasks.updateTask] Calling db.updateTask...');
         await db.updateTask(updatedTask);
@@ -191,10 +199,11 @@ export const useTasks = () => {
   };
 
   const deleteTask = async (taskId: string) => {
-    console.log('[useTasks.deleteTask] taskId:', taskId, '| user:', user?.id ?? 'NULL (local-only mode)');
+    const currentUser = userRef.current;
+    console.log('[useTasks.deleteTask] taskId:', taskId, '| user:', currentUser?.id ?? 'NULL (local-only mode)');
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
 
-    if (user) {
+    if (currentUser) {
       try {
         console.log('[useTasks.deleteTask] Calling db.deleteTask...');
         await db.deleteTask(taskId);
