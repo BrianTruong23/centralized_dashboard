@@ -29,6 +29,11 @@ This project uses Supabase PostgreSQL and automatically maintains schema documen
 To enable Google OAuth login in this app, follow:
 - [`docs/SUPABASE_GOOGLE_AUTH_SETUP.md`](./docs/SUPABASE_GOOGLE_AUTH_SETUP.md)
 
+## Knowledge Base
+
+- Task/project creation flow:
+  - [`docs/TASK_AND_PROJECT_FLOW.md`](./docs/TASK_AND_PROJECT_FLOW.md)
+
 ### Viewing the Schema
 
 The current database schema is documented in [`docs/SCHEMA.md`](./docs/SCHEMA.md), which includes:

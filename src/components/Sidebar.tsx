@@ -35,6 +35,8 @@ interface SidebarProps {
   onSearchChange: (query: string) => void;
   projects?: Project[];
   addProject?: (input: CreateProjectInput) => Promise<Project | undefined>;
+  focusPlantEnabled: boolean;
+  onToggleFocusPlant: (enabled: boolean) => void;
 }
 
 export const Sidebar = ({
@@ -49,6 +51,8 @@ export const Sidebar = ({
   onSearchChange,
   projects = [],
   addProject,
+  focusPlantEnabled,
+  onToggleFocusPlant,
 }: SidebarProps) => {
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -215,6 +219,8 @@ export const Sidebar = ({
          onClose={() => setIsSettingsOpen(false)}
          user={user}
          onLogout={onLogout}
+         focusPlantEnabled={focusPlantEnabled}
+         onToggleFocusPlant={onToggleFocusPlant}
       />
 
       <ActivityLogModal

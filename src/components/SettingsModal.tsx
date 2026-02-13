@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Loader2, X, AlertTriangle, User as UserIcon, Lock, Trash2, Bug, LogOut } from 'lucide-react';
+import { X, AlertTriangle, User as UserIcon, Lock, Trash2, Bug, LogOut, Leaf } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 
 interface SettingsModalProps {
@@ -10,10 +10,12 @@ interface SettingsModalProps {
   onClose: () => void;
   user: User;
   onLogout: () => void;
+  focusPlantEnabled: boolean;
+  onToggleFocusPlant: (enabled: boolean) => void;
 }
 
-export function SettingsModal({ isOpen, onClose, user, onLogout }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'danger' | 'debug'>('profile');
+export function SettingsModal({ isOpen, onClose, user, onLogout, focusPlantEnabled, onToggleFocusPlant }: SettingsModalProps) {
+  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'security' | 'danger' | 'debug'>('profile');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [diagnostics, setDiagnostics] = useState<string[]>([]);
@@ -173,6 +175,12 @@ export function SettingsModal({ isOpen, onClose, user, onLogout }: SettingsModal
                     <UserIcon size={16} /> Profile
                 </button>
                 <button 
+                  onClick={() => setActiveTab('preferences')}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'preferences' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                >
+                    <Leaf size={16} /> Preferences
+                </button>
+                <button 
                   onClick={() => setActiveTab('security')}
                   className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'security' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
@@ -229,6 +237,40 @@ export function SettingsModal({ isOpen, onClose, user, onLogout }: SettingsModal
                              <LogOut size={16} />
                              Log Out
                          </button>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'preferences' && (
+                <div className="space-y-6">
+                    <div>
+                        <h3 className="text-lg font-semibold mb-1">Preferences</h3>
+                        <p className="text-sm text-gray-500">Customize subtle focus visuals.</p>
+                    </div>
+
+                    <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50/80 dark:bg-gray-950/60">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <div className="flex items-center gap-2 text-sm font-medium">
+                                    <Leaf size={16} className="text-emerald-500" />
+                                    Focus Plant
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Shows a small plant that grows during uninterrupted focus time.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => onToggleFocusPlant(!focusPlantEnabled)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${focusPlantEnabled ? 'bg-emerald-500/70' : 'bg-gray-300 dark:bg-gray-700'}`}
+                                aria-pressed={focusPlantEnabled}
+                                aria-label="Toggle Focus Plant visual"
+                            >
+                                <span
+                                    className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${focusPlantEnabled ? 'translate-x-5' : 'translate-x-1'}`}
+                                />
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

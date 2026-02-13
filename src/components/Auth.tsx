@@ -5,6 +5,14 @@ import { supabase, isSupabaseConfigured, SESSION_KEY, resolveAuthReady } from '@
 import { User, Session } from '@supabase/supabase-js';
 import { Loader2 } from 'lucide-react';
 
+function GoogleMark() {
+  return (
+    <span aria-hidden="true" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-[11px] font-bold border border-gray-200">
+      <span className="text-[#4285F4]">G</span>
+    </span>
+  );
+}
+
 // ── localStorage helpers ────────────────────────────────────────────
 function persistSession(session: Session) {
   try {
@@ -262,10 +270,10 @@ export function Auth() {
           type="button"
           onClick={handleGoogleSignIn}
           disabled={isAuthProcessing || isGoogleLoading}
-          className="w-full mb-4 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold py-2.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          className="w-full mb-4 border border-gray-300 dark:border-gray-600 bg-white text-gray-800 dark:text-gray-100 font-semibold py-2.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
         >
-          {(isAuthProcessing || isGoogleLoading) && <Loader2 size={16} className="animate-spin" />}
-          Continue with Google
+          {(isAuthProcessing || isGoogleLoading) ? <Loader2 size={16} className="animate-spin" /> : <GoogleMark />}
+          <span className="text-[#1f1f1f] dark:text-gray-100">Sign in with Google</span>
         </button>
 
         <div className="relative mb-4">
