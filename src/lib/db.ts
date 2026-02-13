@@ -1,8 +1,108 @@
-import { supabase } from './supabase';
+import { SUPABASE_URL, SUPABASE_ANON_KEY, getAccessToken } from './supabase';
 import { Task } from '@/types/task';
 
-// Map database row → Task object.
-// Supports both old schema (completed boolean) and new schema (status text).
+// ── Raw HTTP helpers ───────────────────────────────────────────────────────
+// All DB operations use native fetch() against the PostgREST REST API.
+// We NEVER use supabase.from() or supabase.auth.getSession() because the
+// Supabase JS client's internal auth lock can deadlock any request during
+// token refresh. The access token is cached in supabase.ts and read
+// synchronously via getAccessToken().
+
+function requireToken(): string {
+  const token = getAccessToken();
+  if (!token) throw new Error('Not authenticated');
+  return token;
+}
+
+function headers(token: string): Record<string, string> {
+  return {
+    'apikey': SUPABASE_ANON_KEY!,
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+}
+
+async function rawInsert(
+  table: string,
+  payload: Record<string, any> | Record<string, any>[],
+  token: string,
+): Promise<void> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: { ...headers(token), 'Prefer': 'return=minimal' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw { code: body.code || String(res.status), message: body.message || res.statusText, details: body.details };
+  }
+}
+
+async function rawSelect<T = any>(
+  table: string,
+  token: string,
+  params?: Record<string, string>,
+): Promise<T[]> {
+  const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
+  url.searchParams.set('select', '*');
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      url.searchParams.set(k, v);
+    }
+  }
+  const res = await fetch(url.toString(), {
+    method: 'GET',
+    headers: headers(token),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw { code: body.code || String(res.status), message: body.message || res.statusText };
+  }
+  return res.json();
+}
+
+async function rawUpdate(
+  table: string,
+  updates: Record<string, any>,
+  filters: Record<string, string>,
+  token: string,
+): Promise<void> {
+  const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
+  for (const [k, v] of Object.entries(filters)) {
+    url.searchParams.set(k, v);
+  }
+  const res = await fetch(url.toString(), {
+    method: 'PATCH',
+    headers: { ...headers(token), 'Prefer': 'return=minimal' },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw { code: body.code || String(res.status), message: body.message || res.statusText, details: body.details };
+  }
+}
+
+async function rawDelete(
+  table: string,
+  filters: Record<string, string>,
+  token: string,
+): Promise<void> {
+  const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
+  for (const [k, v] of Object.entries(filters)) {
+    url.searchParams.set(k, v);
+  }
+  const res = await fetch(url.toString(), {
+    method: 'DELETE',
+    headers: headers(token),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw { code: body.code || String(res.status), message: body.message || res.statusText, details: body.details };
+  }
+}
+
+// ── Field mappers ──────────────────────────────────────────────────────────
+
 const mapRowToTask = (row: any): Task => ({
   id: row.id,
   user_id: row.user_id,
@@ -19,240 +119,156 @@ const mapRowToTask = (row: any): Task => ({
   project_id: row.project_id,
 });
 
+function taskToRow(task: Task): Record<string, any> {
+  const row: Record<string, any> = {
+    id: task.id,
+    user_id: task.user_id,
+    text: task.title,
+    description: task.description,
+    category: task.category,
+    priority: task.priority,
+    estimated_minutes: task.estimatedMinutes,
+    energy_level: task.energyLevel,
+    deadline: task.deadline || null,
+    tags: task.tags,
+    completed: task.status === 'done',
+    status: task.status,
+    created_at: new Date(task.createdAt).toISOString(),
+  };
+  if (task.project_id) {
+    row.project_id = task.project_id;
+  }
+  return row;
+}
+
+// ── Fire-and-forget activity log (never blocks the caller) ─────────────────
+
+function logActivity(token: string, userId: string, action: string, entityId: string, details: any = null) {
+  rawInsert('activity_logs', {
+    user_id: userId,
+    action,
+    entity_id: entityId,
+    entity_type: 'task',
+    details,
+  }, token).catch(() => {}); // never throws, never awaited
+}
+
+// ── Public API ─────────────────────────────────────────────────────────────
+
 export const db = {
-  async fetchTasks() {
-    if (!supabase) throw new Error('Supabase not configured');
-    console.log('[db.fetchTasks] Fetching tasks from Supabase...');
-    const { data, error } = await supabase
-      .from('tasks')
-      .select('*')
-      .order('created_at', { ascending: false });
+  // ── Tasks ──────────────────────────────────────────────────────────────
 
-    if (error) {
-      console.error('[db.fetchTasks] Error:', error.code, error.message);
-      if (error.code === '42P01') {
-        throw new Error('Tasks table does not exist in Supabase. Tasks will be stored locally.');
-      }
-      throw new Error(error.message || 'Failed to fetch tasks from database');
+  async fetchTasks(): Promise<Task[]> {
+    const token = requireToken();
+    const rows = await rawSelect('tasks', token, {
+      'order': 'created_at.desc',
+    });
+    return rows.map(mapRowToTask);
+  },
+
+  async addTask(task: Task): Promise<void> {
+    const token = requireToken();
+    await rawInsert('tasks', taskToRow(task), token);
+    if (task.user_id) logActivity(token, task.user_id, 'created_task', task.id, { title: task.title });
+  },
+
+  async addTasksBatch(tasks: Task[]): Promise<number> {
+    if (tasks.length === 0) return 0;
+    const token = requireToken();
+    await rawInsert('tasks', tasks.map(taskToRow), token);
+    const userId = tasks[0]?.user_id;
+    if (userId) {
+      tasks.forEach(t => logActivity(token, userId, 'created_task', t.id, { title: t.title }));
     }
-    console.log('[db.fetchTasks] Fetched', data.length, 'tasks');
-    return data.map(mapRowToTask);
+    return tasks.length;
   },
 
-  async logActivity(userId: string, action: string, entityId: string, details: any = null, entityType: string = 'task') {
-      if (!supabase) return;
-      try {
-          await supabase.from('activity_logs').insert({
-              user_id: userId,
-              action,
-              entity_id: entityId,
-              entity_type: entityType,
-              details
-          });
-      } catch (e) {
-          console.error('[db.logActivity] Failed to log activity:', e);
-          // Don't block main operation
-      }
-  },
-
-  async addTask(task: Task) {
-    if (!supabase) throw new Error('Supabase not configured');
-
-    // --- DIAGNOSTIC: Log auth state at insert time ---
-    const { data: { session } } = await supabase.auth.getSession();
-    console.log('[db.addTask] 🔐 Auth session:', session ? `uid=${session.user.id}` : 'NO SESSION');
-    console.log('[db.addTask] 🔐 task.user_id:', task.user_id);
-    console.log('[db.addTask] 🔐 Match:', session?.user?.id === task.user_id);
-
-    const payload: Record<string, any> = {
-      id: task.id,
-      user_id: task.user_id,
+  async updateTask(task: Task): Promise<void> {
+    const token = requireToken();
+    await rawUpdate('tasks', {
       text: task.title,
       description: task.description,
       category: task.category,
       priority: task.priority,
       estimated_minutes: task.estimatedMinutes,
       energy_level: task.energyLevel,
-      deadline: task.deadline || null,
+      deadline: task.deadline,
       tags: task.tags,
       completed: task.status === 'done',
       status: task.status,
-      created_at: new Date(task.createdAt).toISOString(),
-    };
-
-    // Only include project_id if it's actually set (avoids FK violations)
-    if (task.project_id) {
-      payload.project_id = task.project_id;
-    }
-
-    console.log('[db.addTask] 📦 Full payload:', JSON.stringify(payload, null, 2));
-
-    // Use .select() to get the inserted row back — if RLS blocks the insert,
-    // Supabase returns NO error but data will be empty. This lets us detect it.
-    const { error, data, status, statusText } = await supabase
-      .from('tasks')
-      .insert(payload)
-      .select();
-
-    console.log('[db.addTask] 📡 Response: status=', status, statusText, '| data=', data, '| error=', error);
-
-    if (error) {
-      console.error('[db.addTask] ❌ Supabase error:', error.code, error.message, error.details, error.hint);
-      throw error;
-    }
-
-    if (!data || data.length === 0) {
-      console.error('[db.addTask] ❌ Insert returned 0 rows — RLS blocked. user_id:', task.user_id);
-      throw new Error('Insert blocked by RLS policy — no rows returned');
-    }
-
-    console.log('[db.addTask] ✅ Insert succeeded for:', task.id);
-    
-    // Fire-and-forget activity log — don't block on it
-    if (task.user_id) {
-        this.logActivity(task.user_id, 'created_task', task.id, { title: task.title }).catch(() => {});
-    }
-  },
-
-  async updateTask(task: Task) {
-    if (!supabase) throw new Error('Supabase not configured');
-    console.log('[db.updateTask] Updating task:', task.id);
-    const { error } = await supabase
-      .from('tasks')
-      .update({
-        text: task.title,
-        description: task.description,
-        category: task.category,
-        priority: task.priority,
-        estimated_minutes: task.estimatedMinutes,
-        energy_level: task.energyLevel,
-        deadline: task.deadline,
-        tags: task.tags,
-        completed: task.status === 'done',
-        status: task.status,
-        project_id: task.project_id,
-      })
-      .eq('id', task.id);
-    if (error) {
-      console.error('[db.updateTask] Error:', error.code, error.message, error.details);
-      throw error;
-    }
-
-    // Log activity logic
+      project_id: task.project_id,
+    }, { 'id': `eq.${task.id}` }, token);
     if (task.status === 'done' && task.user_id) {
-         await this.logActivity(task.user_id, 'completed_task', task.id, { title: task.title });
+      logActivity(token, task.user_id, 'completed_task', task.id, { title: task.title });
     }
-    
-    console.log('[db.updateTask] Update succeeded');
   },
 
-  async deleteTask(taskId: string) {
-    if (!supabase) throw new Error('Supabase not configured');
-    console.log('[db.deleteTask] Deleting task:', taskId);
-    
-    // Fetch task for logging
-    const { data: task } = await supabase.from('tasks').select('user_id, text').eq('id', taskId).single();
-
-    const { error, count } = await supabase.from('tasks').delete({ count: 'exact' }).eq('id', taskId);
-    if (error) {
-      console.error('[db.deleteTask] Error:', error.code, error.message, error.details);
-      throw error;
-    }
-
-    if (task && task.user_id) {
-        await this.logActivity(task.user_id, 'deleted_task', taskId, { title: task.text });
-    }
-    
-    console.log('[db.deleteTask] Rows deleted:', count);
+  async deleteTask(taskId: string): Promise<void> {
+    const token = requireToken();
+    await rawDelete('tasks', { 'id': `eq.${taskId}` }, token);
   },
 
-  async fetchProjects(userId?: string) {
-    if (!supabase) throw new Error('Supabase not configured');
-    console.log('[db.fetchProjects] Fetching projects for user:', userId ?? 'UNKNOWN');
+  // ── Projects ───────────────────────────────────────────────────────────
 
-    let query = supabase
-      .from('projects')
-      .select('*')
-      .order('created_at', { ascending: true });
-    
-    // Explicitly filter by user_id if provided (belt-and-suspenders with RLS)
-    if (userId) {
-      query = query.eq('user_id', userId);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('[db.fetchProjects] Error:', error.code, error.message);
-      throw error;
-    }
-    console.log('[db.fetchProjects] Found', data?.length ?? 0, 'projects');
-    return data || [];
+  async fetchProjects(userId?: string): Promise<any[]> {
+    const token = requireToken();
+    const params: Record<string, string> = { 'order': 'created_at.asc' };
+    if (userId) params['user_id'] = `eq.${userId}`;
+    return rawSelect('projects', token, params);
   },
 
-  async addProject(project: { user_id: string; name: string; color: string }) {
-    if (!supabase) throw new Error('Supabase not configured');
-    console.log('[db.addProject] Inserting project:', project.name, '| user:', project.user_id);
-    
-    const insertPromise = supabase
-      .from('projects')
-      .insert({
-        user_id: project.user_id,
-        name: project.name,
-        color: project.color,
-      })
-      .select()
-      .single();
-    
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error(`addProject timed out after 10s for "${project.name}"`)), 10000)
-    );
+  async addProject(project: { user_id: string; name: string; color: string }): Promise<any> {
+    const token = requireToken();
 
-    const { data, error } = await Promise.race([insertPromise, timeoutPromise]) as any;
+    // Check if already exists
+    const existing = await rawSelect('projects', token, {
+      'user_id': `eq.${project.user_id}`,
+      'name': `eq.${project.name}`,
+    });
+    if (existing.length > 0) return existing[0];
 
-    if (error) {
-      console.error('[db.addProject] Error:', error.code, error.message);
-      throw error;
+    // Insert
+    try {
+      await rawInsert('projects', project, token);
+    } catch (e: any) {
+      if (e.code !== '23505') throw e;
+      // unique constraint — another request created it, fall through to fetch
     }
-    console.log('[db.addProject] ✓ Project created:', data?.id, data?.name);
-    return data;
+
+    // Fetch the inserted row
+    const rows = await rawSelect('projects', token, {
+      'user_id': `eq.${project.user_id}`,
+      'name': `eq.${project.name}`,
+    });
+    if (rows.length === 0) throw new Error('Project created but fetch returned nothing');
+    return rows[0];
   },
 
-  async ensureDefaultProjects(userId: string) {
-    if (!supabase) throw new Error('Supabase not configured');
-    console.log('[db.ensureDefaultProjects] Checking for default projects...');
+  async ensureDefaultProjects(userId: string): Promise<any[]> {
+    const token = requireToken();
 
-    // Check if Life and Work projects exist by name
-    const { data: existingProjects } = await supabase
-      .from('projects')
-      .select('name')
-      .eq('user_id', userId)
-      .in('name', ['Life', 'Work']);
+    const existing = await rawSelect('projects', token, {
+      'user_id': `eq.${userId}`,
+      'name': `in.("Life","Work")`,
+    });
 
-    const existingNames = new Set((existingProjects || []).map((p: any) => p.name));
-    
-    const defaults = [
-      { user_id: userId, name: 'Life', color: '#22c55e' }, // Green
-      { user_id: userId, name: 'Work', color: '#3b82f6' }, // Blue
-    ];
-    
-    const toCreate = defaults.filter(d => !existingNames.has(d.name));
+    const existingNames = new Set(existing.map((p: any) => p.name));
+    const toCreate = [
+      { user_id: userId, name: 'Life', color: '#22c55e' },
+      { user_id: userId, name: 'Work', color: '#3b82f6' },
+    ].filter(d => !existingNames.has(d.name));
 
-    if (toCreate.length === 0) {
-      console.log('[db.ensureDefaultProjects] Life and Work already exist, skipping');
-      return;
+    if (toCreate.length === 0) return existing;
+
+    try {
+      await rawInsert('projects', toCreate, token);
+    } catch (e: any) {
+      if (e.code !== '23505') return existing;
     }
 
-    console.log('[db.ensureDefaultProjects] Creating missing defaults:', toCreate.map(p => p.name).join(', '));
-    const { error } = await supabase
-      .from('projects')
-      .insert(toCreate);
-
-    if (error) {
-      console.error('[db.ensureDefaultProjects] Error:', error.code, error.message);
-      // Don't throw — this is a convenience function, not critical
-    } else {
-      console.log('[db.ensureDefaultProjects] Default projects created');
-    }
-  }
+    return rawSelect('projects', token, {
+      'user_id': `eq.${userId}`,
+      'name': `in.("Life","Work")`,
+    });
+  },
 };
