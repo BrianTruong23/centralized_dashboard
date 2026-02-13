@@ -57,7 +57,12 @@ export const db = {
 
   async addTask(task: Task) {
     if (!supabase) throw new Error('Supabase not configured');
-    console.log('[db.addTask] Inserting task:', task.id, '| project_id:', task.project_id ?? 'NONE');
+
+    // --- DIAGNOSTIC: Log auth state at insert time ---
+    const { data: { session } } = await supabase.auth.getSession();
+    console.log('[db.addTask] 🔐 Auth session:', session ? `uid=${session.user.id}` : 'NO SESSION');
+    console.log('[db.addTask] 🔐 task.user_id:', task.user_id);
+    console.log('[db.addTask] 🔐 Match:', session?.user?.id === task.user_id);
 
     const payload: Record<string, any> = {
       id: task.id,
@@ -80,12 +85,16 @@ export const db = {
       payload.project_id = task.project_id;
     }
 
+    console.log('[db.addTask] 📦 Full payload:', JSON.stringify(payload, null, 2));
+
     // Use .select() to get the inserted row back — if RLS blocks the insert,
     // Supabase returns NO error but data will be empty. This lets us detect it.
-    const { error, data } = await supabase
+    const { error, data, status, statusText } = await supabase
       .from('tasks')
       .insert(payload)
       .select();
+
+    console.log('[db.addTask] 📡 Response: status=', status, statusText, '| data=', data, '| error=', error);
 
     if (error) {
       console.error('[db.addTask] ❌ Supabase error:', error.code, error.message, error.details, error.hint);
@@ -93,11 +102,11 @@ export const db = {
     }
 
     if (!data || data.length === 0) {
-      console.error('[db.addTask] ❌ Insert returned 0 rows — likely RLS policy blocked it. user_id:', task.user_id);
+      console.error('[db.addTask] ❌ Insert returned 0 rows — RLS blocked. user_id:', task.user_id);
       throw new Error('Insert blocked by RLS policy — no rows returned');
     }
 
-    console.log('[db.addTask] ✓ Insert succeeded for:', task.id);
+    console.log('[db.addTask] ✅ Insert succeeded for:', task.id);
     
     // Fire-and-forget activity log — don't block on it
     if (task.user_id) {
