@@ -13,13 +13,14 @@ import { Task } from '@/types/task';
 import { FocusTimer } from '@/components/FocusTimer';
 import { AuthModal } from '@/components/AuthModal';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { Zap, CalendarRange, Loader2, Filter, ChevronUp, ChevronDown, Play } from 'lucide-react';
+import { Zap, CalendarRange, Loader2, Filter, ChevronUp, ChevronDown, Play, Sparkles } from 'lucide-react';
 import { DailyNotes } from '@/components/DailyNotes';
 import { DailyNotesHistory } from '@/components/DailyNotesHistory';
 import { AmbientSound } from '@/components/AmbientSound';
 import { Sidebar } from '@/components/Sidebar';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { FilterPanel } from '@/components/FilterPanel';
+import { AutoPlanModal } from '@/components/AutoPlanModal';
 import { TaskStatus, TaskPriority, TaskCategory } from '@/types/task';
 import clsx from 'clsx';
 import { supabase, authReady, SESSION_KEY } from '@/lib/supabase';
@@ -84,6 +85,9 @@ export default function Home() {
   const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
   const [activeFocusTask, setActiveFocusTask] = useState<Task | null>(null);
   const [isFocusModalOpen, setIsFocusModalOpen] = useState(false);
+  
+  // Auto Plan State
+  const [isAutoPlanModalOpen, setIsAutoPlanModalOpen] = useState(false);
 
   const getDefaultDate = () => {
     if (currentView === 'today') {
@@ -189,6 +193,29 @@ export default function Home() {
     setIsFocusModalOpen(true);
   };
 
+  const handleAutoPlanTasks = async (newTasks: Task[]) => {
+      console.log(`[handleAutoPlanTasks] Received ${newTasks.length} tasks to add`);
+      
+      // Fire ALL addTask calls concurrently — don't let one blocking call stop the rest
+      const results = await Promise.allSettled(
+          newTasks.map(async (task) => {
+              console.log(`[handleAutoPlanTasks] Adding task: "${task.title}" | project_id: ${task.project_id || 'NONE'}`);
+              await addTask(task);
+              console.log(`[handleAutoPlanTasks] ✓ Task added: "${task.title}"`);
+              return task.title;
+          })
+      );
+      
+      const succeeded = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.filter(r => r.status === 'rejected');
+      console.log(`[handleAutoPlanTasks] Done: ${succeeded}/${newTasks.length} tasks added`);
+      failed.forEach((r, i) => {
+          if (r.status === 'rejected') {
+              console.error(`[handleAutoPlanTasks] ✗ Failed:`, r.reason);
+          }
+      });
+  };
+
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState<{
@@ -252,14 +279,8 @@ export default function Home() {
     }
 
     if (currentView === 'today') {
-        const now = new Date();
-        return result.filter(t => {
-            if (!t.deadline) return false;
-            const d = new Date(t.deadline);
-            return d.getDate() === now.getDate() && 
-                   d.getMonth() === now.getMonth() && 
-                   d.getFullYear() === now.getFullYear();
-        });
+        const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+        return result.filter(t => t.deadline === todayStr);
     }
     if (currentView === 'upcoming') {
         const now = new Date();
@@ -343,9 +364,14 @@ export default function Home() {
             <h1 className="text-3xl font-bold tracking-tighter mb-1 font-mono uppercase">
                {viewTitle}
             </h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">
-                {currentView === 'kanban' ? 'Visual workflow' : 'Design your day, master your time.'} 
-                <Link href="https://forms.gle/K8z21uKNX5ieb7Ai9" target="_blank" rel="noopener noreferrer" className="underline hover:text-black dark:hover:text-white ml-2">Features</Link>
+            <p className="text-gray-500 dark:text-gray-400 text-sm min-h-[20px]">
+                {currentView === 'kanban' ? 'Visual workflow' : 
+                 currentView === 'today' ? (
+                    <>
+                        Design your day, master your time. 
+                        <Link href="https://forms.gle/K8z21uKNX5ieb7Ai9" target="_blank" rel="noopener noreferrer" className="underline hover:text-black dark:hover:text-white ml-2">Features</Link>
+                    </>
+                 ) : null}
             </p>
           </div>
 
@@ -410,15 +436,26 @@ export default function Home() {
             ) : (
                 <>
                     <section className="mb-8">
-                    <section className="mb-8">
                         <TaskInput 
                             onAddTask={addTask} 
                             defaultDate={getDefaultDate()}
                         />
                     </section>
-                    </section>
 
-                    {(currentView === 'inbox' || currentView === 'today') && (
+                    {/* Auto Plan Section for Inbox */}
+                     {currentView === 'inbox' && (
+                        <section className="mb-8">
+                             <button
+                                onClick={() => setIsAutoPlanModalOpen(true)}
+                                className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:border-black dark:hover:border-white hover:text-black dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-all font-medium"
+                             >
+                                <Sparkles size={18} />
+                                Auto Plan My Week
+                             </button>
+                        </section>
+                    )}
+
+                    {currentView === 'today' && (
                         <section className="mb-8">
                             {!showPlan ? (
                                 <button
@@ -519,6 +556,13 @@ export default function Home() {
         onAddTask={addTask}
         userId={user?.id}
         defaultDate={getDefaultDate()}
+      />
+
+      <AutoPlanModal 
+        isOpen={isAutoPlanModalOpen}
+        onClose={() => setIsAutoPlanModalOpen(false)}
+        onAddTasks={handleAutoPlanTasks}
+        userId={user?.id}
       />
 
       <FocusSessionModal 

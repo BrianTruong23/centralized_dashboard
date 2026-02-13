@@ -98,20 +98,23 @@ export const Sidebar = ({
 
   return (
     <aside className={clsx("w-64 flex flex-col h-screen bg-gray-50/50 dark:bg-black border-r border-gray-100 dark:border-gray-900", className)}>
-      {/* Header with UserDropdown */}
+      {/* Header with Logo + UserDropdown */}
       <div className="p-4 mb-2 flex items-center justify-between">
-         {user ? (
-            <div className="flex-1 mr-2">
-                <UserDropdown 
-                  user={user} 
-                  onLogout={onLogout} 
-                  onOpenSettings={() => setIsSettingsOpen(true)}
-                  onOpenActivityLog={() => setIsActivityLogOpen(true)}
-                />
-            </div>
-         ) : (
-            <div className="text-sm font-bold px-2">Minima</div>
-         )}
+         <div className="flex items-center gap-2 flex-1 mr-2">
+             <img src="/logo.svg" alt="Minima" width={48} height={48} className="rounded-lg" />
+             {user ? (
+                 <div className="flex-1">
+                     <UserDropdown 
+                       user={user} 
+                       onLogout={onLogout} 
+                       onOpenSettings={() => setIsSettingsOpen(true)}
+                       onOpenActivityLog={() => setIsActivityLogOpen(true)}
+                     />
+                 </div>
+             ) : (
+                 <span className="text-sm font-bold">Minima</span>
+             )}
+         </div>
          
          <div className="flex items-center gap-1 opacity-0 hover:opacity-100 transition-opacity">
              <ThemeToggle />
