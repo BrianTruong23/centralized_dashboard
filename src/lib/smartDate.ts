@@ -1,3 +1,5 @@
+import { formatDateKey } from '@/lib/dateKey';
+
 export const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 export const SHORT_DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
@@ -44,7 +46,7 @@ export function parseDateFromText(text: string): DateMatch | null {
 
   return {
     match: match[0],
-    date: targetDate.toISOString().split('T')[0],
+    date: formatDateKey(targetDate),
     index: match.index
   };
 }

@@ -9,9 +9,6 @@ if (!isSupabaseConfigured) {
   console.warn('Missing Supabase environment variables. Storage will not persist to cloud.');
 }
 
-// persistSession: false — we handle token persistence ourselves in React
-// components (useEffect) to guarantee client-side execution.
-// Module-level side effects are unreliable in Next.js SSR.
 export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl!, supabaseKey!, {
       auth: {
@@ -21,16 +18,38 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
     })
   : null;
 
-// Key used to store auth tokens in localStorage
+export const SUPABASE_URL = supabaseUrl;
+export const SUPABASE_ANON_KEY = supabaseKey;
 export const SESSION_KEY = 'app_auth_session';
 
-// Auth-ready promise: resolved by the Auth component once session recovery
-// is complete. Other components (useTasks, page) await this before making
-// authenticated DB calls.
+// ── Cached access token ────────────────────────────────────────────────────
+// Updated by onAuthStateChange below. DB functions read this synchronously
+// instead of calling supabase.auth.getSession() which can deadlock.
+let _cachedAccessToken: string | null = null;
+
+/** Get the current access token (synchronous, never deadlocks). */
+export function getAccessToken(): string | null {
+  return _cachedAccessToken;
+}
+
+// ── Auth-ready promise ─────────────────────────────────────────────────────
 let _resolveAuthReady: (() => void) | null = null;
 export const authReady = new Promise<void>((resolve) => {
   _resolveAuthReady = resolve;
 });
 export function resolveAuthReady() {
   _resolveAuthReady?.();
+}
+
+// Single onAuthStateChange listener that:
+// 1. Caches the access token for synchronous reads
+// 2. Resolves authReady so hooks can start loading
+if (supabase) {
+  supabase.auth.onAuthStateChange((event, session) => {
+    _cachedAccessToken = session?.access_token ?? null;
+
+    if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+      resolveAuthReady();
+    }
+  });
 }

@@ -11,76 +11,82 @@ export const useProjects = () => {
 
   useEffect(() => {
     let mounted = true;
+    let loadId = 0; // Monotonic counter to discard stale results
 
     const loadProjects = async (userId: string) => {
+      const thisLoad = ++loadId;
       try {
-        console.log('[useProjects] Loading projects for user:', userId);
+        console.log('[useProjects] Loading projects for user:', userId, '(load #' + thisLoad + ')');
+        await db.ensureDefaultProjects(userId).catch((err: any) => {
+          console.warn('[useProjects] ensureDefaultProjects failed (non-fatal):', err?.message);
+        });
         const dbProjects = await db.fetchProjects(userId);
-        if (mounted) {
+        if (mounted && thisLoad === loadId) {
           setProjects(dbProjects);
-          console.log('[useProjects] Projects set:', dbProjects.length);
+          setIsLoading(false);
+          console.log('[useProjects] Projects set:', dbProjects.length, dbProjects.map((p: any) => p.name));
         }
       } catch (e) {
         console.error('[useProjects] Failed to fetch projects:', e);
-      } finally {
         if (mounted) setIsLoading(false);
       }
     };
 
-    const init = async () => {
+    if (!supabase) {
+      setIsLoading(false);
+      return;
+    }
+
+    // Eager load: wait for auth to be ready, then fetch via getSession().
+    // This is the same pattern useTasks uses — it works because authReady
+    // resolves after INITIAL_SESSION fires, guaranteeing the session is
+    // available. We cannot rely on onAuthStateChange alone because
+    // INITIAL_SESSION may fire before useEffect registers the listener.
+    const eagerLoad = async () => {
       try {
-        // Race authReady against a timeout — don't hang forever
-        await Promise.race([
-          authReady,
-          new Promise(resolve => setTimeout(resolve, 3000))
-        ]);
+        await authReady;
+        if (!mounted) return;
 
-        if (!supabase || !mounted) {
-          setIsLoading(false);
-          return;
-        }
-
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await supabase!.auth.getSession();
         const user = session?.user || null;
         userRef.current = user;
 
         if (user) {
-          // Fire-and-forget: ensure defaults exist (don't block rendering)
-          db.ensureDefaultProjects(user.id).then(() => {
-            // After defaults are ensured, refresh projects
-            if (mounted) loadProjects(user.id);
-          }).catch(e => console.warn('[useProjects] ensureDefaultProjects failed:', e));
-          
-          // Also load immediately (defaults may already exist)
+          console.log('[useProjects] Eager load — user:', user.id);
           await loadProjects(user.id);
         } else {
-          console.log('[useProjects] No user session found');
+          console.log('[useProjects] Eager load — no session');
           if (mounted) setIsLoading(false);
         }
       } catch (e) {
-        console.error('[useProjects] init error:', e);
+        console.error('[useProjects] Eager load error:', e);
         if (mounted) setIsLoading(false);
       }
     };
 
-    init();
+    eagerLoad();
 
-    const { data: { subscription } } = supabase?.auth.onAuthStateChange(async (event, session) => {
-        console.log('[useProjects] onAuthStateChange:', event);
-        userRef.current = session?.user || null;
-        if (session?.user) {
-            // Don't block on ensureDefaults — just load projects
-            loadProjects(session.user.id);
-            // Ensure defaults in background
-            db.ensureDefaultProjects(session.user.id).catch(() => {});
-        } else if (event === 'SIGNED_OUT') {
-            setProjects([]);
-        }
-    }) || { data: { subscription: { unsubscribe: () => {} } } };
+    // Also listen for auth changes (SIGNED_IN, TOKEN_REFRESHED, SIGNED_OUT)
+    // to handle login/logout/token refresh after the initial eager load.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // Skip INITIAL_SESSION — already handled by eagerLoad above
+      if (event === 'INITIAL_SESSION') return;
+
+      console.log('[useProjects] onAuthStateChange:', event, session?.user?.id);
+      userRef.current = session?.user || null;
+
+      if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+        await loadProjects(session.user.id);
+      } else if (event === 'SIGNED_OUT') {
+        loadId++; // Cancel any in-flight loads
+        setProjects([]);
+        setIsLoading(false);
+      }
+    });
 
     return () => {
-        mounted = false;
-        subscription.unsubscribe();
+      mounted = false;
+      subscription.unsubscribe();
     };
   }, []);
 
