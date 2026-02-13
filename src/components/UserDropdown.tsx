@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { User } from '@supabase/supabase-js';
 import { Settings, LogOut, ChevronDown, User as UserIcon, Bell, Layout } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
+import { UpgradeModal } from './UpgradeModal';
 
 interface UserDropdownProps {
   user: User;
@@ -13,6 +14,7 @@ interface UserDropdownProps {
 export function UserDropdown({ user, onLogout }: UserDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close clicks outside
@@ -93,11 +95,21 @@ export function UserDropdown({ user, onLogout }: UserDropdownProps) {
         )}
       </div>
 
-      <SettingsModal 
-         isOpen={showSettings} 
-         onClose={() => setShowSettings(false)} 
-         user={user} 
+      <SettingsModal
+         isOpen={showSettings}
+         onClose={() => setShowSettings(false)}
+         user={user}
          onLogout={onLogout}
+         onUpgradeClick={() => {
+           setShowSettings(false);
+           setShowUpgrade(true);
+         }}
+      />
+
+      <UpgradeModal
+         isOpen={showUpgrade}
+         onClose={() => setShowUpgrade(false)}
+         user={user}
       />
     </>
   );

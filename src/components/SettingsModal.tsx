@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Loader2, X, AlertTriangle, User as UserIcon, Lock, Trash2 } from 'lucide-react';
+import { Loader2, X, AlertTriangle, User as UserIcon, Lock, Trash2, Crown } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 
 interface SettingsModalProps {
@@ -10,16 +10,43 @@ interface SettingsModalProps {
   onClose: () => void;
   user: User;
   onLogout: () => void;
+  onUpgradeClick: () => void;
 }
 
-export function SettingsModal({ isOpen, onClose, user, onLogout }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'danger'>('profile');
+export function SettingsModal({ isOpen, onClose, user, onLogout, onUpgradeClick }: SettingsModalProps) {
+  const [activeTab, setActiveTab] = useState<'profile' | 'subscription' | 'security' | 'danger'>('profile');
+  const [isPremium, setIsPremium] = useState(false);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   // Form states
   const [newPassword, setNewPassword] = useState('');
-  
+
+  useEffect(() => {
+    if (isOpen && user) {
+      fetchSubscriptionStatus();
+    }
+  }, [isOpen, user]);
+
+  const fetchSubscriptionStatus = async () => {
+    if (!supabase) return;
+    try {
+      const { data, error } = await supabase
+        .from('user_subscriptions')
+        .select('is_premium, subscription_status')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!error && data) {
+        setIsPremium(data.is_premium);
+        setSubscriptionStatus(data.subscription_status);
+      }
+    } catch (err) {
+      console.error('Error fetching subscription:', err);
+    }
+  };
+
   if (!isOpen) return null;
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
@@ -66,19 +93,25 @@ export function SettingsModal({ isOpen, onClose, user, onLogout }: SettingsModal
         <div className="w-1/3 bg-gray-50 dark:bg-gray-950 border-r border-gray-100 dark:border-gray-800 p-4">
             <h2 className="text-lg font-bold mb-6 px-2">Settings</h2>
             <nav className="space-y-1">
-                <button 
+                <button
                   onClick={() => setActiveTab('profile')}
                   className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'profile' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
                     <UserIcon size={16} /> Profile
                 </button>
-                <button 
+                <button
+                  onClick={() => setActiveTab('subscription')}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'subscription' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                >
+                    <Crown size={16} /> Subscription
+                </button>
+                <button
                   onClick={() => setActiveTab('security')}
                   className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'security' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
                     <Lock size={16} /> Security
                 </button>
-                <button 
+                <button
                   onClick={() => setActiveTab('danger')}
                   className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'danger' ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
@@ -115,6 +148,79 @@ export function SettingsModal({ isOpen, onClose, user, onLogout }: SettingsModal
                             <code className="block w-full p-2 bg-gray-100 dark:bg-gray-800 rounded-md text-xs font-mono text-gray-500 overflow-hidden text-ellipsis">{user.id}</code>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {activeTab === 'subscription' && (
+                <div className="space-y-6">
+                    <div>
+                        <h3 className="text-lg font-semibold mb-1">Subscription</h3>
+                        <p className="text-sm text-gray-500">Manage your premium subscription.</p>
+                    </div>
+
+                    {isPremium ? (
+                        <div className="space-y-4">
+                            <div className="p-4 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950/20 dark:to-yellow-950/20 border border-amber-200 dark:border-amber-900/30 rounded-xl">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <Crown className="text-amber-600 dark:text-amber-400" size={24} />
+                                    <h4 className="font-bold text-amber-900 dark:text-amber-100">Premium Member</h4>
+                                </div>
+                                <p className="text-sm text-amber-700 dark:text-amber-300">
+                                    You have access to all premium features!
+                                </p>
+                                <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                                    Status: {subscriptionStatus || 'Active'}
+                                </p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <h5 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Premium Features:</h5>
+                                <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1 pl-5 list-disc">
+                                    <li>Unlimited tasks and projects</li>
+                                    <li>Advanced filters and search</li>
+                                    <li>Focus analytics and insights</li>
+                                    <li>Export data to CSV/JSON</li>
+                                    <li>Priority support</li>
+                                </ul>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl">
+                                <h4 className="font-semibold mb-2">Free Plan</h4>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                                    You are currently on the free plan with limited features.
+                                </p>
+                                <ul className="text-sm text-gray-500 dark:text-gray-500 space-y-1 pl-5 list-disc mb-4">
+                                    <li>Up to 50 tasks</li>
+                                    <li>Up to 3 projects</li>
+                                    <li>Basic features only</li>
+                                </ul>
+                            </div>
+
+                            <button
+                                onClick={() => {
+                                    onClose();
+                                    onUpgradeClick();
+                                }}
+                                className="w-full py-3 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-bold rounded-lg transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+                            >
+                                <Crown size={20} />
+                                Upgrade to Premium
+                            </button>
+
+                            <div className="space-y-2 pt-2">
+                                <h5 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Unlock Premium Features:</h5>
+                                <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1 pl-5 list-disc">
+                                    <li>Unlimited tasks and projects</li>
+                                    <li>Advanced filters and search</li>
+                                    <li>Focus analytics and insights</li>
+                                    <li>Export data to CSV/JSON</li>
+                                    <li>Priority support</li>
+                                </ul>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
