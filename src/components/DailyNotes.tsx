@@ -36,6 +36,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pastNotes, setPastNotes] = useState<Note[]>([]);
+  const [isSummaryVisible, setIsSummaryVisible] = useState(false);
 
   // State for missing projects handling
   const [missingProjects, setMissingProjects] = useState<string[]>([]);
@@ -108,6 +109,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
 
   const handleSummarize = async () => {
     if (!noteContent.trim()) return;
+    setIsSummaryVisible(true);
     setIsLoading(true);
     setError(null);
 
@@ -366,7 +368,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className={`grid grid-cols-1 ${isSummaryVisible ? 'md:grid-cols-2' : ''} gap-6`}>
         <div className="flex flex-col gap-2">
             <label className="text-xs font-semibold uppercase text-gray-400">Your Thoughts</label>
             <textarea
@@ -377,6 +379,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
             />
         </div>
 
+        {isSummaryVisible && (
         <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold uppercase text-gray-400">AI Summary & Action Items</label>
@@ -570,6 +573,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
                 )}
             </div>
         </div>
+        )}
       </div>
 
     </div>
