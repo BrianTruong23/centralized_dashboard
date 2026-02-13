@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     }
 
     log('Request received, parsing body...');
-    const { notes, startDate } = await req.json();
+    const { notes, startDate, preferences } = await req.json();
 
     if (!notes) {
       return NextResponse.json({ error: 'Notes are required' }, { status: 400 });
@@ -58,6 +58,13 @@ export async function POST(req: Request) {
       Current Context:
       - Today is ${startDate || new Date().toISOString().split('T')[0]}.
       - User Notes: "${notes}"
+      - User Planning Preferences:
+        - Peak energy time: ${preferences?.energyPeak || 'morning'}
+        - Preferred deep-work block: ${preferences?.deepWorkMinutes || 90} minutes
+        - Preferred break: ${preferences?.breakMinutes || 15} minutes
+        - Work days: ${preferences?.workDays || 'Mon-Fri'}
+        - Constraints: "${preferences?.personalConstraints || 'None provided'}"
+        - Additional notes: "${preferences?.planningNotes || 'None provided'}"
 
       ROLE: Expert Project Manager & Scheduler.
       GOAL: Create a weekly plan (Mon-Sun) from the notes.
@@ -76,6 +83,10 @@ export async function POST(req: Request) {
          - Interpretation: "Today" means ${startDate || new Date().toISOString().split('T')[0]}.
          - "Tomorrow" means ${new Date(new Date(startDate || Date.now()).getTime() + 86400000).toISOString().split('T')[0]}.
          - If no date is implied, schedule intelligently.
+      8. Personalization:
+         - Place cognitively demanding tasks near the user's peak energy window.
+         - Honor constraints and work days whenever possible.
+         - If task is large, break it into logical sequential steps across days.
 
       OUTPUT JSON format only (no markdown):
       {

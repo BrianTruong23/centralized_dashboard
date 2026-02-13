@@ -6,6 +6,7 @@ import { Task } from '@/types/task';
 import { Project, CreateProjectInput } from '@/types/project';
 import { formatDateKey } from '@/lib/dateKey';
 import { supabase } from '@/lib/supabase';
+import { PlanningPreferences } from '@/types/planningPreferences';
 
 type PlannedTask = {
   title: string;
@@ -28,9 +29,17 @@ interface AiAssistantProps {
   addProject: (input: CreateProjectInput) => Promise<Project | undefined>;
   onAddTasks: (tasks: Task[]) => Promise<void> | void;
   proOverride?: boolean;
+  planningPreferences: PlanningPreferences;
 }
 
-export function AiAssistant({ userId, projects, addProject, onAddTasks, proOverride = false }: AiAssistantProps) {
+export function AiAssistant({
+  userId,
+  projects,
+  addProject,
+  onAddTasks,
+  proOverride = false,
+  planningPreferences,
+}: AiAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -74,6 +83,7 @@ export function AiAssistant({ userId, projects, addProject, onAddTasks, proOverr
         body: JSON.stringify({
           notes: input,
           startDate: formatDateKey(new Date()),
+          preferences: planningPreferences,
         }),
       });
 

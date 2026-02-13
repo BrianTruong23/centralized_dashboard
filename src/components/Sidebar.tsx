@@ -23,6 +23,7 @@ import { CreateProjectModal } from './CreateProjectModal';
 import { SettingsModal } from './SettingsModal';
 import { ActivityLogModal } from './ActivityLogModal';
 import { formatDateKey } from '@/lib/dateKey';
+import { PlanningPreferences } from '@/types/planningPreferences';
 
 interface SidebarProps {
   currentView: string;
@@ -41,6 +42,8 @@ interface SidebarProps {
   isPro: boolean;
   forceProUser: boolean;
   onToggleForceProUser: (enabled: boolean) => void;
+  planningPreferences: PlanningPreferences;
+  onPlanningPreferencesChange: (next: PlanningPreferences) => void;
 }
 
 export const Sidebar = ({
@@ -60,6 +63,8 @@ export const Sidebar = ({
   isPro,
   forceProUser,
   onToggleForceProUser,
+  planningPreferences,
+  onPlanningPreferencesChange,
 }: SidebarProps) => {
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -231,6 +236,8 @@ export const Sidebar = ({
          isPro={isPro}
          forceProUser={forceProUser}
          onToggleForceProUser={onToggleForceProUser}
+         planningPreferences={planningPreferences}
+         onPlanningPreferencesChange={onPlanningPreferencesChange}
       />
 
       <ActivityLogModal

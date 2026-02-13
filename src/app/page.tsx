@@ -26,6 +26,7 @@ import Link from 'next/link';
 import { formatDateKey } from '@/lib/dateKey';
 import { usePremium } from '@/hooks/usePremium';
 import { AiAssistant } from '@/components/AiAssistant';
+import { PlanningPreferences, defaultPlanningPreferences } from '@/types/planningPreferences';
 
 const loadingMessages = [
   'Loading dashboard...',
@@ -99,6 +100,16 @@ export default function Home() {
     const raw = localStorage.getItem('focus_plant_enabled');
     return raw === null ? true : raw === 'true';
   });
+  const [planningPreferences, setPlanningPreferences] = useState<PlanningPreferences>(() => {
+    if (typeof window === 'undefined') return defaultPlanningPreferences;
+    try {
+      const raw = localStorage.getItem('planning_preferences');
+      if (!raw) return defaultPlanningPreferences;
+      return { ...defaultPlanningPreferences, ...JSON.parse(raw) } as PlanningPreferences;
+    } catch {
+      return defaultPlanningPreferences;
+    }
+  });
 
   useEffect(() => {
     try {
@@ -115,6 +126,14 @@ export default function Home() {
       // ignore storage errors
     }
   }, [forceProUser]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('planning_preferences', JSON.stringify(planningPreferences));
+    } catch {
+      // ignore storage errors
+    }
+  }, [planningPreferences]);
 
   const getDefaultDate = () => {
     if (currentView === 'today') {
@@ -403,6 +422,8 @@ export default function Home() {
           isPro={effectiveIsPro}
           forceProUser={forceProUser}
           onToggleForceProUser={setForceProUser}
+          planningPreferences={planningPreferences}
+          onPlanningPreferencesChange={setPlanningPreferences}
        />
 
        {/* CreateTaskModal rendered once at the bottom of the component */}
@@ -659,6 +680,7 @@ export default function Home() {
         projects={projects}
         addProject={addProjectFn}
         proOverride={forceProUser}
+        planningPreferences={planningPreferences}
       />
 
       <FocusSessionModal 
@@ -678,6 +700,7 @@ export default function Home() {
         addProject={addProjectFn}
         onAddTasks={handleAutoPlanTasks}
         proOverride={forceProUser}
+        planningPreferences={planningPreferences}
       />
       <AmbientSound />
     </div>
