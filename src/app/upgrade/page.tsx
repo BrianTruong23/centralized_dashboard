@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { usePremium } from '@/hooks/usePremium';
 import { CheckCircle2, Crown, Loader2, Sparkles, XCircle } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 
-export default function UpgradePage() {
+function UpgradePageContent() {
   const searchParams = useSearchParams();
   const { isPro, loading: isPremiumLoading, refresh } = usePremium();
   const [status, setStatus] = useState<'idle' | 'creating' | 'redirecting' | 'capturing' | 'success' | 'cancel' | 'error'>('idle');
@@ -162,5 +162,24 @@ export default function UpgradePage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function UpgradePage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-[#fafafa] dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-4 py-10">
+          <div className="max-w-2xl mx-auto rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 shadow-sm">
+            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+              <Loader2 size={16} className="animate-spin" />
+              Loading upgrade page...
+            </div>
+          </div>
+        </main>
+      }
+    >
+      <UpgradePageContent />
+    </Suspense>
   );
 }
