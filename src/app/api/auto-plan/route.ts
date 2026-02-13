@@ -5,6 +5,35 @@ export async function POST(req: Request) {
   const log = (msg: string) => console.log(`[AutoPlan API ${Date.now() - startTime}ms] ${msg}`);
 
   try {
+    const authHeader = req.headers.get('authorization') || '';
+    const userToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!userToken) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnon) {
+      return NextResponse.json({ error: 'Supabase is not configured' }, { status: 503 });
+    }
+
+    const subRes = await fetch(`${supabaseUrl}/rest/v1/user_subscriptions?select=tier,status&limit=1`, {
+      method: 'GET',
+      headers: {
+        apikey: supabaseAnon,
+        Authorization: `Bearer ${userToken}`,
+      },
+    });
+    if (!subRes.ok) {
+      return NextResponse.json({ error: 'Could not verify subscription status' }, { status: 403 });
+    }
+    const rows = await subRes.json();
+    const sub = rows?.[0];
+    const isPro = sub?.tier === 'pro' && sub?.status === 'active';
+    if (!isPro) {
+      return NextResponse.json({ error: 'Auto Plan is a Pro feature. Please upgrade.' }, { status: 402 });
+    }
+
     log('Request received, parsing body...');
     const { notes, startDate } = await req.json();
 

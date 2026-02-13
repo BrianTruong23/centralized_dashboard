@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Project, CreateProjectInput } from '@/types/project';
 import { Loader2, Sparkles, X, Check, Calendar, AlertTriangle } from 'lucide-react';
 import { Task, TaskCategory } from '@/types/task';
+import { supabase } from '@/lib/supabase';
 
 interface AutoPlanModalProps {
   isOpen: boolean;
@@ -52,9 +53,16 @@ export function AutoPlanModal({ isOpen, onClose, onAddTasks, userId, projects, a
     setError(null);
 
     try {
+      if (!supabase) throw new Error('Supabase not configured');
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Please sign in to use Auto Plan');
+
       const res = await fetch('/api/auto-plan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({ 
             notes, 
             startDate: new Date().toLocaleDateString('en-CA') // Send LOCAL date yyyy-mm-dd

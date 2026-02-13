@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { X, AlertTriangle, User as UserIcon, Lock, Trash2, Bug, LogOut, Leaf } from 'lucide-react';
+import { X, AlertTriangle, User as UserIcon, Lock, Trash2, Bug, LogOut, Leaf, Crown } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
+import { useRouter } from 'next/navigation';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -12,13 +13,15 @@ interface SettingsModalProps {
   onLogout: () => void;
   focusPlantEnabled: boolean;
   onToggleFocusPlant: (enabled: boolean) => void;
+  isPro: boolean;
 }
 
-export function SettingsModal({ isOpen, onClose, user, onLogout, focusPlantEnabled, onToggleFocusPlant }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'security' | 'danger' | 'debug'>('profile');
+export function SettingsModal({ isOpen, onClose, user, onLogout, focusPlantEnabled, onToggleFocusPlant, isPro }: SettingsModalProps) {
+  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'billing' | 'security' | 'danger' | 'debug'>('profile');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [diagnostics, setDiagnostics] = useState<string[]>([]);
+  const router = useRouter();
 
   // Form states
   const [newPassword, setNewPassword] = useState('');
@@ -181,6 +184,12 @@ export function SettingsModal({ isOpen, onClose, user, onLogout, focusPlantEnabl
                     <Leaf size={16} /> Preferences
                 </button>
                 <button 
+                  onClick={() => setActiveTab('billing')}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'billing' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                >
+                    <Crown size={16} /> Billing
+                </button>
+                <button 
                   onClick={() => setActiveTab('security')}
                   className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'security' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
@@ -269,6 +278,38 @@ export function SettingsModal({ isOpen, onClose, user, onLogout, focusPlantEnabl
                                 <span
                                     className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${focusPlantEnabled ? 'translate-x-5' : 'translate-x-1'}`}
                                 />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'billing' && (
+                <div className="space-y-6">
+                    <div>
+                        <h3 className="text-lg font-semibold mb-1">Billing</h3>
+                        <p className="text-sm text-gray-500">Manage your plan and unlock premium features.</p>
+                    </div>
+
+                    <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-xl bg-gradient-to-br from-amber-50 to-white dark:from-gray-900 dark:to-gray-950">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <div className="flex items-center gap-2 text-sm font-semibold">
+                                    <Crown size={16} className={isPro ? 'text-emerald-500' : 'text-amber-500'} />
+                                    {isPro ? 'Pro Active' : 'Free Plan'}
+                                </div>
+                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                    {isPro
+                                      ? 'You already have access to premium features.'
+                                      : 'Upgrade to Pro to unlock premium planning features and future releases.'}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => { onClose(); router.push('/upgrade'); }}
+                                className="px-3 py-2 rounded-lg text-xs font-bold bg-black dark:bg-white text-white dark:text-black hover:opacity-90 transition-opacity"
+                            >
+                                {isPro ? 'Manage Plan' : 'Go Pro'}
                             </button>
                         </div>
                     </div>
