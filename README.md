@@ -24,6 +24,11 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 This project uses Supabase PostgreSQL and automatically maintains schema documentation.
 
+## Supabase Google Sign-In Setup
+
+To enable Google OAuth login in this app, follow:
+- [`docs/SUPABASE_GOOGLE_AUTH_SETUP.md`](./docs/SUPABASE_GOOGLE_AUTH_SETUP.md)
+
 ### Viewing the Schema
 
 The current database schema is documented in [`docs/SCHEMA.md`](./docs/SCHEMA.md), which includes:
