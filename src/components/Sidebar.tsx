@@ -22,6 +22,8 @@ import { UserDropdown } from './UserDropdown';
 import { CreateProjectModal } from './CreateProjectModal';
 import { SettingsModal } from './SettingsModal';
 import { ActivityLogModal } from './ActivityLogModal';
+import { formatDateKey } from '@/lib/dateKey';
+import { PlanningPreferences } from '@/types/planningPreferences';
 
 interface SidebarProps {
   currentView: string;
@@ -35,6 +37,13 @@ interface SidebarProps {
   onSearchChange: (query: string) => void;
   projects?: Project[];
   addProject?: (input: CreateProjectInput) => Promise<Project | undefined>;
+  focusPlantEnabled: boolean;
+  onToggleFocusPlant: (enabled: boolean) => void;
+  isPro: boolean;
+  forceProUser: boolean;
+  onToggleForceProUser: (enabled: boolean) => void;
+  planningPreferences: PlanningPreferences;
+  onPlanningPreferencesChange: (next: PlanningPreferences) => void;
 }
 
 export const Sidebar = ({
@@ -49,6 +58,13 @@ export const Sidebar = ({
   onSearchChange,
   projects = [],
   addProject,
+  focusPlantEnabled,
+  onToggleFocusPlant,
+  isPro,
+  forceProUser,
+  onToggleForceProUser,
+  planningPreferences,
+  onPlanningPreferencesChange,
 }: SidebarProps) => {
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -60,7 +76,7 @@ export const Sidebar = ({
   const todayCount = tasks.filter(t => {
       if (t.status === 'done') return false;
       if (!t.deadline) return false;
-      const today = new Date().toISOString().split('T')[0];
+      const today = formatDateKey(new Date());
       return t.deadline === today;
   }).length;
   
@@ -215,6 +231,13 @@ export const Sidebar = ({
          onClose={() => setIsSettingsOpen(false)}
          user={user}
          onLogout={onLogout}
+         focusPlantEnabled={focusPlantEnabled}
+         onToggleFocusPlant={onToggleFocusPlant}
+         isPro={isPro}
+         forceProUser={forceProUser}
+         onToggleForceProUser={onToggleForceProUser}
+         planningPreferences={planningPreferences}
+         onPlanningPreferencesChange={onPlanningPreferencesChange}
       />
 
       <ActivityLogModal

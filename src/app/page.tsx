@@ -24,6 +24,9 @@ import clsx from 'clsx';
 import { supabase, authReady, SESSION_KEY } from '@/lib/supabase';
 import Link from 'next/link';
 import { formatDateKey } from '@/lib/dateKey';
+import { usePremium } from '@/hooks/usePremium';
+import { AiAssistant } from '@/components/AiAssistant';
+import { PlanningPreferences, defaultPlanningPreferences } from '@/types/planningPreferences';
 
 const loadingMessages = [
   'Loading dashboard...',
@@ -54,6 +57,12 @@ function LoadingScreen() {
 export default function Home() {
   const { tasks, addTask, addTasksBatch, updateTask, deleteTask, isLoaded } = useTasks();
   const { projects, addProject: addProjectFn } = useProjects();
+  const { isPro, loading: premiumLoading } = usePremium();
+  const [forceProUser, setForceProUser] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('force_pro_user') === 'true';
+  });
+  const effectiveIsPro = isPro || forceProUser;
   const [showPlan, setShowPlan] = useState(false);
   const [dayPlan, setDayPlan] = useState<Task[]>([]);
   const [user, setUser] = useState<any>(() => {
@@ -86,6 +95,45 @@ export default function Home() {
   
   // Auto Plan State
   const [isAutoPlanModalOpen, setIsAutoPlanModalOpen] = useState(false);
+  const [focusPlantEnabled, setFocusPlantEnabled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const raw = localStorage.getItem('focus_plant_enabled');
+    return raw === null ? true : raw === 'true';
+  });
+  const [planningPreferences, setPlanningPreferences] = useState<PlanningPreferences>(() => {
+    if (typeof window === 'undefined') return defaultPlanningPreferences;
+    try {
+      const raw = localStorage.getItem('planning_preferences');
+      if (!raw) return defaultPlanningPreferences;
+      return { ...defaultPlanningPreferences, ...JSON.parse(raw) } as PlanningPreferences;
+    } catch {
+      return defaultPlanningPreferences;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('focus_plant_enabled', String(focusPlantEnabled));
+    } catch {
+      // ignore storage errors
+    }
+  }, [focusPlantEnabled]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('force_pro_user', String(forceProUser));
+    } catch {
+      // ignore storage errors
+    }
+  }, [forceProUser]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('planning_preferences', JSON.stringify(planningPreferences));
+    } catch {
+      // ignore storage errors
+    }
+  }, [planningPreferences]);
 
   const getDefaultDate = () => {
     if (currentView === 'today') {
@@ -369,6 +417,13 @@ export default function Home() {
           onSearchChange={setSearchQuery}
           projects={projects}
           addProject={addProjectFn}
+          focusPlantEnabled={focusPlantEnabled}
+          onToggleFocusPlant={setFocusPlantEnabled}
+          isPro={effectiveIsPro}
+          forceProUser={forceProUser}
+          onToggleForceProUser={setForceProUser}
+          planningPreferences={planningPreferences}
+          onPlanningPreferencesChange={setPlanningPreferences}
        />
 
        {/* CreateTaskModal rendered once at the bottom of the component */}
@@ -484,13 +539,29 @@ export default function Home() {
                     {/* Auto Plan Section for Inbox */}
                      {currentView === 'inbox' && (
                         <section className="mb-8">
-                             <button
-                                onClick={() => setIsAutoPlanModalOpen(true)}
-                                className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:border-black dark:hover:border-white hover:text-black dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-all font-medium"
-                             >
-                                <Sparkles size={18} />
-                                Auto Plan My Week
-                             </button>
+                             {effectiveIsPro ? (
+                                <button
+                                  onClick={() => setIsAutoPlanModalOpen(true)}
+                                  className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:border-black dark:hover:border-white hover:text-black dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-all font-medium"
+                                >
+                                  <Sparkles size={18} />
+                                  Auto Plan My Week
+                                </button>
+                             ) : (
+                                <div className="w-full rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/70 dark:bg-amber-900/10 p-4">
+                                  <p className="text-sm font-semibold text-amber-700 dark:text-amber-300 mb-1">Pro Feature</p>
+                                  <p className="text-xs text-amber-700/90 dark:text-amber-300/90 mb-3">
+                                    Auto Plan is available on Pro. Upgrade to unlock AI-assisted weekly planning.
+                                  </p>
+                                  <Link
+                                    href="/upgrade"
+                                    className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-lg bg-black dark:bg-white text-white dark:text-black hover:opacity-90 transition-opacity"
+                                  >
+                                    <Sparkles size={14} />
+                                    {premiumLoading ? 'Checking plan...' : 'Upgrade to Pro'}
+                                  </Link>
+                                </div>
+                             )}
                         </section>
                     )}
 
@@ -608,17 +679,30 @@ export default function Home() {
         userId={user?.id}
         projects={projects}
         addProject={addProjectFn}
+        proOverride={forceProUser}
+        planningPreferences={planningPreferences}
       />
 
       <FocusSessionModal 
         isOpen={isFocusModalOpen}
         onClose={() => setIsFocusModalOpen(false)}
         task={activeFocusTask}
+        showFocusPlant={focusPlantEnabled}
         onComplete={(task) => {
           updateTask({ ...task, status: 'done' });
           setIsFocusModalOpen(false);
           setActiveFocusTask(null);
         }}
+      />
+      <AiAssistant
+        userId={user?.id}
+        tasks={tasks}
+        projects={projects}
+        addProject={addProjectFn}
+        onAddTasks={handleAutoPlanTasks}
+        onDeleteTask={deleteTask}
+        proOverride={forceProUser}
+        planningPreferences={planningPreferences}
       />
       <AmbientSound />
     </div>

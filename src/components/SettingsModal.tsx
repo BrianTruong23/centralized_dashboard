@@ -2,21 +2,43 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Loader2, X, AlertTriangle, User as UserIcon, Lock, Trash2, Bug, LogOut } from 'lucide-react';
+import { X, AlertTriangle, User as UserIcon, Lock, Trash2, Bug, LogOut, Leaf, Crown } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
+import { useRouter } from 'next/navigation';
+import { PlanningPreferences } from '@/types/planningPreferences';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: User;
   onLogout: () => void;
+  focusPlantEnabled: boolean;
+  onToggleFocusPlant: (enabled: boolean) => void;
+  isPro: boolean;
+  forceProUser: boolean;
+  onToggleForceProUser: (enabled: boolean) => void;
+  planningPreferences: PlanningPreferences;
+  onPlanningPreferencesChange: (next: PlanningPreferences) => void;
 }
 
-export function SettingsModal({ isOpen, onClose, user, onLogout }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'danger' | 'debug'>('profile');
+export function SettingsModal({
+  isOpen,
+  onClose,
+  user,
+  onLogout,
+  focusPlantEnabled,
+  onToggleFocusPlant,
+  isPro,
+  forceProUser,
+  onToggleForceProUser,
+  planningPreferences,
+  onPlanningPreferencesChange,
+}: SettingsModalProps) {
+  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'billing' | 'security' | 'danger' | 'debug'>('profile');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [diagnostics, setDiagnostics] = useState<string[]>([]);
+  const router = useRouter();
 
   // Form states
   const [newPassword, setNewPassword] = useState('');
@@ -173,6 +195,18 @@ export function SettingsModal({ isOpen, onClose, user, onLogout }: SettingsModal
                     <UserIcon size={16} /> Profile
                 </button>
                 <button 
+                  onClick={() => setActiveTab('preferences')}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'preferences' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                >
+                    <Leaf size={16} /> Preferences
+                </button>
+                <button 
+                  onClick={() => setActiveTab('billing')}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'billing' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                >
+                    <Crown size={16} /> Billing
+                </button>
+                <button 
                   onClick={() => setActiveTab('security')}
                   className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'security' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
@@ -229,6 +263,177 @@ export function SettingsModal({ isOpen, onClose, user, onLogout }: SettingsModal
                              <LogOut size={16} />
                              Log Out
                          </button>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'preferences' && (
+                <div className="space-y-6">
+                    <div>
+                        <h3 className="text-lg font-semibold mb-1">Preferences</h3>
+                        <p className="text-sm text-gray-500">Customize focus visuals and AI planning behavior.</p>
+                    </div>
+
+                    <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50/80 dark:bg-gray-950/60">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <div className="flex items-center gap-2 text-sm font-medium">
+                                    <Leaf size={16} className="text-emerald-500" />
+                                    Focus Plant
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Shows a small plant that grows during uninterrupted focus time.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => onToggleFocusPlant(!focusPlantEnabled)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${focusPlantEnabled ? 'bg-emerald-500/70' : 'bg-gray-300 dark:bg-gray-700'}`}
+                                aria-pressed={focusPlantEnabled}
+                                aria-label="Toggle Focus Plant visual"
+                            >
+                                <span
+                                    className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${focusPlantEnabled ? 'translate-x-5' : 'translate-x-1'}`}
+                                />
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50/80 dark:bg-gray-950/60 space-y-4">
+                        <div>
+                            <p className="text-sm font-semibold">AI Planning Profile</p>
+                            <p className="text-xs text-gray-500 mt-1">The assistant uses these details to generate better schedules.</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Most Energetic Time</label>
+                                <select
+                                  value={planningPreferences.energyPeak}
+                                  onChange={(e) => onPlanningPreferencesChange({ ...planningPreferences, energyPeak: e.target.value as PlanningPreferences['energyPeak'] })}
+                                  className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900"
+                                >
+                                  <option value="early_morning">Early morning</option>
+                                  <option value="morning">Morning</option>
+                                  <option value="afternoon">Afternoon</option>
+                                  <option value="evening">Evening</option>
+                                  <option value="night">Night</option>
+                                  <option value="varies">Varies day-to-day</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Preferred Work Days</label>
+                                <input
+                                  type="text"
+                                  value={planningPreferences.workDays}
+                                  onChange={(e) => onPlanningPreferencesChange({ ...planningPreferences, workDays: e.target.value })}
+                                  placeholder="Mon-Fri"
+                                  className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Deep Work Block (minutes)</label>
+                                <input
+                                  type="number"
+                                  min={15}
+                                  step={5}
+                                  value={planningPreferences.deepWorkMinutes}
+                                  onChange={(e) => onPlanningPreferencesChange({ ...planningPreferences, deepWorkMinutes: Math.max(15, Number(e.target.value) || 90) })}
+                                  className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Break Between Sessions (minutes)</label>
+                                <input
+                                  type="number"
+                                  min={5}
+                                  step={5}
+                                  value={planningPreferences.breakMinutes}
+                                  onChange={(e) => onPlanningPreferencesChange({ ...planningPreferences, breakMinutes: Math.max(5, Number(e.target.value) || 15) })}
+                                  className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Constraints</label>
+                            <textarea
+                              value={planningPreferences.personalConstraints}
+                              onChange={(e) => onPlanningPreferencesChange({ ...planningPreferences, personalConstraints: e.target.value })}
+                              placeholder="Example: Meetings 1-3 PM Tue/Thu, family time after 7 PM."
+                              className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900 min-h-20"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Additional Planning Notes</label>
+                            <textarea
+                              value={planningPreferences.planningNotes}
+                              onChange={(e) => onPlanningPreferencesChange({ ...planningPreferences, planningNotes: e.target.value })}
+                              placeholder="Example: Prefer creative tasks before lunch."
+                              className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900 min-h-20"
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'billing' && (
+                <div className="space-y-6">
+                    <div>
+                        <h3 className="text-lg font-semibold mb-1">Billing</h3>
+                        <p className="text-sm text-gray-500">Manage your plan and unlock premium features.</p>
+                    </div>
+
+                    <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-xl bg-gradient-to-br from-amber-50 to-white dark:from-gray-900 dark:to-gray-950">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <div className="flex items-center gap-2 text-sm font-semibold">
+                                    <Crown size={16} className={isPro ? 'text-emerald-500' : 'text-amber-500'} />
+                                    {isPro ? 'Pro Active' : 'Free Plan'}
+                                </div>
+                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                    {isPro
+                                      ? 'You already have access to premium features.'
+                                      : 'Upgrade to Pro to unlock premium planning features and future releases.'}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => { onClose(); router.push('/upgrade'); }}
+                                className="px-3 py-2 rounded-lg text-xs font-bold bg-black dark:bg-white text-white dark:text-black hover:opacity-90 transition-opacity"
+                            >
+                                {isPro ? 'Manage Plan' : 'Go Pro'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50/80 dark:bg-gray-950/60">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <p className="text-sm font-semibold">Testing Override</p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Toggle between User and Pro User locally for testing premium features.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => onToggleForceProUser(!forceProUser)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${forceProUser ? 'bg-emerald-500/70' : 'bg-gray-300 dark:bg-gray-700'}`}
+                                aria-pressed={forceProUser}
+                                aria-label="Toggle test pro user mode"
+                            >
+                                <span
+                                  className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${forceProUser ? 'translate-x-5' : 'translate-x-1'}`}
+                                />
+                            </button>
+                        </div>
+                        <p className="text-xs mt-2 font-medium text-gray-600 dark:text-gray-300">
+                            Mode: {forceProUser ? 'Pro User (Testing)' : 'User'}
+                        </p>
                     </div>
                 </div>
             )}
