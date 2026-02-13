@@ -14,12 +14,13 @@ interface CreateTaskModalProps {
   userId?: string;
   defaultDate?: string;
   projects: Project[];
+  defaultProjectId?: string;
 }
 
 
 const ENERGY_LEVELS: TaskEnergyLevel[] = ['low', 'medium', 'high'];
 
-export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDate, projects }: CreateTaskModalProps) {
+export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDate, projects, defaultProjectId }: CreateTaskModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<TaskCategory>('Life');
@@ -33,12 +34,21 @@ export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDat
     if (isOpen && defaultDate) setDeadline(defaultDate);
   }, [isOpen, defaultDate]);
 
-  // Auto-select first project (Life) when projects load
+  // Set default project/category when modal opens, preferring active view project.
   useEffect(() => {
-    if (projects.length > 0 && !projectId) {
-      setProjectId(projects[0].id);
+    if (!isOpen) return;
+
+    const defaultProject =
+      (defaultProjectId && projects.find(p => p.id === defaultProjectId)) || projects[0];
+
+    if (defaultProject) {
+      setProjectId(defaultProject.id);
+      setCategory(defaultProject.name);
+    } else {
+      setProjectId('');
+      setCategory('Inbox');
     }
-  }, [projects, projectId]);
+  }, [isOpen, projects, defaultProjectId]);
 
   if (!isOpen) return null;
 
@@ -68,14 +78,17 @@ export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDat
   };
 
   const resetForm = () => {
+    const defaultProject =
+      (defaultProjectId && projects.find(p => p.id === defaultProjectId)) || projects[0];
+
     setTitle('');
     setDescription('');
-    setCategory('Life');
+    setCategory(defaultProject ? defaultProject.name : 'Inbox');
     setPriority(3);
     setEstimatedMinutes(30);
     setEnergyLevel('medium');
     setDeadline(defaultDate || '');
-    setProjectId(projects.length > 0 ? projects[0].id : '');
+    setProjectId(defaultProject ? defaultProject.id : '');
   };
 
   return (

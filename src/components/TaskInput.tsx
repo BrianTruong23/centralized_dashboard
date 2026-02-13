@@ -10,9 +10,10 @@ interface TaskInputProps {
   onAddTask: (task: Task) => void;
   defaultDate?: string;
   projects?: Project[];
+  defaultProjectId?: string;
 }
 
-export const TaskInput = ({ onAddTask, defaultDate, projects = [] }: TaskInputProps) => {
+export const TaskInput = ({ onAddTask, defaultDate, projects = [], defaultProjectId }: TaskInputProps) => {
   const isLoading = false;
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -28,12 +29,16 @@ export const TaskInput = ({ onAddTask, defaultDate, projects = [] }: TaskInputPr
     setDeadline(defaultDate || '');
   }, [defaultDate]);
 
-  // Set default project when projects load
+  // Set default project based on active view project, fallback to first project.
   useEffect(() => {
+    if (defaultProjectId && projects.some(p => p.id === defaultProjectId)) {
+      setProjectId(defaultProjectId);
+      return;
+    }
     if (projects.length > 0 && !projectId) {
       setProjectId(projects[0].id);
     }
-  }, [projects, projectId]);
+  }, [projects, projectId, defaultProjectId]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

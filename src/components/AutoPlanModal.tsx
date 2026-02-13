@@ -147,27 +147,23 @@ export function AutoPlanModal({ isOpen, onClose, onAddTasks, userId, projects, a
           confirmedProjects.has(name)
       );
 
-      // 3. CREATE ALL PROJECTS IN PARALLEL (don't let one hang block others)
+      // 3. Create projects SEQUENTIALLY (avoids connection contention with Supabase)
       console.log(`[AutoPlan] Creating ${projectsToCreate.length} new projects BEFORE tasks...`);
       const newProjectMap: Record<string, string> = {};
-      
-      const projectResults = await Promise.allSettled(
-          projectsToCreate.map(async (name) => {
+
+      for (const name of projectsToCreate) {
+          try {
               console.log(`[AutoPlan] Creating project: "${name}"...`);
               const project = await addProject({ name, color: '#3b82f6' });
               if (project) {
                   newProjectMap[name.toLowerCase()] = project.id;
                   console.log(`[AutoPlan] ✓ Project "${name}" created with id: ${project.id}`);
               }
-              return name;
-          })
-      );
-      
-      const failedProjects = projectResults.filter(r => r.status === 'rejected');
-      if (failedProjects.length > 0) {
-          console.warn(`[AutoPlan] ${failedProjects.length} project(s) failed to create`);
+          } catch (e: any) {
+              console.warn(`[AutoPlan] ✗ Failed to create project "${name}":`, e?.message);
+          }
       }
-      console.log(`[AutoPlan] All projects created. Now building task list...`);
+      console.log(`[AutoPlan] Projects done. Now building task list...`);
 
       // 4. Build complete project name → ID map (existing + newly created)
       const projectMap = new Map<string, string>();
