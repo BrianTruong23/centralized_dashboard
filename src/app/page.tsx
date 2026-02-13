@@ -25,6 +25,7 @@ import { supabase, authReady, SESSION_KEY } from '@/lib/supabase';
 import Link from 'next/link';
 import { formatDateKey } from '@/lib/dateKey';
 import { usePremium } from '@/hooks/usePremium';
+import { AiAssistant } from '@/components/AiAssistant';
 
 const loadingMessages = [
   'Loading dashboard...',
@@ -654,6 +655,12 @@ export default function Home() {
           setIsFocusModalOpen(false);
           setActiveFocusTask(null);
         }}
+      />
+      <AiAssistant
+        userId={user?.id}
+        projects={projects}
+        addProject={addProjectFn}
+        onAddTasks={handleAutoPlanTasks}
       />
       <AmbientSound />
     </div>
