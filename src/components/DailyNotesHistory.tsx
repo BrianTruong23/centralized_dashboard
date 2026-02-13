@@ -1,0 +1,81 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { notesDb, Note } from '@/lib/notes';
+import { Sparkles, Calendar } from 'lucide-react';
+
+interface DailyNotesHistoryProps {
+  userId?: string;
+}
+
+export function DailyNotesHistory({ userId }: DailyNotesHistoryProps) {
+  const [pastNotes, setPastNotes] = useState<Note[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!userId) return;
+    loadHistory();
+  }, [userId]);
+
+  const loadHistory = async () => {
+    try {
+      setLoading(true);
+      const notes = await notesDb.fetchNotes();
+      if (notes && notes.length > 0) {
+        const today = new Date();
+        // Filter out today's note
+        const history = notes.filter(note => {
+            const d = new Date(note.createdAt);
+            return d.getDate() !== today.getDate() || 
+                   d.getMonth() !== today.getMonth() || 
+                   d.getFullYear() !== today.getFullYear();
+        }).sort((a, b) => b.createdAt - a.createdAt);
+        
+        setPastNotes(history);
+      }
+    } catch (err) {
+      console.error('Failed to load notes history', err);
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  if (!userId || (pastNotes.length === 0 && !loading)) return null;
+
+  return (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
+        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-6">Previous Days</h3>
+        
+        {loading ? (
+            <div className="text-center py-4 text-gray-400 text-sm">Loading history...</div>
+        ) : (
+            <div className="space-y-8">
+                {pastNotes.map(note => (
+                    <div key={note.id} className="group relative pl-6 border-l-2 border-gray-100 dark:border-gray-800 hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors">
+                        <div className="absolute -left-[5px] top-0 w-2.5 h-2.5 rounded-full bg-gray-200 dark:bg-gray-700 group-hover:bg-indigo-500 transition-colors" />
+                        
+                        <div className="mb-3">
+                            <span className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                                {new Date(note.createdAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                            </span>
+                        </div>
+                        
+                        <div className="prose dark:prose-invert max-w-none text-gray-600 dark:text-gray-400 mb-4">
+                            <p className="whitespace-pre-wrap leading-relaxed">{note.content}</p>
+                        </div>
+                        
+                        {note.summary && (
+                            <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/30">
+                                <p className="text-sm text-indigo-700 dark:text-indigo-300 italic flex gap-2">
+                                    <Sparkles size={16} className="shrink-0 mt-0.5" />
+                                    <span>{note.summary}</span>
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+        )}
+    </div>
+  );
+}

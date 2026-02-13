@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { notesDb, Note } from '@/lib/notes';
 import { Loader2, Sparkles, Save, Plus, CheckCircle, ListPlus, Calendar, Pencil, X } from 'lucide-react';
 import { Task, TaskCategory, TaskEnergyLevel } from '@/types/task';
+import { Project, CreateProjectInput } from '@/types/project';
 
 interface ActionItem {
   title: string;
@@ -19,9 +20,11 @@ interface DailyNotesProps {
   userId?: string;
   onAddTask?: (task: Task) => void;
   showHistory?: boolean;
+  projects?: Project[];
+  addProject?: (input: CreateProjectInput) => Promise<Project | undefined>;
 }
 
-export function DailyNotes({ userId, onAddTask, showHistory = false }: DailyNotesProps) {
+export function DailyNotes({ userId, onAddTask, showHistory = false, projects = [], addProject }: DailyNotesProps) {
   const [noteContent, setNoteContent] = useState('');
   const [summary, setSummary] = useState('');
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
@@ -33,6 +36,10 @@ export function DailyNotes({ userId, onAddTask, showHistory = false }: DailyNote
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pastNotes, setPastNotes] = useState<Note[]>([]);
+
+  // State for missing projects handling
+  const [missingProjects, setMissingProjects] = useState<string[]>([]);
+  const [pendingTasksToAdd, setPendingTasksToAdd] = useState<number[] | 'all' | null>(null);
 
   const categories: TaskCategory[] = ['Research', 'Coding', 'Admin', 'Health', 'Life', 'Finance', 'Social', 'Content', 'UX'];
   const energyLevels: TaskEnergyLevel[] = ['low', 'medium', 'high'];
@@ -179,23 +186,99 @@ export function DailyNotes({ userId, onAddTask, showHistory = false }: DailyNote
     createdAt: Date.now(),
   });
 
+  // Check for missing projects before adding tasks
+  const checkMissingProjects = (indices: number[] | 'all') => {
+    const itemsToCheck = indices === 'all' 
+      ? actionItems 
+      : indices.map(i => actionItems[i]);
+    
+    // Filter out items that are already added
+    const items = indices === 'all'
+        ? itemsToCheck.filter((_, i) => !addedItems.has(i))
+        : itemsToCheck;
+
+    if (items.length === 0) return;
+
+    const usedCategories = new Set(items.map(item => item.category));
+    const existingProjectNames = new Set(projects.map(p => p.name.toLowerCase()));
+    
+    const missing = Array.from(usedCategories).filter(cat => 
+        cat && !existingProjectNames.has(cat.toLowerCase()) && cat !== 'Admin'
+    );
+
+    if (missing.length > 0) {
+      setMissingProjects(missing);
+      setPendingTasksToAdd(indices);
+    } else {
+      executeAddTasks(indices);
+    }
+  };
+
+  const executeAddTasks = async (indices: number[] | 'all', createdProjectMap: Record<string, string> = {}) => {
+    if (!onAddTask) return;
+
+    const projectMap = new Map<string, string>();
+    projects.forEach(p => projectMap.set(p.name.toLowerCase(), p.id));
+    
+    // Add newly created projects to map
+    Object.entries(createdProjectMap).forEach(([name, id]) => {
+        projectMap.set(name.toLowerCase(), id);
+    });
+
+    const itemsToAdd = indices === 'all' 
+        ? actionItems.map((item, i) => ({ item, index: i }))
+        : indices.map(i => ({ item: actionItems[i], index: i }));
+
+    itemsToAdd.forEach(({ item, index }) => {
+        if (!addedItems.has(index)) {
+            const projectId = projectMap.get(item.category.toLowerCase());
+            const task = createTaskFromItem(item);
+            if (projectId) {
+                task.project_id = projectId;
+            }
+            onAddTask(task);
+            setAddedItems(prev => new Set(prev).add(index));
+        }
+    });
+    
+    setMissingProjects([]);
+    setPendingTasksToAdd(null);
+  };
+
+  const handleConfirmCreateProjects = async () => {
+    const newProjectMap: Record<string, string> = {};
+    
+    // Create projects sequentially to ensure we get IDs
+    for (const name of missingProjects) {
+        try {
+            const newProject = await addProject?.({ name, color: 'blue' }); // Default color
+            if (newProject) {
+                newProjectMap[name] = newProject.id;
+            }
+        } catch (e) {
+            console.error(`Failed to create project ${name}`, e);
+        }
+    }
+
+    if (pendingTasksToAdd !== null) {
+        executeAddTasks(pendingTasksToAdd, newProjectMap);
+    }
+  };
+
+  const handleSkipCreateProjects = () => {
+      if (pendingTasksToAdd !== null) {
+          executeAddTasks(pendingTasksToAdd);
+      }
+  };
+
   const handleAddTask = (index: number) => {
     if (!onAddTask || addedItems.has(index)) return;
-    const item = actionItems[index];
-    const task = createTaskFromItem(item);
-    onAddTask(task);
-    setAddedItems(prev => new Set(prev).add(index));
+    checkMissingProjects([index]);
   };
 
   const handleAddAllTasks = () => {
     if (!onAddTask) return;
-    actionItems.forEach((item, index) => {
-      if (!addedItems.has(index)) {
-        const task = createTaskFromItem(item);
-        onAddTask(task);
-      }
-    });
-    setAddedItems(new Set(actionItems.map((_, i) => i)));
+    checkMissingProjects('all');
   };
 
   const handleEditClick = (index: number) => {
@@ -221,6 +304,40 @@ export function DailyNotes({ userId, onAddTask, showHistory = false }: DailyNote
 
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
+      
+      {/* Missing Projects Confirmation Modal */}
+      {missingProjects.length > 0 && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-md shadow-xl border border-gray-200 dark:border-gray-700">
+                <h3 className="text-lg font-bold mb-2 text-gray-900 dark:text-gray-100">Create Missing Projects?</h3>
+                <p className="text-gray-600 dark:text-gray-300 mb-4 text-sm">
+                    The following categories from your summary do not exist as projects. Would you like to create them automatically?
+                </p>
+                <div className="flex flex-wrap gap-2 mb-6">
+                    {missingProjects.map(p => (
+                        <span key={p} className="px-2 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded text-sm font-medium">
+                            {p}
+                        </span>
+                    ))}
+                </div>
+                <div className="flex justify-end gap-3">
+                    <button 
+                        onClick={handleSkipCreateProjects}
+                        className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 font-medium"
+                    >
+                        Skip
+                    </button>
+                    <button 
+                        onClick={handleConfirmCreateProjects}
+                        className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium"
+                    >
+                        Create & Add
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-bold">Daily Notes & Dump</h2>
         <div className="flex gap-2">
@@ -235,7 +352,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false }: DailyNote
             <button
                 onClick={handleSummarize}
                 disabled={isLoading || !noteContent.trim()}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-black dark:bg-white dark:text-black rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors disabled:opacity-50"
             >
                 {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                 Summarize with AI
@@ -455,34 +572,6 @@ export function DailyNotes({ userId, onAddTask, showHistory = false }: DailyNote
         </div>
       </div>
 
-      {showHistory && pastNotes.length > 0 && (
-        <div className="mt-12 pt-8 border-t border-gray-100 dark:border-gray-800 space-y-6">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1">Previous Days</h3>
-            <div className="space-y-6">
-                {pastNotes.map(note => (
-                    <div key={note.id} className="group relative pl-4 border-l-2 border-gray-100 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-600 transition-colors">
-                        <div className="absolute -left-[5px] top-0 w-2.5 h-2.5 rounded-full bg-gray-200 dark:bg-gray-700 group-hover:bg-indigo-500 transition-colors" />
-                        <div className="mb-2">
-                            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                {new Date(note.createdAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                            </span>
-                        </div>
-                        <div className="prose dark:prose-invert max-w-none text-sm text-gray-600 dark:text-gray-400 mb-3">
-                            <p className="whitespace-pre-wrap line-clamp-3 group-hover:line-clamp-none transition-all duration-300">{note.content}</p>
-                        </div>
-                        {note.summary && (
-                            <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-3 rounded-lg border border-indigo-100 dark:border-indigo-900/30">
-                                <p className="text-xs text-indigo-700 dark:text-indigo-300 italic">
-                                    <Sparkles size={12} className="inline mr-1.5 -mt-0.5" />
-                                    {note.summary}
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                ))}
-            </div>
-        </div>
-      )}
     </div>
   );
 }

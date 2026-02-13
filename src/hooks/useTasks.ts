@@ -176,6 +176,12 @@ export const useTasks = () => {
         console.log('[useTasks.addTask] DB insert succeeded');
       } catch (e: any) {
         console.error('[useTasks.addTask] DB insert FAILED:', e?.message || e?.code || e);
+        // Roll back optimistic update so user doesn't see phantom tasks
+        setTasks((prev) => {
+          const next = prev.filter((t) => t.id !== taskWithUser.id);
+          saveTasks(next);
+          return next;
+        });
       }
     } else {
       console.warn('[useTasks.addTask] No auth — task saved to localStorage only.');
