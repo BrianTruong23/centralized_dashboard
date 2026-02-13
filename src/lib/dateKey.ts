@@ -21,3 +21,12 @@ export function formatDateKey(date: Date, timeZone?: string): string {
 
   return `${year}-${month}-${day}`;
 }
+
+export function parseDateKey(dateKey: string): Date {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  if (!year || !month || !day) {
+    throw new Error(`Invalid date key: ${dateKey}`);
+  }
+  // Interpret YYYY-MM-DD as local calendar date.
+  return new Date(year, month - 1, day);
+}

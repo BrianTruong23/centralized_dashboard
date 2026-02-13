@@ -271,4 +271,19 @@ export const db = {
       'name': `in.("Life","Work")`,
     });
   },
+
+  // ── Subscription / Premium ─────────────────────────────────────────────
+
+  async getMySubscription(): Promise<{ isPro: boolean; tier: string; status: string; planType: string } | null> {
+    const token = requireToken();
+    const rows = await rawSelect<any>('user_subscriptions', token, { limit: '1' });
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      isPro: row.tier === 'pro' && row.status === 'active',
+      tier: row.tier ?? 'free',
+      status: row.status ?? 'inactive',
+      planType: row.plan_type ?? 'one_time',
+    };
+  },
 };

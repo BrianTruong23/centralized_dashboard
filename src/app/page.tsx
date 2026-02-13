@@ -24,6 +24,7 @@ import clsx from 'clsx';
 import { supabase, authReady, SESSION_KEY } from '@/lib/supabase';
 import Link from 'next/link';
 import { formatDateKey } from '@/lib/dateKey';
+import { usePremium } from '@/hooks/usePremium';
 
 const loadingMessages = [
   'Loading dashboard...',
@@ -54,6 +55,7 @@ function LoadingScreen() {
 export default function Home() {
   const { tasks, addTask, addTasksBatch, updateTask, deleteTask, isLoaded } = useTasks();
   const { projects, addProject: addProjectFn } = useProjects();
+  const { isPro, loading: premiumLoading } = usePremium();
   const [showPlan, setShowPlan] = useState(false);
   const [dayPlan, setDayPlan] = useState<Task[]>([]);
   const [user, setUser] = useState<any>(() => {
@@ -384,6 +386,7 @@ export default function Home() {
           addProject={addProjectFn}
           focusPlantEnabled={focusPlantEnabled}
           onToggleFocusPlant={setFocusPlantEnabled}
+          isPro={isPro}
        />
 
        {/* CreateTaskModal rendered once at the bottom of the component */}
@@ -499,13 +502,29 @@ export default function Home() {
                     {/* Auto Plan Section for Inbox */}
                      {currentView === 'inbox' && (
                         <section className="mb-8">
-                             <button
-                                onClick={() => setIsAutoPlanModalOpen(true)}
-                                className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:border-black dark:hover:border-white hover:text-black dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-all font-medium"
-                             >
-                                <Sparkles size={18} />
-                                Auto Plan My Week
-                             </button>
+                             {isPro ? (
+                                <button
+                                  onClick={() => setIsAutoPlanModalOpen(true)}
+                                  className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:border-black dark:hover:border-white hover:text-black dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-all font-medium"
+                                >
+                                  <Sparkles size={18} />
+                                  Auto Plan My Week
+                                </button>
+                             ) : (
+                                <div className="w-full rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/70 dark:bg-amber-900/10 p-4">
+                                  <p className="text-sm font-semibold text-amber-700 dark:text-amber-300 mb-1">Pro Feature</p>
+                                  <p className="text-xs text-amber-700/90 dark:text-amber-300/90 mb-3">
+                                    Auto Plan is available on Pro. Upgrade to unlock AI-assisted weekly planning.
+                                  </p>
+                                  <Link
+                                    href="/upgrade"
+                                    className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-lg bg-black dark:bg-white text-white dark:text-black hover:opacity-90 transition-opacity"
+                                  >
+                                    <Sparkles size={14} />
+                                    {premiumLoading ? 'Checking plan...' : 'Upgrade to Pro'}
+                                  </Link>
+                                </div>
+                             )}
                         </section>
                     )}
 

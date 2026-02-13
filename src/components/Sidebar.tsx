@@ -22,6 +22,7 @@ import { UserDropdown } from './UserDropdown';
 import { CreateProjectModal } from './CreateProjectModal';
 import { SettingsModal } from './SettingsModal';
 import { ActivityLogModal } from './ActivityLogModal';
+import { formatDateKey } from '@/lib/dateKey';
 
 interface SidebarProps {
   currentView: string;
@@ -37,6 +38,7 @@ interface SidebarProps {
   addProject?: (input: CreateProjectInput) => Promise<Project | undefined>;
   focusPlantEnabled: boolean;
   onToggleFocusPlant: (enabled: boolean) => void;
+  isPro: boolean;
 }
 
 export const Sidebar = ({
@@ -53,6 +55,7 @@ export const Sidebar = ({
   addProject,
   focusPlantEnabled,
   onToggleFocusPlant,
+  isPro,
 }: SidebarProps) => {
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -64,7 +67,7 @@ export const Sidebar = ({
   const todayCount = tasks.filter(t => {
       if (t.status === 'done') return false;
       if (!t.deadline) return false;
-      const today = new Date().toISOString().split('T')[0];
+      const today = formatDateKey(new Date());
       return t.deadline === today;
   }).length;
   
@@ -221,6 +224,7 @@ export const Sidebar = ({
          onLogout={onLogout}
          focusPlantEnabled={focusPlantEnabled}
          onToggleFocusPlant={onToggleFocusPlant}
+         isPro={isPro}
       />
 
       <ActivityLogModal
