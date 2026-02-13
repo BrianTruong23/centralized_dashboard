@@ -286,4 +286,37 @@ export const db = {
       planType: row.plan_type ?? 'one_time',
     };
   },
+
+  // ── Onboarding ──────────────────────────────────────────────────────────
+
+  async getOnboardingStatus(userId: string): Promise<any | null> {
+    const token = requireToken();
+    const rows = await rawSelect<any>('onboarding_status', token, {
+      'user_id': `eq.${userId}`,
+      limit: '1',
+    });
+    return rows[0] || null;
+  },
+
+  async createOnboardingStatus(userId: string, preferences: { weekStartsMonday: boolean; maxTasksPerDay: number }): Promise<void> {
+    const token = requireToken();
+    await rawInsert('onboarding_status', {
+      user_id: userId,
+      completed: true,
+      completed_at: new Date().toISOString(),
+      week_starts_monday: preferences.weekStartsMonday,
+      max_tasks_per_day: preferences.maxTasksPerDay,
+    }, token);
+  },
+
+  async skipOnboarding(userId: string): Promise<void> {
+    const token = requireToken();
+    await rawInsert('onboarding_status', {
+      user_id: userId,
+      completed: true,
+      completed_at: new Date().toISOString(),
+      week_starts_monday: true,
+      max_tasks_per_day: 8,
+    }, token);
+  },
 };

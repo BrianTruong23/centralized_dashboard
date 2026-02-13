@@ -26,6 +26,9 @@ import { formatDateKey } from '@/lib/dateKey';
 import { usePremium } from '@/hooks/usePremium';
 import { AiAssistant } from '@/components/AiAssistant';
 import { PlanningPreferences, defaultPlanningPreferences } from '@/types/planningPreferences';
+import OnboardingModal from '@/components/OnboardingModal';
+import { OnboardingPreferences } from '@/types/onboarding';
+import { db } from '@/lib/db';
 
 const loadingMessages = [
   'Loading dashboard...',
@@ -92,6 +95,8 @@ export default function Home() {
     return null;
   });
   const [currentView, setCurrentView] = useState('today');
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
   
   // Resolve project name for display
   const currentProject = projects.find(p => `project-${p.id}` === currentView);
@@ -195,6 +200,53 @@ export default function Home() {
         authListener?.subscription.unsubscribe();
     };
   }, []);
+
+  // Check if onboarding is needed for new users
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      if (!user || onboardingChecked) return;
+
+      try {
+        const status = await db.getOnboardingStatus(user.id);
+        setOnboardingChecked(true);
+
+        // Show onboarding only if user has never completed it
+        if (!status || !status.completed) {
+          setIsOnboardingOpen(true);
+        }
+      } catch (error) {
+        console.error('Error checking onboarding status:', error);
+        setOnboardingChecked(true);
+      }
+    };
+
+    checkOnboarding();
+  }, [user, onboardingChecked]);
+
+  const handleOnboardingComplete = async (preferences: OnboardingPreferences) => {
+    if (!user) return;
+
+    try {
+      await db.createOnboardingStatus(user.id, preferences);
+      setIsOnboardingOpen(false);
+
+      // Optionally store preferences in localStorage for quick access
+      localStorage.setItem('onboarding_preferences', JSON.stringify(preferences));
+    } catch (error) {
+      console.error('Error saving onboarding preferences:', error);
+    }
+  };
+
+  const handleOnboardingSkip = async () => {
+    if (!user) return;
+
+    try {
+      await db.skipOnboarding(user.id);
+      setIsOnboardingOpen(false);
+    } catch (error) {
+      console.error('Error skipping onboarding:', error);
+    }
+  };
 
   const handleLogout = async () => {
     console.log('[handleLogout] 🔴 Logout initiated');
@@ -715,7 +767,7 @@ export default function Home() {
         defaultProjectId={currentProject?.id}
       />
 
-      <AutoPlanModal 
+      <AutoPlanModal
         isOpen={isAutoPlanModalOpen}
         onClose={() => setIsAutoPlanModalOpen(false)}
         onAddTasks={handleAutoPlanTasks}
@@ -724,6 +776,12 @@ export default function Home() {
         addProject={addProjectFn}
         proOverride={forceProUser}
         planningPreferences={planningPreferences}
+      />
+
+      <OnboardingModal
+        isOpen={isOnboardingOpen}
+        onComplete={handleOnboardingComplete}
+        onSkip={handleOnboardingSkip}
       />
 
       <FocusSessionModal 
