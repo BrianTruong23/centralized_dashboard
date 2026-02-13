@@ -14,9 +14,21 @@ interface SettingsModalProps {
   focusPlantEnabled: boolean;
   onToggleFocusPlant: (enabled: boolean) => void;
   isPro: boolean;
+  forceProUser: boolean;
+  onToggleForceProUser: (enabled: boolean) => void;
 }
 
-export function SettingsModal({ isOpen, onClose, user, onLogout, focusPlantEnabled, onToggleFocusPlant, isPro }: SettingsModalProps) {
+export function SettingsModal({
+  isOpen,
+  onClose,
+  user,
+  onLogout,
+  focusPlantEnabled,
+  onToggleFocusPlant,
+  isPro,
+  forceProUser,
+  onToggleForceProUser,
+}: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'billing' | 'security' | 'danger' | 'debug'>('profile');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -312,6 +324,31 @@ export function SettingsModal({ isOpen, onClose, user, onLogout, focusPlantEnabl
                                 {isPro ? 'Manage Plan' : 'Go Pro'}
                             </button>
                         </div>
+                    </div>
+
+                    <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50/80 dark:bg-gray-950/60">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <p className="text-sm font-semibold">Testing Override</p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Toggle between User and Pro User locally for testing premium features.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => onToggleForceProUser(!forceProUser)}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${forceProUser ? 'bg-emerald-500/70' : 'bg-gray-300 dark:bg-gray-700'}`}
+                                aria-pressed={forceProUser}
+                                aria-label="Toggle test pro user mode"
+                            >
+                                <span
+                                  className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${forceProUser ? 'translate-x-5' : 'translate-x-1'}`}
+                                />
+                            </button>
+                        </div>
+                        <p className="text-xs mt-2 font-medium text-gray-600 dark:text-gray-300">
+                            Mode: {forceProUser ? 'Pro User (Testing)' : 'User'}
+                        </p>
                     </div>
                 </div>
             )}

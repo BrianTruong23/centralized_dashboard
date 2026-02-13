@@ -39,6 +39,8 @@ interface SidebarProps {
   focusPlantEnabled: boolean;
   onToggleFocusPlant: (enabled: boolean) => void;
   isPro: boolean;
+  forceProUser: boolean;
+  onToggleForceProUser: (enabled: boolean) => void;
 }
 
 export const Sidebar = ({
@@ -56,6 +58,8 @@ export const Sidebar = ({
   focusPlantEnabled,
   onToggleFocusPlant,
   isPro,
+  forceProUser,
+  onToggleForceProUser,
 }: SidebarProps) => {
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -225,6 +229,8 @@ export const Sidebar = ({
          focusPlantEnabled={focusPlantEnabled}
          onToggleFocusPlant={onToggleFocusPlant}
          isPro={isPro}
+         forceProUser={forceProUser}
+         onToggleForceProUser={onToggleForceProUser}
       />
 
       <ActivityLogModal

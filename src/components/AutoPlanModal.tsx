@@ -13,6 +13,7 @@ interface AutoPlanModalProps {
   userId: string;
   projects: Project[];
   addProject: (input: CreateProjectInput) => Promise<Project | undefined>;
+  proOverride?: boolean;
 }
 
 interface PlannedTask {
@@ -32,7 +33,7 @@ interface WeekPlan {
   tasks: PlannedTask[];
 }
 
-export function AutoPlanModal({ isOpen, onClose, onAddTasks, userId, projects, addProject }: AutoPlanModalProps) {
+export function AutoPlanModal({ isOpen, onClose, onAddTasks, userId, projects, addProject, proOverride = false }: AutoPlanModalProps) {
   const [step, setStep] = useState<'input' | 'loading' | 'review'>('input');
   const [notes, setNotes] = useState('');
   const [weekPlan, setWeekPlan] = useState<WeekPlan[]>([]);
@@ -62,6 +63,7 @@ export function AutoPlanModal({ isOpen, onClose, onAddTasks, userId, projects, a
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
+          ...(proOverride ? { 'x-pro-override': 'true' } : {}),
         },
         body: JSON.stringify({ 
             notes, 

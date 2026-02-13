@@ -27,9 +27,10 @@ interface AiAssistantProps {
   projects: Project[];
   addProject: (input: CreateProjectInput) => Promise<Project | undefined>;
   onAddTasks: (tasks: Task[]) => Promise<void> | void;
+  proOverride?: boolean;
 }
 
-export function AiAssistant({ userId, projects, addProject, onAddTasks }: AiAssistantProps) {
+export function AiAssistant({ userId, projects, addProject, onAddTasks, proOverride = false }: AiAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -68,6 +69,7 @@ export function AiAssistant({ userId, projects, addProject, onAddTasks }: AiAssi
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
+          ...(proOverride ? { 'x-pro-override': 'true' } : {}),
         },
         body: JSON.stringify({
           notes: input,
