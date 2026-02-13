@@ -90,7 +90,7 @@ export function AiAssistant({
   const totalPlanCount = useMemo(() => weekPlan.reduce((acc, day) => acc + day.tasks.length, 0), [weekPlan]);
 
   const panelClass = isExpanded
-    ? 'fixed inset-6 sm:inset-10 z-[300] rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-2xl overflow-hidden animate-in fade-in duration-200'
+    ? 'fixed left-1/2 top-1/2 z-[300] w-[min(96vw,1080px)] h-[min(88vh,820px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-2xl overflow-hidden animate-in fade-in duration-200'
     : 'fixed bottom-20 right-4 sm:right-20 z-[300] w-[380px] max-w-[calc(100vw-2rem)] rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200';
 
   const togglePlanSelected = (dayDate: string, idx: number) => {
@@ -325,34 +325,37 @@ export function AiAssistant({
             </div>
           </div>
 
-          <div className="p-4 space-y-3 h-[calc(100%-58px)] overflow-y-auto">
-            <div className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-900/40 rounded-lg p-3">
-              {assistantMessage}
-            </div>
-
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask me to plan, prioritize inbox, delete tasks, or clear inbox..."
-              className="w-full h-24 text-sm p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/20"
-            />
-
-            {error && (
-              <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded-lg border border-red-100 dark:border-red-900/40">
-                {error}
+          <div className="p-4 h-[calc(100%-58px)] overflow-y-auto">
+            <div className={isExpanded ? 'mx-auto max-w-4xl space-y-3' : 'space-y-3'}>
+              <div className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-900/40 rounded-lg p-3">
+                {assistantMessage}
               </div>
-            )}
 
-            <button
-              onClick={runAssistant}
-              disabled={isLoading || !input.trim()}
-              className="w-full inline-flex items-center justify-center gap-2 py-2.5 rounded-lg bg-black dark:bg-white text-white dark:text-black text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
-              {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={14} />}
-              Run Agent
-            </button>
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask me to plan, prioritize inbox, delete tasks, or clear inbox..."
+                className={`w-full ${isExpanded ? 'h-28' : 'h-24'} text-sm p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/20`}
+              />
 
-            {mode === 'priorities' && priorityTasks.length > 0 && (
+              {error && (
+                <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded-lg border border-red-100 dark:border-red-900/40">
+                  {error}
+                </div>
+              )}
+
+              <div className={isExpanded ? 'flex justify-end' : ''}>
+                <button
+                  onClick={runAssistant}
+                  disabled={isLoading || !input.trim()}
+                  className={`${isExpanded ? 'px-5 py-2.5' : 'w-full py-2.5'} inline-flex items-center justify-center gap-2 rounded-lg bg-black dark:bg-white text-white dark:text-black text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-50`}
+                >
+                  {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={14} />}
+                  Run Agent
+                </button>
+              </div>
+
+              {mode === 'priorities' && priorityTasks.length > 0 && (
               <div className="space-y-2">
                 <div className="text-xs font-semibold flex items-center gap-1 text-gray-600 dark:text-gray-300"><ListChecks size={14} /> Top Inbox Priorities</div>
                 {priorityTasks.map((task) => (
@@ -362,9 +365,9 @@ export function AiAssistant({
                   </div>
                 ))}
               </div>
-            )}
+              )}
 
-            {mode === 'delete' && (
+              {mode === 'delete' && (
               <div className="space-y-2">
                 <div className="text-xs font-semibold flex items-center gap-1 text-gray-600 dark:text-gray-300"><Trash2 size={14} /> Delete Candidates</div>
                 {deleteCandidates.length === 0 ? (
@@ -393,9 +396,9 @@ export function AiAssistant({
                   </>
                 )}
               </div>
-            )}
+              )}
 
-            {mode === 'clear' && (
+              {mode === 'clear' && (
               <div className="space-y-2 p-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
                 <p className="text-sm font-semibold flex items-center gap-1 text-amber-700 dark:text-amber-300"><AlertTriangle size={14} /> Clear Inbox</p>
                 <p className="text-xs text-amber-700/90 dark:text-amber-300/90">This will delete {clearPreviewCount} inbox task{clearPreviewCount === 1 ? '' : 's'}.</p>
@@ -408,9 +411,9 @@ export function AiAssistant({
                   Confirm Clear Inbox
                 </button>
               </div>
-            )}
+              )}
 
-            {mode === 'plan' && totalPlanCount > 0 && (
+              {mode === 'plan' && totalPlanCount > 0 && (
               <div className="space-y-3 pt-1">
                 <div className="text-xs text-gray-500 dark:text-gray-400">Suggested tasks: {selectedPlanCount}/{totalPlanCount} selected</div>
 
@@ -462,7 +465,8 @@ export function AiAssistant({
                   Add Selected Tasks
                 </button>
               </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}
