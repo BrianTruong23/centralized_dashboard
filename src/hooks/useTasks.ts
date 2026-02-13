@@ -245,10 +245,46 @@ export const useTasks = () => {
     }
   };
 
+  /** Batch-add multiple tasks in a single DB call. Used by AutoPlan. */
+  const addTasksBatch = async (newTasks: Task[]) => {
+    let currentUser = userRef.current;
+    if (!currentUser && supabase) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) { currentUser = user; userRef.current = user; }
+    }
+
+    console.log(`[useTasks.addTasksBatch] ${newTasks.length} tasks | user: ${currentUser?.id ?? 'NULL'}`);
+    const tasksWithUser = newTasks.map(t => ({ ...t, user_id: currentUser?.id }));
+
+    // Optimistic UI update
+    setTasks((prev) => {
+      const next = [...tasksWithUser, ...prev];
+      saveTasks(next);
+      return next;
+    });
+
+    if (currentUser) {
+      try {
+        await db.addTasksBatch(tasksWithUser as Task[]);
+        console.log('[useTasks.addTasksBatch] DB batch insert succeeded');
+      } catch (e: any) {
+        console.error('[useTasks.addTasksBatch] DB batch insert FAILED:', e?.message || e?.code || e);
+        // Roll back all optimistic tasks
+        const idsToRemove = new Set(tasksWithUser.map(t => t.id));
+        setTasks((prev) => {
+          const next = prev.filter((t) => !idsToRemove.has(t.id));
+          saveTasks(next);
+          return next;
+        });
+      }
+    }
+  };
+
   return {
     tasks,
     setTasks,
     addTask,
+    addTasksBatch,
     updateTask,
     deleteTask,
     isLoaded,

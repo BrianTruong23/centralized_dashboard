@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Loader2, X, AlertTriangle, User as UserIcon, Lock, Trash2 } from 'lucide-react';
+import { Loader2, X, AlertTriangle, User as UserIcon, Lock, Trash2, Bug, LogOut } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 
 interface SettingsModalProps {
@@ -13,9 +13,10 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ isOpen, onClose, user, onLogout }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'danger'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'danger' | 'debug'>('profile');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [diagnostics, setDiagnostics] = useState<string[]>([]);
 
   // Form states
   const [newPassword, setNewPassword] = useState('');
@@ -58,6 +59,105 @@ export function SettingsModal({ isOpen, onClose, user, onLogout }: SettingsModal
       }
   };
 
+  const runDiagnostics = async () => {
+      setDiagnostics([]);
+      setLoading(true);
+      const logs: string[] = [];
+      let passed = 0;
+      let failed = 0;
+      const log = (msg: string, ok?: boolean) => {
+          logs.push(msg);
+          if (ok === true) passed++;
+          if (ok === false) failed++;
+      };
+
+      log('--- Diagnostics ---');
+
+      try {
+          // 1. Supabase client
+          if (!supabase) throw new Error('Supabase client missing');
+          log('[OK] Supabase client exists', true);
+
+          // 2. Auth session
+          const { data: { session }, error: sessErr } = await supabase.auth.getSession();
+          if (sessErr) {
+              log(`[ERR] Session Error: ${sessErr.message}`, false);
+          } else if (session) {
+              log(`[OK] Auth Session Active: ${session.user.email} (${session.user.id})`, true);
+              log(`   Token expires: ${new Date((session.expires_at || 0) * 1000).toLocaleString()}`);
+          } else {
+              log('[ERR] No Active Session', false);
+          }
+
+          // 3. Select Tasks
+          log('Testing Select Tasks...');
+          const { data: taskRows, error: taskSelErr } = await supabase.from('tasks').select('id').limit(5);
+          if (taskSelErr) log(`[ERR] Select Tasks Failed: ${taskSelErr.message}`, false);
+          else log(`[OK] Tasks Readable: ${taskRows?.length} rows`, true);
+
+          // 4. Select Projects
+          log('Testing Select Projects...');
+          const { data: projs, error: projErr } = await supabase.from('projects').select('*').limit(5);
+          if (projErr) log(`[ERR] Select Projects Failed: ${projErr.message}`, false);
+          else log(`[OK] Projects Readable: ${projs?.length} rows`, true);
+
+          // 5. Test RLS Insert (with all required fields)
+          log('Testing Task Insert (RLS)...');
+          try {
+             const { data: task, error: taskErr } = await supabase.from('tasks').insert({
+                 user_id: user.id,
+                 text: 'Diagnostic Task ' + Date.now(),
+                 category: 'Life',
+                 status: 'todo',
+                 priority: 3,
+                 estimated_minutes: 30,
+                 energy_level: 'medium',
+             }).select().single();
+
+             if (taskErr) log(`[ERR] Insert Task Failed: ${taskErr.message}`, false);
+             else if (!task) log('[ERR] Insert returned no data (RLS blocked)', false);
+             else {
+                 log(`[OK] Task Insert OK: ${task.id}`, true);
+                 // Clean up
+                 const { error: delErr } = await supabase.from('tasks').delete().eq('id', task.id);
+                 if (delErr) log(`[WARN] Cleanup failed: ${delErr.message}`);
+                 else log('[OK] Diagnostic Task Cleaned up', true);
+             }
+          } catch (e: any) {
+              log(`[ERR] Insert Exception: ${e.message}`, false);
+          }
+
+          // 6. Test Project Insert
+          log('Testing Project Insert (RLS)...');
+          try {
+             const { data: proj, error: projInsErr } = await supabase.from('projects').insert({
+                 user_id: user.id,
+                 name: '_diag_' + Date.now(),
+                 color: '#999999',
+             }).select().single();
+
+             if (projInsErr) log(`[ERR] Insert Project Failed: ${projInsErr.message}`, false);
+             else if (!proj) log('[ERR] Project insert returned no data (RLS blocked)', false);
+             else {
+                 log(`[OK] Project Insert OK: ${proj.id}`, true);
+                 await supabase.from('projects').delete().eq('id', proj.id);
+                 log('[OK] Diagnostic Project Cleaned up', true);
+             }
+          } catch (e: any) {
+              log(`[ERR] Project Insert Exception: ${e.message}`, false);
+          }
+
+      } catch (e: any) {
+          log(`[ERR] Critical Error: ${e.message}`, false);
+      }
+
+      log('');
+      log(`--- Summary: ${passed} passed, ${failed} failed ---`);
+
+      setDiagnostics(logs);
+      setLoading(false);
+  };
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl h-[500px] flex overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -83,6 +183,12 @@ export function SettingsModal({ isOpen, onClose, user, onLogout }: SettingsModal
                   className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'danger' ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
                     <Trash2 size={16} /> Danger Zone
+                </button>
+                <button 
+                  onClick={() => setActiveTab('debug')}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'debug' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                >
+                    <Bug size={16} /> Debug
                 </button>
             </nav>
         </div>
@@ -114,6 +220,15 @@ export function SettingsModal({ isOpen, onClose, user, onLogout }: SettingsModal
                             <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">User ID</label>
                             <code className="block w-full p-2 bg-gray-100 dark:bg-gray-800 rounded-md text-xs font-mono text-gray-500 overflow-hidden text-ellipsis">{user.id}</code>
                         </div>
+                    </div>
+                    <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+                         <button 
+                            onClick={onLogout}
+                            className="flex items-center gap-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/10 px-3 py-2 rounded-lg transition-colors w-full"
+                         >
+                             <LogOut size={16} />
+                             Log Out
+                         </button>
                     </div>
                 </div>
             )}
@@ -169,6 +284,29 @@ export function SettingsModal({ isOpen, onClose, user, onLogout }: SettingsModal
                             Delete Personal Account
                         </button>
                     </div>
+                </div>
+            )}
+
+            {activeTab === 'debug' && (
+                <div className="space-y-6">
+                    <div>
+                        <h3 className="text-lg font-semibold mb-1">Diagnostics</h3>
+                        <p className="text-sm text-gray-500">Run checks if you are having issues.</p>
+                    </div>
+                    <button 
+                        onClick={runDiagnostics}
+                        disabled={loading}
+                        className="px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-lg text-sm font-bold hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                    >
+                        {loading ? 'Running...' : 'Run Diagnostics'}
+                    </button>
+                    {diagnostics.length > 0 && (
+                        <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded-lg font-mono text-xs overflow-x-auto whitespace-pre-wrap space-y-1">
+                             {diagnostics.map((log, i) => (
+                                 <div key={i}>{log}</div>
+                             ))}
+                        </div>
+                    )}
                 </div>
             )}
         </div>

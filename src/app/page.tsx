@@ -10,9 +10,7 @@ import { FocusSessionModal } from '@/components/FocusSessionModal';
 import { TaskItem } from '@/components/TaskItem';
 import { pickNextTask, generateDayPlan } from '@/lib/scheduler';
 import { Task } from '@/types/task';
-import { FocusTimer } from '@/components/FocusTimer';
 import { AuthModal } from '@/components/AuthModal';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import { Zap, CalendarRange, Loader2, Filter, ChevronUp, ChevronDown, Play, Sparkles } from 'lucide-react';
 import { DailyNotes } from '@/components/DailyNotes';
 import { DailyNotesHistory } from '@/components/DailyNotesHistory';
@@ -25,6 +23,7 @@ import { TaskStatus, TaskPriority, TaskCategory } from '@/types/task';
 import clsx from 'clsx';
 import { supabase, authReady, SESSION_KEY } from '@/lib/supabase';
 import Link from 'next/link';
+import { formatDateKey } from '@/lib/dateKey';
 
 const loadingMessages = [
   'Loading dashboard...',
@@ -53,11 +52,10 @@ function LoadingScreen() {
 }
 
 export default function Home() {
-  const { tasks, addTask, updateTask, deleteTask, isLoaded } = useTasks();
+  const { tasks, addTask, addTasksBatch, updateTask, deleteTask, isLoaded } = useTasks();
   const { projects, addProject: addProjectFn } = useProjects();
   const [showPlan, setShowPlan] = useState(false);
   const [dayPlan, setDayPlan] = useState<Task[]>([]);
-  const [isFocusing, setIsFocusing] = useState(false);
   const [user, setUser] = useState<any>(() => {
     // Optimistic load from cache to speed up dashboard display
     if (typeof window !== 'undefined') {
@@ -91,12 +89,12 @@ export default function Home() {
 
   const getDefaultDate = () => {
     if (currentView === 'today') {
-      return new Date().toISOString().split('T')[0];
+      return formatDateKey(new Date());
     }
     if (currentView === 'upcoming') {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
-      return tomorrow.toISOString().split('T')[0];
+      return formatDateKey(tomorrow);
     }
     return undefined;
   };
@@ -138,13 +136,45 @@ export default function Home() {
   }, []);
 
   const handleLogout = async () => {
-    if (!supabase) return;
+    console.log('[handleLogout] 🔴 Logout initiated');
     try {
-        await supabase.auth.signOut();
-        localStorage.removeItem(SESSION_KEY);
-        setUser(null);
+        if (supabase) {
+            console.log('[handleLogout] Calling supabase.auth.signOut({ scope: "local" })...');
+            // Use scope:'local' — clears the session client-side only.
+            // This avoids hangs when the Supabase API is unreachable (the default
+            // scope:'global' makes a network request to revoke the token).
+            // Race against a 3s timeout so a hung signOut can't block logout.
+            const signOutPromise = supabase.auth.signOut({ scope: 'local' });
+            const timeoutPromise = new Promise<{ error: { message: string } }>((_, reject) =>
+                setTimeout(() => reject(new Error('signOut timed out after 3s')), 3000)
+            );
+            try {
+                const { error } = await Promise.race([signOutPromise, timeoutPromise]);
+                if (error) {
+                    console.error('[handleLogout] signOut returned error:', error.message);
+                } else {
+                    console.log('[handleLogout] signOut succeeded');
+                }
+            } catch (raceErr) {
+                console.warn('[handleLogout] signOut failed/timed out:', raceErr);
+            }
+        }
     } catch (error) {
-        console.error('Logout error:', error);
+        console.error('[handleLogout] signOut threw:', error);
+    } finally {
+        console.log('[handleLogout] Cleaning up local state...');
+        // Always clear local state — including Supabase's own session keys
+        // so a failed signOut() doesn't leave stale tokens that re-authenticate on reload
+        localStorage.removeItem(SESSION_KEY);
+        try {
+            Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('sb-')) localStorage.removeItem(key);
+            });
+        } catch { /* ignore storage errors */ }
+        console.log('[handleLogout] localStorage cleared, setting user to null');
+        setUser(null);
+        console.log('[handleLogout] Redirecting to /');
+        window.location.href = '/';
     }
   };
 
@@ -186,6 +216,8 @@ export default function Home() {
 
   const handleFocusTask = (task: Task) => {
     setManualFocusTaskId(task.id);
+    setActiveFocusTask(task);
+    setIsFocusModalOpen(true);
   };
 
   const handleStartFocusSession = (task: Task) => {
@@ -194,26 +226,13 @@ export default function Home() {
   };
 
   const handleAutoPlanTasks = async (newTasks: Task[]) => {
-      console.log(`[handleAutoPlanTasks] Received ${newTasks.length} tasks to add`);
-      
-      // Fire ALL addTask calls concurrently — don't let one blocking call stop the rest
-      const results = await Promise.allSettled(
-          newTasks.map(async (task) => {
-              console.log(`[handleAutoPlanTasks] Adding task: "${task.title}" | project_id: ${task.project_id || 'NONE'}`);
-              await addTask(task);
-              console.log(`[handleAutoPlanTasks] ✓ Task added: "${task.title}"`);
-              return task.title;
-          })
-      );
-      
-      const succeeded = results.filter(r => r.status === 'fulfilled').length;
-      const failed = results.filter(r => r.status === 'rejected');
-      console.log(`[handleAutoPlanTasks] Done: ${succeeded}/${newTasks.length} tasks added`);
-      failed.forEach((r, i) => {
-          if (r.status === 'rejected') {
-              console.error(`[handleAutoPlanTasks] ✗ Failed:`, r.reason);
-          }
-      });
+      console.log(`[handleAutoPlanTasks] Received ${newTasks.length} tasks to add (batch)`);
+      try {
+          await addTasksBatch(newTasks);
+          console.log(`[handleAutoPlanTasks] ✅ Batch insert done`);
+      } catch (e: any) {
+          console.error(`[handleAutoPlanTasks] ✗ Batch insert failed:`, e?.message || e);
+      }
   };
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -279,15 +298,14 @@ export default function Home() {
     }
 
     if (currentView === 'today') {
-        const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+        const todayStr = formatDateKey(new Date());
         return result.filter(t => t.deadline === todayStr);
     }
     if (currentView === 'upcoming') {
-        const now = new Date();
-        const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+        const todayStr = formatDateKey(new Date());
         return result.filter(t => {
              if (!t.deadline) return false;
-             return new Date(t.deadline) > todayEnd;
+             return t.deadline > todayStr;
         });
     }
     if (currentView.startsWith('project-')) {
@@ -408,8 +426,6 @@ export default function Home() {
         </header>
 
         <div className="max-w-4xl mx-auto">
-            {/* Focus Now section removed */}
-
             {currentView === 'kanban' ? (
                 <section className="h-[calc(100vh-200px)]">
                     <KanbanBoard
@@ -434,11 +450,34 @@ export default function Home() {
                 </>
             ) : (
                 <>
+                    {suggestedTask && (
+                        <section className="mb-6">
+                            <div className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3">
+                                <div className="min-w-0">
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+                                        Focus Now
+                                    </p>
+                                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                        {suggestedTask.title}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => handleStartFocusSession(suggestedTask)}
+                                    className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-black dark:bg-white text-white dark:text-black text-xs font-bold rounded-lg hover:opacity-90 transition-opacity"
+                                >
+                                    <Zap size={14} />
+                                    Focus Now
+                                </button>
+                            </div>
+                        </section>
+                    )}
+
                     <section className="mb-8">
                         <TaskInput
                             onAddTask={addTask}
                             defaultDate={getDefaultDate()}
                             projects={projects}
+                            defaultProjectId={currentProject?.id}
                         />
                     </section>
 
@@ -559,6 +598,7 @@ export default function Home() {
         userId={user?.id}
         defaultDate={getDefaultDate()}
         projects={projects}
+        defaultProjectId={currentProject?.id}
       />
 
       <AutoPlanModal 
