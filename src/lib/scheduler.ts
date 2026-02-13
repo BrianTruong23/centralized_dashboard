@@ -7,6 +7,30 @@ export interface SchedulerContext {
   availableTimeMinutes?: number;
 }
 
+function deadlineDateKey(deadline?: string): string | null {
+  if (!deadline) return null;
+  const match = deadline.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+  const parsed = new Date(deadline);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const y = parsed.getFullYear();
+  const m = String(parsed.getMonth() + 1).padStart(2, '0');
+  const d = String(parsed.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export const filterTasksDueToday = (tasks: Task[], now: Date): Task[] => {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const todayKey = `${year}-${month}-${day}`;
+  return tasks.filter((task) => {
+    if (task.status === 'done') return false;
+    const taskDate = deadlineDateKey(task.deadline);
+    return taskDate === todayKey;
+  });
+};
+
 /**
  * Calculates a score for a task based on urgency, priority, and context.
  * Higher score = better candidate.
