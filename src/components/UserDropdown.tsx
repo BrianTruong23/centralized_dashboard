@@ -3,16 +3,18 @@
 import { useState, useRef, useEffect } from 'react';
 import { User } from '@supabase/supabase-js';
 import { Settings, LogOut, ChevronDown, User as UserIcon, Bell, Layout } from 'lucide-react';
-import { SettingsModal } from './SettingsModal';
+
 
 interface UserDropdownProps {
   user: User;
   onLogout: () => void;
+  onOpenSettings: () => void;
+  onOpenActivityLog: () => void;
 }
 
-export function UserDropdown({ user, onLogout }: UserDropdownProps) {
+export function UserDropdown({ user, onLogout, onOpenSettings, onOpenActivityLog }: UserDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  // Internal settings state no longer needed, lifted to parent
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close clicks outside
@@ -61,7 +63,7 @@ export function UserDropdown({ user, onLogout }: UserDropdownProps) {
             
             <div className="px-1 space-y-0.5">
                 <button 
-                  onClick={() => { setShowSettings(true); setIsOpen(false); }}
+                  onClick={() => { onOpenSettings(); setIsOpen(false); }}
                   className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
                 >
                     <div className="flex items-center gap-3">
@@ -70,7 +72,10 @@ export function UserDropdown({ user, onLogout }: UserDropdownProps) {
                     </div>
                 </button>
                 {/* Placeholders from screenshot request */}
-                <button className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors">
+                <button 
+                   onClick={() => { onOpenActivityLog(); setIsOpen(false); }}
+                   className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                >
                      <div className="flex items-center gap-3">
                         <Layout size={16} />
                         <span>Activity Log</span>
@@ -93,12 +98,6 @@ export function UserDropdown({ user, onLogout }: UserDropdownProps) {
         )}
       </div>
 
-      <SettingsModal 
-         isOpen={showSettings} 
-         onClose={() => setShowSettings(false)} 
-         user={user} 
-         onLogout={onLogout}
-      />
     </>
   );
 }

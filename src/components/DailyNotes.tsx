@@ -235,7 +235,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false }: DailyNote
             <button
                 onClick={handleSummarize}
                 disabled={isLoading || !noteContent.trim()}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-black dark:bg-white dark:text-black rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors disabled:opacity-50"
             >
                 {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                 Summarize with AI
@@ -455,34 +455,6 @@ export function DailyNotes({ userId, onAddTask, showHistory = false }: DailyNote
         </div>
       </div>
 
-      {showHistory && pastNotes.length > 0 && (
-        <div className="mt-12 pt-8 border-t border-gray-100 dark:border-gray-800 space-y-6">
-            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1">Previous Days</h3>
-            <div className="space-y-6">
-                {pastNotes.map(note => (
-                    <div key={note.id} className="group relative pl-4 border-l-2 border-gray-100 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-600 transition-colors">
-                        <div className="absolute -left-[5px] top-0 w-2.5 h-2.5 rounded-full bg-gray-200 dark:bg-gray-700 group-hover:bg-indigo-500 transition-colors" />
-                        <div className="mb-2">
-                            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                                {new Date(note.createdAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                            </span>
-                        </div>
-                        <div className="prose dark:prose-invert max-w-none text-sm text-gray-600 dark:text-gray-400 mb-3">
-                            <p className="whitespace-pre-wrap line-clamp-3 group-hover:line-clamp-none transition-all duration-300">{note.content}</p>
-                        </div>
-                        {note.summary && (
-                            <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-3 rounded-lg border border-indigo-100 dark:border-indigo-900/30">
-                                <p className="text-xs text-indigo-700 dark:text-indigo-300 italic">
-                                    <Sparkles size={12} className="inline mr-1.5 -mt-0.5" />
-                                    {note.summary}
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                ))}
-            </div>
-        </div>
-      )}
     </div>
   );
 }
