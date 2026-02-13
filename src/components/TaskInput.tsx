@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Task, TaskPriority, TaskEnergyLevel, TaskCategory } from '@/types/task';
 import { generateId } from '@/lib/utils';
 import clsx from 'clsx';
@@ -6,19 +6,25 @@ import { Plus } from 'lucide-react';
 
 interface TaskInputProps {
   onAddTask: (task: Task) => void;
+  defaultDate?: string;
 }
 
 const CATEGORIES: TaskCategory[] = ['Research', 'Coding', 'Admin', 'Health', 'Life', 'Finance', 'Social', 'Content', 'UX'];
 
-export const TaskInput = ({ onAddTask }: TaskInputProps) => {
+export const TaskInput = ({ onAddTask, defaultDate }: TaskInputProps) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<TaskCategory>('Life');
   const [priority, setPriority] = useState<TaskPriority>(3);
   const [estimatedMinutes, setEstimatedMinutes] = useState(60);
   const [energyLevel, setEnergyLevel] = useState<TaskEnergyLevel>('medium');
-  const [deadline, setDeadline] = useState('');
+  const [deadline, setDeadline] = useState(defaultDate || '');
   const [isExpanded, setIsExpanded] = useState(false);
+
+  // Update deadline when defaultDate changes (e.g. switching views)
+  useEffect(() => {
+    setDeadline(defaultDate || '');
+  }, [defaultDate]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +53,7 @@ export const TaskInput = ({ onAddTask }: TaskInputProps) => {
     setPriority(3);
     setEstimatedMinutes(60);
     setEnergyLevel('medium');
-    setDeadline('');
+    setDeadline(defaultDate || '');
     setIsExpanded(false);
   };
 
