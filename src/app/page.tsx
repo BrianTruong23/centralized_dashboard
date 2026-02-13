@@ -54,7 +54,7 @@ function LoadingScreen() {
 
 export default function Home() {
   const { tasks, addTask, updateTask, deleteTask, isLoaded } = useTasks();
-  const { projects } = useProjects();
+  const { projects, addProject: addProjectFn } = useProjects();
   const [showPlan, setShowPlan] = useState(false);
   const [dayPlan, setDayPlan] = useState<Task[]>([]);
   const [isFocusing, setIsFocusing] = useState(false);
@@ -351,12 +351,7 @@ export default function Home() {
           onSearchChange={setSearchQuery}
        />
 
-       <CreateTaskModal
-          isOpen={isCreateTaskModalOpen}
-          onClose={() => setIsCreateTaskModalOpen(false)}
-          onAddTask={addTask}
-          userId={userId}
-       />
+       {/* CreateTaskModal rendered once at the bottom of the component */}
 
       <main className={`flex-1 overflow-y-auto px-8 py-8 ${!user ? 'blur-sm pointer-events-none select-none' : ''}`}>
         <header className="mb-8 flex items-start justify-between max-w-4xl mx-auto relative">
@@ -436,9 +431,10 @@ export default function Home() {
             ) : (
                 <>
                     <section className="mb-8">
-                        <TaskInput 
-                            onAddTask={addTask} 
+                        <TaskInput
+                            onAddTask={addTask}
                             defaultDate={getDefaultDate()}
+                            projects={projects}
                         />
                     </section>
 
@@ -556,6 +552,7 @@ export default function Home() {
         onAddTask={addTask}
         userId={user?.id}
         defaultDate={getDefaultDate()}
+        projects={projects}
       />
 
       <AutoPlanModal 
@@ -563,6 +560,8 @@ export default function Home() {
         onClose={() => setIsAutoPlanModalOpen(false)}
         onAddTasks={handleAutoPlanTasks}
         userId={user?.id}
+        projects={projects}
+        addProject={addProjectFn}
       />
 
       <FocusSessionModal 

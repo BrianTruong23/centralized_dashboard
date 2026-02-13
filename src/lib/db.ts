@@ -58,7 +58,7 @@ export const db = {
   async addTask(task: Task) {
     if (!supabase) throw new Error('Supabase not configured');
     console.log('[db.addTask] Inserting task:', task.id, '| project_id:', task.project_id ?? 'NONE');
-    
+
     const payload: Record<string, any> = {
       id: task.id,
       user_id: task.user_id,
@@ -80,15 +80,26 @@ export const db = {
       payload.project_id = task.project_id;
     }
 
+    console.log('[db.addTask] Payload keys:', Object.keys(payload).join(', '));
+
     // Timeout protection: don't let a hanging Supabase call block forever
     const insertPromise = supabase.from('tasks').insert(payload);
     const timeoutPromise = new Promise((_, reject) => 
       setTimeout(() => reject(new Error('Insert timed out after 10s')), 10000)
     );
     
-    const { error } = await Promise.race([insertPromise, timeoutPromise]) as any;
+    const result: any = await Promise.race([insertPromise, timeoutPromise]);
+    const { error, data, status, statusText } = result || {};
+    
     if (error) {
-      console.error('[db.addTask] Error:', error.code, error.message, error.details);
+      console.error('[db.addTask] ❌ Supabase error:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        status,
+        statusText
+      });
       throw error;
     }
     

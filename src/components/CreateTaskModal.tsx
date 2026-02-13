@@ -5,7 +5,7 @@ import { Task, TaskPriority, TaskEnergyLevel, TaskCategory } from '@/types/task'
 import { generateId } from '@/lib/utils';
 import clsx from 'clsx';
 import { X, Calendar, Clock, Zap, Tag, Flag, FolderKanban } from 'lucide-react';
-import { useProjects } from '@/hooks/useProjects';
+import { Project } from '@/types/project';
 
 interface CreateTaskModalProps {
   isOpen: boolean;
@@ -13,13 +13,13 @@ interface CreateTaskModalProps {
   onAddTask: (task: Task) => void;
   userId?: string;
   defaultDate?: string;
+  projects: Project[];
 }
 
 
 const ENERGY_LEVELS: TaskEnergyLevel[] = ['low', 'medium', 'high'];
 
-export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDate }: CreateTaskModalProps) {
-  const { projects, isLoading } = useProjects();
+export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDate, projects }: CreateTaskModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<TaskCategory>('Life');
@@ -132,15 +132,10 @@ export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDat
                      const p = projects.find(proj => proj.id === e.target.value);
                      if (p) setCategory(p.name);
                   }}
-                  className={clsx(
-                      "w-full text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md px-2 py-2 outline-none focus:border-black dark:focus:border-gray-500 transition-colors",
-                      isLoading && "opacity-50 cursor-wait"
-                  )}
+                  className="w-full text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md px-2 py-2 outline-none focus:border-black dark:focus:border-gray-500 transition-colors"
                   required
                 >
-                  {isLoading ? (
-                    <option value="">Loading projects...</option>
-                  ) : projects.length === 0 ? (
+                  {projects.length === 0 ? (
                     <option value="">No projects found</option>
                   ) : (
                     projects.map(p => (
