@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "jest",
-    "export-schema": "ts-node scripts/export-schema.ts"
+    "export-schema": "TS_NODE_COMPILER_OPTIONS='{\"module\":\"commonjs\",\"moduleResolution\":\"node\"}' node -r ts-node/register/transpile-only scripts/export-schema.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -116,11 +116,11 @@ export const Sidebar = ({
   return (
     <aside className={clsx("w-64 flex flex-col h-screen bg-gray-50/50 dark:bg-black border-r border-gray-100 dark:border-gray-900", className)}>
       {/* Header with Logo + UserDropdown */}
-      <div className="p-4 mb-2 flex items-center justify-between">
-         <div className="flex items-center gap-2 flex-1 mr-2">
-             <img src="/logo.svg" alt="Minima" width={48} height={48} className="rounded-lg" />
+      <div className="p-4 mb-2 flex items-center gap-3">
+         <img src="/logo.svg" alt="Minima" width={48} height={48} className="rounded-lg flex-shrink-0" />
+         <div className="min-w-0 flex-1">
              {user ? (
-                 <div className="flex-1">
+                 <div className="min-w-0">
                      <UserDropdown 
                        user={user} 
                        onLogout={onLogout} 
@@ -133,7 +133,7 @@ export const Sidebar = ({
              )}
          </div>
          
-         <div className="flex items-center gap-1 opacity-0 hover:opacity-100 transition-opacity">
+         <div className="flex items-center pl-1 flex-shrink-0">
              <ThemeToggle />
          </div>
       </div>

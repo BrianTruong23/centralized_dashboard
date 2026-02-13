@@ -11,6 +11,7 @@ interface DailyNotesHistoryProps {
 export function DailyNotesHistory({ userId }: DailyNotesHistoryProps) {
   const [pastNotes, setPastNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!userId) return;
@@ -42,6 +43,10 @@ export function DailyNotesHistory({ userId }: DailyNotesHistoryProps) {
 
   if (!userId || (pastNotes.length === 0 && !loading)) return null;
 
+  const toggleExpanded = (noteId: string) => {
+    setExpandedNotes((prev) => ({ ...prev, [noteId]: !prev[noteId] }));
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
         <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-6">Previous Days</h3>
@@ -53,6 +58,10 @@ export function DailyNotesHistory({ userId }: DailyNotesHistoryProps) {
                 {pastNotes.map(note => (
                     <div key={note.id} className="group relative pl-6 border-l-2 border-gray-100 dark:border-gray-800 hover:border-indigo-500 dark:hover:border-indigo-500 transition-colors">
                         <div className="absolute -left-[5px] top-0 w-2.5 h-2.5 rounded-full bg-gray-200 dark:bg-gray-700 group-hover:bg-indigo-500 transition-colors" />
+                        {(() => {
+                          const isExpanded = !!expandedNotes[note.id];
+                          return (
+                            <>
                         
                         <div className="mb-3">
                             <span className="text-lg font-bold text-gray-900 dark:text-gray-100">
@@ -61,10 +70,12 @@ export function DailyNotesHistory({ userId }: DailyNotesHistoryProps) {
                         </div>
                         
                         <div className="prose dark:prose-invert max-w-none text-gray-600 dark:text-gray-400 mb-4">
-                            <p className="whitespace-pre-wrap leading-relaxed">{note.content}</p>
+                            <p className={`whitespace-pre-wrap leading-relaxed ${isExpanded ? '' : 'line-clamp-4'}`}>
+                              {note.content}
+                            </p>
                         </div>
                         
-                        {note.summary && (
+                        {note.summary && isExpanded && (
                             <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/30">
                                 <p className="text-sm text-indigo-700 dark:text-indigo-300 italic flex gap-2">
                                     <Sparkles size={16} className="shrink-0 mt-0.5" />
@@ -72,6 +83,17 @@ export function DailyNotesHistory({ userId }: DailyNotesHistoryProps) {
                                 </p>
                             </div>
                         )}
+                        
+                        <button
+                          type="button"
+                          onClick={() => toggleExpanded(note.id)}
+                          className="mt-2 text-xs font-semibold text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-300 transition-colors"
+                        >
+                          {isExpanded ? 'Show less' : 'See more'}
+                        </button>
+                            </>
+                          );
+                        })()}
                     </div>
                 ))}
             </div>
