@@ -3,6 +3,7 @@ import { Task, TaskPriority, TaskStatus, TaskCategory, TaskEnergyLevel } from '@
 import clsx from 'clsx';
 import { CheckCircle2, Circle, Trash2, Zap, Clock, Calendar, Pencil, X, Check } from 'lucide-react';
 import { format } from 'date-fns';
+import { useProjects } from '@/hooks/useProjects';
 
 interface TaskItemProps {
   task: Task;
@@ -15,8 +16,11 @@ const categories: TaskCategory[] = ['Research', 'Coding', 'Admin', 'Health', 'Li
 const energyLevels: TaskEnergyLevel[] = ['low', 'medium', 'high'];
 
 export const TaskItem = ({ task, onUpdate, onDelete, onFocus }: TaskItemProps) => {
+  const { projects } = useProjects();
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Task>(task);
+
+  const project = projects.find(p => p.id === task.project_id);
 
   const toggleStatus = () => {
     onUpdate({
@@ -70,6 +74,19 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus }: TaskItemProps) =
         {/* For brevity, I'll keep the grid controls but style them cleaner */}
         <div className="grid grid-cols-2 gap-4 pt-2">
             <div>
+              <label className="text-xs text-gray-500 block mb-1">Project</label>
+              <select
+                value={editForm.project_id || ''}
+                onChange={(e) => setEditForm({ ...editForm, project_id: e.target.value })}
+                className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none"
+              >
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
               <label className="text-xs text-gray-500 block mb-1">Status</label>
               <select
                 value={editForm.status}
@@ -81,10 +98,10 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus }: TaskItemProps) =
                 <option value="done">Done</option>
               </select>
             </div>
-            
+
             <div>
               <label className="text-xs text-gray-500 block mb-1">Deadline</label>
-              <input 
+              <input
                 type="date"
                 value={editForm.deadline || ''}
                 onChange={(e) => setEditForm({ ...editForm, deadline: e.target.value })}
@@ -167,13 +184,27 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus }: TaskItemProps) =
         </div>
 
         <div className="flex items-center gap-3 text-[11px] text-gray-400 dark:text-gray-500 font-medium h-4">
+           {/* Project indicator */}
+           {project && (
+             <>
+               <span className="flex items-center gap-1.5">
+                 <span
+                   className="w-2 h-2 rounded-full"
+                   style={{ backgroundColor: project.color }}
+                 />
+                 <span className="text-gray-600 dark:text-gray-400 font-medium">{project.name}</span>
+               </span>
+               <span className="w-0.5 h-0.5 rounded-full bg-gray-300" />
+             </>
+           )}
+
            {/* Metadata only shows if relevant */}
            <span className="flex items-center gap-1.5">
               {task.estimatedMinutes}m
            </span>
            <span className="w-0.5 h-0.5 rounded-full bg-gray-300" />
            <span>{task.category}</span>
-           
+
            {task.priority < 4 && (
              <>
                 <span className="w-0.5 h-0.5 rounded-full bg-gray-300" />

@@ -16,6 +16,7 @@ const mapRowToTask = (row: any): Task => ({
   deadline: row.deadline,
   tags: row.tags || [],
   createdAt: new Date(row.created_at).getTime(),
+  project_id: row.project_id,
 });
 
 export const db = {
@@ -54,6 +55,7 @@ export const db = {
       tags: task.tags,
       completed: task.status === 'done',
       status: task.status,
+      project_id: task.project_id,
       created_at: new Date(task.createdAt).toISOString(),
     });
     if (error) {
@@ -79,6 +81,7 @@ export const db = {
         tags: task.tags,
         completed: task.status === 'done',
         status: task.status,
+        project_id: task.project_id,
       })
       .eq('id', task.id);
     if (error) {
@@ -132,5 +135,40 @@ export const db = {
       throw error;
     }
     return data;
+  },
+
+  async ensureDefaultProjects(userId: string) {
+    if (!supabase) throw new Error('Supabase not configured');
+    console.log('[db.ensureDefaultProjects] Checking for default projects...');
+
+    // Check if user already has projects
+    const { data: existingProjects } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('user_id', userId)
+      .limit(1);
+
+    // If user already has projects, don't create defaults
+    if (existingProjects && existingProjects.length > 0) {
+      console.log('[db.ensureDefaultProjects] User already has projects, skipping defaults');
+      return;
+    }
+
+    // Create default Life and Work projects
+    const defaultProjects = [
+      { user_id: userId, name: 'Life', color: '#22c55e' }, // Green
+      { user_id: userId, name: 'Work', color: '#3b82f6' }, // Blue
+    ];
+
+    console.log('[db.ensureDefaultProjects] Creating default projects...');
+    const { error } = await supabase
+      .from('projects')
+      .insert(defaultProjects);
+
+    if (error) {
+      console.error('[db.ensureDefaultProjects] Error:', error.code, error.message);
+      throw error;
+    }
+    console.log('[db.ensureDefaultProjects] Default projects created');
   }
 };

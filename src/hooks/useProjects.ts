@@ -17,6 +17,8 @@ export const useProjects = () => {
 
       if (userRef.current) {
         try {
+          // Ensure default projects exist for new users
+          await db.ensureDefaultProjects(userRef.current.id);
           const dbProjects = await db.fetchProjects();
           setProjects(dbProjects);
         } catch (e) {
@@ -32,6 +34,8 @@ export const useProjects = () => {
         userRef.current = session?.user || null;
         if (session?.user) {
             try {
+                // Ensure default projects exist for new users
+                await db.ensureDefaultProjects(session.user.id);
                 const dbProjects = await db.fetchProjects();
                 setProjects(dbProjects);
             } catch (e) {
