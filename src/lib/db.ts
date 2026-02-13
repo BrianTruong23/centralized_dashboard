@@ -68,41 +68,35 @@ export const db = {
       priority: task.priority,
       estimated_minutes: task.estimatedMinutes,
       energy_level: task.energyLevel,
-      deadline: task.deadline,
+      deadline: task.deadline || null,
       tags: task.tags,
       completed: task.status === 'done',
       status: task.status,
       created_at: new Date(task.createdAt).toISOString(),
     };
-    
+
     // Only include project_id if it's actually set (avoids FK violations)
     if (task.project_id) {
       payload.project_id = task.project_id;
     }
 
-    console.log('[db.addTask] Payload keys:', Object.keys(payload).join(', '));
+    // Use .select() to get the inserted row back — if RLS blocks the insert,
+    // Supabase returns NO error but data will be empty. This lets us detect it.
+    const { error, data } = await supabase
+      .from('tasks')
+      .insert(payload)
+      .select();
 
-    // Timeout protection: don't let a hanging Supabase call block forever
-    const insertPromise = supabase.from('tasks').insert(payload);
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Insert timed out after 10s')), 10000)
-    );
-    
-    const result: any = await Promise.race([insertPromise, timeoutPromise]);
-    const { error, data, status, statusText } = result || {};
-    
     if (error) {
-      console.error('[db.addTask] ❌ Supabase error:', {
-        code: error.code,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        status,
-        statusText
-      });
+      console.error('[db.addTask] ❌ Supabase error:', error.code, error.message, error.details, error.hint);
       throw error;
     }
-    
+
+    if (!data || data.length === 0) {
+      console.error('[db.addTask] ❌ Insert returned 0 rows — likely RLS policy blocked it. user_id:', task.user_id);
+      throw new Error('Insert blocked by RLS policy — no rows returned');
+    }
+
     console.log('[db.addTask] ✓ Insert succeeded for:', task.id);
     
     // Fire-and-forget activity log — don't block on it
