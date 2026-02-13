@@ -5,6 +5,7 @@ import { Project, CreateProjectInput } from '@/types/project';
 import { Loader2, Sparkles, X, Check, Calendar, AlertTriangle } from 'lucide-react';
 import { Task, TaskCategory } from '@/types/task';
 import { supabase } from '@/lib/supabase';
+import { PlanningPreferences } from '@/types/planningPreferences';
 
 interface AutoPlanModalProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ interface AutoPlanModalProps {
   projects: Project[];
   addProject: (input: CreateProjectInput) => Promise<Project | undefined>;
   proOverride?: boolean;
+  planningPreferences: PlanningPreferences;
 }
 
 interface PlannedTask {
@@ -33,7 +35,16 @@ interface WeekPlan {
   tasks: PlannedTask[];
 }
 
-export function AutoPlanModal({ isOpen, onClose, onAddTasks, userId, projects, addProject, proOverride = false }: AutoPlanModalProps) {
+export function AutoPlanModal({
+  isOpen,
+  onClose,
+  onAddTasks,
+  userId,
+  projects,
+  addProject,
+  proOverride = false,
+  planningPreferences,
+}: AutoPlanModalProps) {
   const [step, setStep] = useState<'input' | 'loading' | 'review'>('input');
   const [notes, setNotes] = useState('');
   const [weekPlan, setWeekPlan] = useState<WeekPlan[]>([]);
@@ -67,7 +78,8 @@ export function AutoPlanModal({ isOpen, onClose, onAddTasks, userId, projects, a
         },
         body: JSON.stringify({ 
             notes, 
-            startDate: new Date().toLocaleDateString('en-CA') // Send LOCAL date yyyy-mm-dd
+            startDate: new Date().toLocaleDateString('en-CA'), // Send LOCAL date yyyy-mm-dd
+            preferences: planningPreferences,
         }),
       });
 

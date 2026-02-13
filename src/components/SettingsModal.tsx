@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { X, AlertTriangle, User as UserIcon, Lock, Trash2, Bug, LogOut, Leaf, Crown } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
+import { PlanningPreferences } from '@/types/planningPreferences';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -16,6 +17,8 @@ interface SettingsModalProps {
   isPro: boolean;
   forceProUser: boolean;
   onToggleForceProUser: (enabled: boolean) => void;
+  planningPreferences: PlanningPreferences;
+  onPlanningPreferencesChange: (next: PlanningPreferences) => void;
 }
 
 export function SettingsModal({
@@ -28,6 +31,8 @@ export function SettingsModal({
   isPro,
   forceProUser,
   onToggleForceProUser,
+  planningPreferences,
+  onPlanningPreferencesChange,
 }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'billing' | 'security' | 'danger' | 'debug'>('profile');
   const [loading, setLoading] = useState(false);
@@ -266,7 +271,7 @@ export function SettingsModal({
                 <div className="space-y-6">
                     <div>
                         <h3 className="text-lg font-semibold mb-1">Preferences</h3>
-                        <p className="text-sm text-gray-500">Customize subtle focus visuals.</p>
+                        <p className="text-sm text-gray-500">Customize focus visuals and AI planning behavior.</p>
                     </div>
 
                     <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50/80 dark:bg-gray-950/60">
@@ -291,6 +296,86 @@ export function SettingsModal({
                                     className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${focusPlantEnabled ? 'translate-x-5' : 'translate-x-1'}`}
                                 />
                             </button>
+                        </div>
+                    </div>
+
+                    <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50/80 dark:bg-gray-950/60 space-y-4">
+                        <div>
+                            <p className="text-sm font-semibold">AI Planning Profile</p>
+                            <p className="text-xs text-gray-500 mt-1">The assistant uses these details to generate better schedules.</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Most Energetic Time</label>
+                                <select
+                                  value={planningPreferences.energyPeak}
+                                  onChange={(e) => onPlanningPreferencesChange({ ...planningPreferences, energyPeak: e.target.value as PlanningPreferences['energyPeak'] })}
+                                  className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900"
+                                >
+                                  <option value="early_morning">Early morning</option>
+                                  <option value="morning">Morning</option>
+                                  <option value="afternoon">Afternoon</option>
+                                  <option value="evening">Evening</option>
+                                  <option value="night">Night</option>
+                                  <option value="varies">Varies day-to-day</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Preferred Work Days</label>
+                                <input
+                                  type="text"
+                                  value={planningPreferences.workDays}
+                                  onChange={(e) => onPlanningPreferencesChange({ ...planningPreferences, workDays: e.target.value })}
+                                  placeholder="Mon-Fri"
+                                  className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Deep Work Block (minutes)</label>
+                                <input
+                                  type="number"
+                                  min={15}
+                                  step={5}
+                                  value={planningPreferences.deepWorkMinutes}
+                                  onChange={(e) => onPlanningPreferencesChange({ ...planningPreferences, deepWorkMinutes: Math.max(15, Number(e.target.value) || 90) })}
+                                  className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Break Between Sessions (minutes)</label>
+                                <input
+                                  type="number"
+                                  min={5}
+                                  step={5}
+                                  value={planningPreferences.breakMinutes}
+                                  onChange={(e) => onPlanningPreferencesChange({ ...planningPreferences, breakMinutes: Math.max(5, Number(e.target.value) || 15) })}
+                                  className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900"
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Constraints</label>
+                            <textarea
+                              value={planningPreferences.personalConstraints}
+                              onChange={(e) => onPlanningPreferencesChange({ ...planningPreferences, personalConstraints: e.target.value })}
+                              placeholder="Example: Meetings 1-3 PM Tue/Thu, family time after 7 PM."
+                              className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900 min-h-20"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Additional Planning Notes</label>
+                            <textarea
+                              value={planningPreferences.planningNotes}
+                              onChange={(e) => onPlanningPreferencesChange({ ...planningPreferences, planningNotes: e.target.value })}
+                              placeholder="Example: Prefer creative tasks before lunch."
+                              className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900 min-h-20"
+                            />
                         </div>
                     </div>
                 </div>
