@@ -26,6 +26,7 @@
 #### 5. Project Management
 - **Dynamic Categories**: Replaced hardcoded categories with dynamic Projects.
 - **Refactoring**: Updated schemas and components to link Tasks to `project_id`.
+- **Organization**: Moved all SQL schema files into a dedicated `sql/` directory.
 
 ### Fixes
 - **Build System**: Resolved `lightningcss` and Next.js build errors.
