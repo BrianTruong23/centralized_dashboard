@@ -57,6 +57,11 @@ export default function Home() {
   const { tasks, addTask, addTasksBatch, updateTask, deleteTask, isLoaded } = useTasks();
   const { projects, addProject: addProjectFn } = useProjects();
   const { isPro, loading: premiumLoading } = usePremium();
+  const [forceProUser, setForceProUser] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('force_pro_user') === 'true';
+  });
+  const effectiveIsPro = isPro || forceProUser;
   const [showPlan, setShowPlan] = useState(false);
   const [dayPlan, setDayPlan] = useState<Task[]>([]);
   const [user, setUser] = useState<any>(() => {
@@ -102,6 +107,14 @@ export default function Home() {
       // ignore storage errors
     }
   }, [focusPlantEnabled]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('force_pro_user', String(forceProUser));
+    } catch {
+      // ignore storage errors
+    }
+  }, [forceProUser]);
 
   const getDefaultDate = () => {
     if (currentView === 'today') {
@@ -387,7 +400,9 @@ export default function Home() {
           addProject={addProjectFn}
           focusPlantEnabled={focusPlantEnabled}
           onToggleFocusPlant={setFocusPlantEnabled}
-          isPro={isPro}
+          isPro={effectiveIsPro}
+          forceProUser={forceProUser}
+          onToggleForceProUser={setForceProUser}
        />
 
        {/* CreateTaskModal rendered once at the bottom of the component */}
@@ -503,7 +518,7 @@ export default function Home() {
                     {/* Auto Plan Section for Inbox */}
                      {currentView === 'inbox' && (
                         <section className="mb-8">
-                             {isPro ? (
+                             {effectiveIsPro ? (
                                 <button
                                   onClick={() => setIsAutoPlanModalOpen(true)}
                                   className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:border-black dark:hover:border-white hover:text-black dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-all font-medium"
@@ -643,6 +658,7 @@ export default function Home() {
         userId={user?.id}
         projects={projects}
         addProject={addProjectFn}
+        proOverride={forceProUser}
       />
 
       <FocusSessionModal 
@@ -661,6 +677,7 @@ export default function Home() {
         projects={projects}
         addProject={addProjectFn}
         onAddTasks={handleAutoPlanTasks}
+        proOverride={forceProUser}
       />
       <AmbientSound />
     </div>
