@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Task } from '@/types/task';
 import { Play, Pause, Square, CheckCircle } from 'lucide-react';
 import clsx from 'clsx';
+import { PlantGrowth } from './PlantGrowth';
+import { loadSettings } from '@/lib/settings';
 
 interface FocusTimerProps {
   task: Task;
@@ -13,7 +15,14 @@ interface FocusTimerProps {
 export const FocusTimer = ({ task, onComplete, onStop }: FocusTimerProps) => {
   const [isActive, setIsActive] = useState(true);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [plantGrowthEnabled, setPlantGrowthEnabled] = useState(true);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load plant growth setting
+  useEffect(() => {
+    const settings = loadSettings();
+    setPlantGrowthEnabled(settings.plantGrowthEnabled);
+  }, []);
 
   useEffect(() => {
     if (isActive) {
@@ -50,11 +59,21 @@ export const FocusTimer = ({ task, onComplete, onStop }: FocusTimerProps) => {
       <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
         <Play size={150} />
       </div>
-      
+
+      {/* Plant Growth Animation */}
+      {plantGrowthEnabled && (
+        <div className="absolute bottom-6 left-6">
+          <PlantGrowth
+            elapsedSeconds={elapsedSeconds}
+            isActive={isActive}
+          />
+        </div>
+      )}
+
       <div className="relative z-10 w-full">
         <div className="mb-2 text-gray-400 text-xs uppercase tracking-widest font-bold">Focusing On</div>
         <h3 className="text-xl font-bold mb-6 line-clamp-1">{task.title}</h3>
-        
+
         <div className="text-7xl font-mono font-bold mb-8 tracking-tighter tabular-nums">
           {formatTime(elapsedSeconds)}
         </div>
@@ -83,7 +102,7 @@ export const FocusTimer = ({ task, onComplete, onStop }: FocusTimerProps) => {
             <CheckCircle size={20} />
             <span>Done</span>
           </button>
-          
+
           <button
             onClick={onStop}
              className="bg-gray-900 text-gray-400 rounded-full p-4 hover:text-white hover:bg-gray-800 transition-transform active:scale-95 border border-gray-800"
