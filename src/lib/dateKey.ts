@@ -23,7 +23,8 @@ export function formatDateKey(date: Date, timeZone?: string): string {
 }
 
 export function parseDateKey(dateKey: string): Date {
-  const [year, month, day] = dateKey.split('-').map(Number);
+  const normalized = dateKey.slice(0, 10);
+  const [year, month, day] = normalized.split('-').map(Number);
   if (!year || !month || !day) {
     throw new Error(`Invalid date key: ${dateKey}`);
   }
