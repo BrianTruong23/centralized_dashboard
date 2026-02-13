@@ -26,6 +26,7 @@ export interface Task {
   status: TaskStatus;
   tags: string[];
   createdAt: number; // timestamp
+  project_id?: string; // Project this task belongs to
 
   // Weekly planning fields
   source?: 'user' | 'agent';

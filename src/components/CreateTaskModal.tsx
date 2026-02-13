@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { Task, TaskPriority, TaskEnergyLevel, TaskCategory } from '@/types/task';
 import { generateId } from '@/lib/utils';
 import clsx from 'clsx';
-import { X, Calendar, Clock, Zap, Tag, Flag } from 'lucide-react';
+import { X, Calendar, Clock, Zap, Tag, Flag, FolderKanban } from 'lucide-react';
+import { useProjects } from '@/hooks/useProjects';
 
 interface CreateTaskModalProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ const CATEGORIES: TaskCategory[] = ['Research', 'Coding', 'Admin', 'Health', 'Li
 const ENERGY_LEVELS: TaskEnergyLevel[] = ['low', 'medium', 'high'];
 
 export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDate }: CreateTaskModalProps) {
+  const { projects } = useProjects();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<TaskCategory>('Life');
@@ -25,10 +27,18 @@ export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDat
   const [estimatedMinutes, setEstimatedMinutes] = useState(30);
   const [energyLevel, setEnergyLevel] = useState<TaskEnergyLevel>('medium');
   const [deadline, setDeadline] = useState(defaultDate || '');
+  const [projectId, setProjectId] = useState<string>('');
 
   useEffect(() => {
     if (isOpen && defaultDate) setDeadline(defaultDate);
   }, [isOpen, defaultDate]);
+
+  // Auto-select first project (Life) when projects load
+  useEffect(() => {
+    if (projects.length > 0 && !projectId) {
+      setProjectId(projects[0].id);
+    }
+  }, [projects, projectId]);
 
   if (!isOpen) return null;
 
@@ -49,6 +59,7 @@ export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDat
       tags: [],
       createdAt: Date.now(),
       deadline: deadline || undefined,
+      project_id: projectId || undefined,
     };
 
     onAddTask(newTask);
@@ -64,6 +75,7 @@ export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDat
     setEstimatedMinutes(30);
     setEnergyLevel('medium');
     setDeadline(defaultDate || '');
+    setProjectId(projects.length > 0 ? projects[0].id : '');
   };
 
   return (
@@ -107,6 +119,29 @@ export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDat
 
            {/* Properties Grid */}
            <div className="grid grid-cols-2 gap-4">
+              {/* Project */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1.5">
+                  <FolderKanban size={12} /> Project
+                </label>
+                <select
+                  value={projectId}
+                  onChange={(e) => setProjectId(e.target.value)}
+                  className="w-full text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md px-2 py-2 outline-none focus:border-black dark:focus:border-gray-500 transition-colors"
+                  required
+                >
+                  {projects.length === 0 ? (
+                    <option value="">Loading projects...</option>
+                  ) : (
+                    projects.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
               {/* Category */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1.5">
