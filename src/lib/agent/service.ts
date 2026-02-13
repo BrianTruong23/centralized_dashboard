@@ -1,0 +1,172 @@
+import { routeIntent } from './router';
+import { createProposal } from './planner';
+import { policyGate } from './policy';
+import { executeApprovedActions } from './executor';
+import { createSupabaseAgentTools } from './supabaseTools';
+import { AgentPreference, AgentProposal, AgentRunRecord, ProposedAction } from './types';
+
+function env(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing environment variable: ${name}`);
+  return value;
+}
+
+function baseHeaders(token: string): Record<string, string> {
+  return {
+    apikey: env('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+}
+
+async function getAuthUserId(userToken: string): Promise<string> {
+  const res = await fetch(`${env('NEXT_PUBLIC_SUPABASE_URL')}/auth/v1/user`, {
+    method: 'GET',
+    headers: {
+      apikey: env('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
+      Authorization: `Bearer ${userToken}`,
+    },
+  });
+  if (!res.ok) throw new Error('Unauthorized');
+  const body = await res.json();
+  if (!body?.id || typeof body.id !== 'string') throw new Error('Unauthorized');
+  return body.id;
+}
+
+async function fetchRuns(userToken: string, userId: string): Promise<AgentRunRecord[]> {
+  const url = new URL(`${env('NEXT_PUBLIC_SUPABASE_URL')}/rest/v1/agent_runs`);
+  url.searchParams.set('select', '*');
+  url.searchParams.set('user_id', `eq.${userId}`);
+  url.searchParams.set('order', 'created_at.desc');
+  url.searchParams.set('limit', '10');
+  const res = await fetch(url.toString(), { method: 'GET', headers: baseHeaders(userToken) });
+  if (!res.ok) throw new Error('Failed to load run history');
+  return (await res.json()) as AgentRunRecord[];
+}
+
+async function insertRun(
+  userToken: string,
+  row: Omit<AgentRunRecord, 'id' | 'created_at'>
+): Promise<AgentRunRecord> {
+  const res = await fetch(`${env('NEXT_PUBLIC_SUPABASE_URL')}/rest/v1/agent_runs?select=*`, {
+    method: 'POST',
+    headers: { ...baseHeaders(userToken), Prefer: 'return=representation' },
+    body: JSON.stringify(row),
+  });
+  if (!res.ok) throw new Error('Failed to save agent run');
+  const data = (await res.json()) as AgentRunRecord[];
+  return data[0];
+}
+
+async function updateRun(
+  userToken: string,
+  runId: string,
+  patch: Partial<AgentRunRecord>
+): Promise<AgentRunRecord> {
+  const res = await fetch(`${env('NEXT_PUBLIC_SUPABASE_URL')}/rest/v1/agent_runs?id=eq.${runId}&select=*`, {
+    method: 'PATCH',
+    headers: { ...baseHeaders(userToken), Prefer: 'return=representation' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error('Failed to update agent run');
+  const data = (await res.json()) as AgentRunRecord[];
+  return data[0];
+}
+
+async function getRunById(userToken: string, runId: string, userId: string): Promise<AgentRunRecord | null> {
+  const url = new URL(`${env('NEXT_PUBLIC_SUPABASE_URL')}/rest/v1/agent_runs`);
+  url.searchParams.set('select', '*');
+  url.searchParams.set('id', `eq.${runId}`);
+  url.searchParams.set('user_id', `eq.${userId}`);
+  url.searchParams.set('limit', '1');
+  const res = await fetch(url.toString(), { method: 'GET', headers: baseHeaders(userToken) });
+  if (!res.ok) throw new Error('Failed to load agent run');
+  const rows = (await res.json()) as AgentRunRecord[];
+  return rows[0] ?? null;
+}
+
+function mergeApprovals(
+  proposed: ProposedAction[],
+  approvedActionIds: string[]
+): ProposedAction[] {
+  const approvedSet = new Set(approvedActionIds);
+  return proposed.map((action) => ({
+    ...action,
+    approved: approvedSet.has(action.action_id),
+  }));
+}
+
+export async function proposeAgentRun(userToken: string, requestText: string): Promise<AgentRunRecord> {
+  const userId = await getAuthUserId(userToken);
+  const tools = createSupabaseAgentTools(userToken);
+  const preferences =
+    (await tools.getPreferences(userId)) ??
+    ({
+      user_id: userId,
+      work_hours: { start: '09:00', end: '17:00' },
+      max_tasks_per_day: 5,
+      timezone: 'UTC',
+      scheduling_style: 'balanced',
+    } satisfies AgentPreference);
+  const tasks = await tools.listTasks({ user_id: userId, archived: false });
+  const intent = routeIntent(requestText);
+  const rawProposal = createProposal(requestText, intent, tasks, preferences);
+  const gatedProposal: AgentProposal = {
+    ...rawProposal,
+    proposed_actions: policyGate(rawProposal.proposed_actions),
+  };
+
+  return insertRun(userToken, {
+    user_id: userId,
+    request_text: requestText,
+    intent,
+    proposed_plan_json: gatedProposal,
+    approved_actions_json: [],
+    executed_actions_json: [],
+  });
+}
+
+export async function executeAgentRun(
+  userToken: string,
+  runId: string,
+  approvedActionIds: string[]
+): Promise<AgentRunRecord> {
+  const userId = await getAuthUserId(userToken);
+  const run = await getRunById(userToken, runId, userId);
+  if (!run) throw new Error('Run not found');
+
+  const approved = mergeApprovals(run.proposed_plan_json.proposed_actions, approvedActionIds);
+  const tools = createSupabaseAgentTools(userToken);
+  const alreadyExecuted = new Set((run.executed_actions_json || []).map((a) => a.action_id));
+  const executed = await executeApprovedActions(approved, tools, {
+    userId,
+    actor: userId,
+    alreadyExecutedActionIds: alreadyExecuted,
+  });
+
+  const mergedExecuted = [...(run.executed_actions_json ?? []), ...executed];
+  return updateRun(userToken, run.id, {
+    approved_actions_json: approved.filter((a) => a.approved),
+    executed_actions_json: mergedExecuted,
+  });
+}
+
+export async function listAgentRuns(userToken: string): Promise<AgentRunRecord[]> {
+  const userId = await getAuthUserId(userToken);
+  return fetchRuns(userToken, userId);
+}
+
+export async function getAgentPreferences(userToken: string): Promise<AgentPreference | null> {
+  const userId = await getAuthUserId(userToken);
+  const tools = createSupabaseAgentTools(userToken);
+  return tools.getPreferences(userId);
+}
+
+export async function patchAgentPreferences(
+  userToken: string,
+  patch: Partial<AgentPreference>
+): Promise<AgentPreference> {
+  const userId = await getAuthUserId(userToken);
+  const tools = createSupabaseAgentTools(userToken);
+  return tools.updatePreferences(userId, patch);
+}

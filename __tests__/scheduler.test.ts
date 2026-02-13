@@ -1,4 +1,4 @@
-import { pickNextTask, generateDayPlan, SchedulerContext } from '@/lib/scheduler';
+import { pickNextTask, generateDayPlan, filterTasksDueToday, SchedulerContext } from '@/lib/scheduler';
 import { Task } from '@/types/task';
 import { addHours, subHours } from 'date-fns';
 
@@ -65,5 +65,16 @@ describe('Scheduler Logic', () => {
     
     expect(plan).toHaveLength(1);
     expect(plan[0].id).toBe('1'); // Should pick t1 (60m) as it fits. t2 (60m) won't fit after t1 (remaining 40). t3 (300) never fits.
+  });
+
+  test('filterTasksDueToday includes only tasks due today (supports ISO datetime)', () => {
+    const now = new Date('2026-02-13T12:00:00-08:00');
+    const today = { ...baseTask, id: 'today', deadline: '2026-02-13' };
+    const todayIso = { ...baseTask, id: 'today-iso', deadline: '2026-02-13T00:00:00+00:00' };
+    const upcoming = { ...baseTask, id: 'upcoming', deadline: '2026-02-16' };
+    const noDate = { ...baseTask, id: 'nodate', deadline: undefined };
+
+    const filtered = filterTasksDueToday([today, todayIso, upcoming, noDate], now);
+    expect(filtered.map((t) => t.id)).toEqual(['today', 'today-iso']);
   });
 });
