@@ -210,7 +210,7 @@ export function AmbientSound() {
                 onClick={() => changeSound(type)}
                 className={`flex flex-col items-center gap-1 p-2 rounded-lg transition-all ${
                   activeSound === type
-                    ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800'
+                    ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-gray-900 dark:border-gray-100 shadow-sm'
                     : 'bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600 border border-transparent'
                 }`}
               >
@@ -230,7 +230,7 @@ export function AmbientSound() {
               step="0.01"
               value={volume}
               onChange={(e) => setVolume(parseFloat(e.target.value))}
-              className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+              className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-black dark:accent-white"
             />
             <Volume2 size={16} className="text-gray-400" />
           </div>
@@ -240,8 +240,8 @@ export function AmbientSound() {
             onClick={togglePlay}
             className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium transition-all ${
               isPlaying
-                ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50'
-                : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600'
+                : 'bg-black dark:bg-white text-white dark:text-black hover:opacity-90'
             }`}
           >
             {isPlaying ? (
@@ -264,7 +264,7 @@ export function AmbientSound() {
           onClick={() => setIsExpanded(true)}
           className={`p-3 rounded-full shadow-lg transition-all ${
             isPlaying
-              ? 'bg-indigo-600 text-white animate-pulse'
+              ? 'bg-black dark:bg-white text-white dark:text-black'
               : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
           }`}
           title="Ambient sounds"

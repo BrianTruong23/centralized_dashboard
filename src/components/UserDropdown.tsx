@@ -43,7 +43,7 @@ export function UserDropdown({ user, onLogout, onOpenSettings, onOpenActivityLog
       <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors w-full"
+          className="w-full min-w-0 flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
         >
           <div className="w-5 h-5 rounded bg-orange-500/10 text-orange-600 flex items-center justify-center text-[10px] font-bold">
             {getInitial()}
@@ -51,7 +51,7 @@ export function UserDropdown({ user, onLogout, onOpenSettings, onOpenActivityLog
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate flex-1 text-left">
             {getName()}
           </span>
-          <ChevronDown size={14} className="text-gray-400" />
+          <ChevronDown size={14} className="text-gray-400 flex-shrink-0" />
         </button>
 
         {isOpen && (
