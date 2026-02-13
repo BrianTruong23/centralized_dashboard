@@ -7,11 +7,10 @@ import { TaskInput } from '@/components/TaskInput';
 import { TaskList } from '@/components/TaskList';
 import { CreateTaskModal } from '@/components/CreateTaskModal';
 import { FocusSessionModal } from '@/components/FocusSessionModal';
-import { TaskItem } from '@/components/TaskItem';
-import { pickNextTask, generateDayPlan } from '@/lib/scheduler';
+import { pickNextTask, generateDayPlan, filterTasksDueToday } from '@/lib/scheduler';
 import { Task } from '@/types/task';
 import { AuthModal } from '@/components/AuthModal';
-import { Zap, CalendarRange, Loader2, Filter, ChevronUp, ChevronDown, Play, Sparkles } from 'lucide-react';
+import { Zap, CalendarRange, Loader2, Filter, ChevronUp, ChevronDown, Play, Sparkles, Trash2 } from 'lucide-react';
 import { DailyNotes } from '@/components/DailyNotes';
 import { DailyNotesHistory } from '@/components/DailyNotesHistory';
 import { AmbientSound } from '@/components/AmbientSound';
@@ -35,6 +34,20 @@ const loadingMessages = [
   'Getting things ready...',
   'Just a moment...',
 ];
+
+function formatPlanDate(deadline?: string): string | null {
+  if (!deadline) return null;
+  const keyMatch = deadline.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (keyMatch) {
+    return `${keyMatch[2]}-${keyMatch[3]}-${keyMatch[1]}`;
+  }
+  const parsed = new Date(deadline);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const mm = String(parsed.getMonth() + 1).padStart(2, '0');
+  const dd = String(parsed.getDate()).padStart(2, '0');
+  const yyyy = parsed.getFullYear();
+  return `${mm}-${dd}-${yyyy}`;
+}
 
 function LoadingScreen() {
   const [messageIndex, setMessageIndex] = useState(0);
@@ -239,7 +252,8 @@ export default function Home() {
   }, [tasks, isLoaded, manualFocusTaskId]);
 
   const handleGeneratePlan = () => {
-    const plan = generateDayPlan(tasks, { now: new Date(), energyLevel: 'medium', availableTimeMinutes: 480 });
+    const dueTodayTasks = filterTasksDueToday(tasks, new Date());
+    const plan = generateDayPlan(dueTodayTasks, { now: new Date(), energyLevel: 'medium', availableTimeMinutes: 480 });
     setDayPlan(plan);
     setShowPlan(true);
   };
@@ -260,6 +274,17 @@ export default function Home() {
         [newPlan[index], newPlan[index + 1]] = [newPlan[index + 1], newPlan[index]];
         return newPlan;
     });
+  };
+
+  const removeTaskFromPlan = (taskId: string) => {
+    // Proposal-only removal: this does NOT delete from DB/tasks list.
+    setDayPlan(prev => prev.filter(t => t.id !== taskId));
+  };
+
+  const handleFocusNextFromPlan = () => {
+    if (dayPlan.length === 0) return;
+    setActiveFocusTask(dayPlan[0]);
+    setIsFocusModalOpen(true);
   };
 
   const handleFocusTask = (task: Task) => {
@@ -579,7 +604,17 @@ export default function Home() {
                                 <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
                                 <div className="flex items-center justify-between mb-4">
                                     <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Today&apos;s Schedule</h2>
-                                    <button onClick={() => setShowPlan(false)} className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={handleFocusNextFromPlan}
+                                        disabled={dayPlan.length === 0}
+                                        className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-black dark:bg-white text-white dark:text-black text-xs font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+                                      >
+                                        <Play size={10} fill="currentColor" />
+                                        Focus Next
+                                      </button>
+                                      <button onClick={() => setShowPlan(false)} className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
+                                    </div>
                                 </div>
                                 {dayPlan.length > 0 ? (
                                     <div className="space-y-4">
@@ -603,22 +638,30 @@ export default function Home() {
                                                 <ChevronDown size={12} />
                                             </button>
                                         </div>
-                                            <div className="flex-1 pb-1 flex items-start justify-between gap-4">
-                                                <div className="flex-1">
-                                                    <TaskItem
-                                                        task={task}
-                                                        onUpdate={updateTask}
-                                                        onDelete={deleteTask}
-                                                        onFocus={handleFocusTask}
-                                                        projects={projects}
-                                                    />
+                                            <div className="flex-1 pb-1 flex items-start justify-between gap-4 border-b border-gray-100 dark:border-gray-700 py-2">
+                                                <div className="min-w-0">
+                                                  <p className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">{task.title}</p>
+                                                  <div className="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                                    <span>{task.category}</span>
+                                                    <span>·</span>
+                                                    <span>{task.estimatedMinutes}m</span>
+                                                    <span>·</span>
+                                                    <span>P{task.priority}</span>
+                                                    {task.deadline && (
+                                                      <>
+                                                        <span>·</span>
+                                                        <span>{formatPlanDate(task.deadline) ?? task.deadline}</span>
+                                                      </>
+                                                    )}
+                                                  </div>
                                                 </div>
                                                 <button
-                                                    onClick={() => handleStartFocusSession(task)}
-                                                    className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-black dark:bg-white text-white dark:text-black text-xs font-bold rounded-lg hover:opacity-80 transition-opacity mt-1"
+                                                  onClick={() => removeTaskFromPlan(task.id)}
+                                                  className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                                  title="Remove from today's plan (proposal only)"
                                                 >
-                                                    <Play size={10} fill="currentColor" />
-                                                    Focus
+                                                  <Trash2 size={12} />
+                                                  Remove
                                                 </button>
                                             </div>
                                         </div>
@@ -696,13 +739,6 @@ export default function Home() {
       />
       <AiAssistant
         userId={user?.id}
-        tasks={tasks}
-        projects={projects}
-        addProject={addProjectFn}
-        onAddTasks={handleAutoPlanTasks}
-        onDeleteTask={deleteTask}
-        proOverride={forceProUser}
-        planningPreferences={planningPreferences}
       />
       <AmbientSound />
     </div>
