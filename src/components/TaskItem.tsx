@@ -4,6 +4,7 @@ import { Project } from '@/types/project';
 import clsx from 'clsx';
 import { CheckCircle2, Circle, Trash2, Zap, Clock, Calendar, Pencil, X, Check } from 'lucide-react';
 import { format } from 'date-fns';
+import { parseDateKey } from '@/lib/dateKey';
 
 interface TaskItemProps {
   task: Task;
@@ -218,7 +219,7 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus, projects = [] }: T
              <>
                <span className="w-0.5 h-0.5 rounded-full bg-gray-300" />
                <span className="flex items-center gap-1 text-red-400">
-                 {format(new Date(task.deadline), 'MMM d')}
+                 {format(parseDateKey(task.deadline), 'MMM d')}
                </span>
              </>
            )}

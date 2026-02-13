@@ -3,6 +3,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase, isSupabaseConfigured, SESSION_KEY, resolveAuthReady } from '@/lib/supabase';
 import { User, Session } from '@supabase/supabase-js';
+import { Loader2 } from 'lucide-react';
+
+function GoogleMark() {
+  return (
+    <span aria-hidden="true" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-[11px] font-bold border border-gray-200">
+      <span className="text-[#4285F4]">G</span>
+    </span>
+  );
+}
 
 // ── localStorage helpers ────────────────────────────────────────────
 function persistSession(session: Session) {
@@ -45,6 +54,7 @@ export function Auth() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const authReadyFired = useRef(false);
 
   useEffect(() => {
@@ -186,6 +196,29 @@ export function Auth() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    if (!supabase) {
+      setError('Authentication is not configured');
+      return;
+    }
+
+    setError(null);
+    setIsGoogleLoading(true);
+
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
+      if (error) throw error;
+    } catch (err: any) {
+      setError(err?.message ?? 'Google sign-in failed');
+      setIsGoogleLoading(false);
+    }
+  };
+
   if (isCheckingSession) return <div className="text-xs text-gray-400">Loading auth...</div>;
 
   // Don't show auth UI if Supabase is not configured
@@ -220,63 +253,82 @@ export function Auth() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 relative animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm p-6 relative animate-in fade-in zoom-in-95 duration-200">
         <button 
           onClick={() => setIsOpen(false)}
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
         >
           ✕
         </button>
         
-        <h2 className="text-xl font-bold mb-1">{isSignUp ? 'Create Account' : 'Welcome Back'}</h2>
-        <p className="text-sm text-gray-500 mb-6">
+        <h2 className="text-xl font-bold mb-1 text-gray-900 dark:text-gray-100">{isSignUp ? 'Create Account' : 'Welcome Back'}</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
           {isSignUp ? 'Sign up to sync your tasks across devices.' : 'Log in to access your synchronized tasks.'}
         </p>
 
+        <button
+          type="button"
+          onClick={handleGoogleSignIn}
+          disabled={isAuthProcessing || isGoogleLoading}
+          className="w-full mb-4 border border-gray-300 dark:border-gray-600 bg-white text-gray-800 dark:text-gray-100 font-semibold py-2.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+        >
+          {(isAuthProcessing || isGoogleLoading) ? <Loader2 size={16} className="animate-spin" /> : <GoogleMark />}
+          <span className="text-[#1f1f1f] dark:text-gray-100">Sign in with Google</span>
+        </button>
+
+        <div className="relative mb-4">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t border-gray-200 dark:border-gray-700" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-white dark:bg-gray-900 px-2 text-gray-500 dark:text-gray-400">or</span>
+          </div>
+        </div>
+
         <form onSubmit={handleAuth} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/5"
+              className="w-full text-sm px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white"
               placeholder="you@example.com"
               required
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Password</label>
+            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black/5"
+              className="w-full text-sm px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white"
               placeholder="••••••••"
               required
             />
           </div>
 
           {error && (
-            <div className="text-xs text-red-500 bg-red-50 p-2 rounded border border-red-100">
+            <div className="text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded border border-red-100 dark:border-red-900/50">
               {error}
             </div>
           )}
 
           <button
             type="submit"
-            disabled={isAuthProcessing}
-            className="w-full bg-black text-white font-bold py-2.5 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
+            disabled={isAuthProcessing || isGoogleLoading}
+            className="w-full bg-black dark:bg-white text-white dark:text-black font-bold py-2.5 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {isAuthProcessing ? 'Processing...' : (isSignUp ? 'Sign Up' : 'Log In')}
           </button>
         </form>
 
-        <div className="mt-6 text-center text-xs text-gray-500">
+        <div className="mt-6 text-center text-xs text-gray-500 dark:text-gray-400">
           {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
           <button
             onClick={() => setIsSignUp(!isSignUp)}
-            className="text-black font-bold hover:underline"
+            className="text-black dark:text-white font-bold hover:underline"
           >
             {isSignUp ? 'Log In' : 'Sign Up'}
           </button>

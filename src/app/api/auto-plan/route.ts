@@ -5,8 +5,42 @@ export async function POST(req: Request) {
   const log = (msg: string) => console.log(`[AutoPlan API ${Date.now() - startTime}ms] ${msg}`);
 
   try {
+    const authHeader = req.headers.get('authorization') || '';
+    const userToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!userToken) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnon) {
+      return NextResponse.json({ error: 'Supabase is not configured' }, { status: 503 });
+    }
+
+    const allowOverride = process.env.NODE_ENV !== 'production' || process.env.ALLOW_PRO_OVERRIDE === 'true';
+    const wantsOverride = req.headers.get('x-pro-override') === 'true';
+
+    if (!(allowOverride && wantsOverride)) {
+      const subRes = await fetch(`${supabaseUrl}/rest/v1/user_subscriptions?select=tier,status&limit=1`, {
+        method: 'GET',
+        headers: {
+          apikey: supabaseAnon,
+          Authorization: `Bearer ${userToken}`,
+        },
+      });
+      if (!subRes.ok) {
+        return NextResponse.json({ error: 'Could not verify subscription status' }, { status: 403 });
+      }
+      const rows = await subRes.json();
+      const sub = rows?.[0];
+      const isPro = sub?.tier === 'pro' && sub?.status === 'active';
+      if (!isPro) {
+        return NextResponse.json({ error: 'Auto Plan is a Pro feature. Please upgrade.' }, { status: 402 });
+      }
+    }
+
     log('Request received, parsing body...');
-    const { notes, startDate } = await req.json();
+    const { notes, startDate, preferences } = await req.json();
 
     if (!notes) {
       return NextResponse.json({ error: 'Notes are required' }, { status: 400 });
@@ -24,6 +58,13 @@ export async function POST(req: Request) {
       Current Context:
       - Today is ${startDate || new Date().toISOString().split('T')[0]}.
       - User Notes: "${notes}"
+      - User Planning Preferences:
+        - Peak energy time: ${preferences?.energyPeak || 'morning'}
+        - Preferred deep-work block: ${preferences?.deepWorkMinutes || 90} minutes
+        - Preferred break: ${preferences?.breakMinutes || 15} minutes
+        - Work days: ${preferences?.workDays || 'Mon-Fri'}
+        - Constraints: "${preferences?.personalConstraints || 'None provided'}"
+        - Additional notes: "${preferences?.planningNotes || 'None provided'}"
 
       ROLE: Expert Project Manager & Scheduler.
       GOAL: Create a weekly plan (Mon-Sun) from the notes.
@@ -42,6 +83,10 @@ export async function POST(req: Request) {
          - Interpretation: "Today" means ${startDate || new Date().toISOString().split('T')[0]}.
          - "Tomorrow" means ${new Date(new Date(startDate || Date.now()).getTime() + 86400000).toISOString().split('T')[0]}.
          - If no date is implied, schedule intelligently.
+      8. Personalization:
+         - Place cognitively demanding tasks near the user's peak energy window.
+         - Honor constraints and work days whenever possible.
+         - If task is large, break it into logical sequential steps across days.
 
       OUTPUT JSON format only (no markdown):
       {

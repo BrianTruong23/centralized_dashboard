@@ -8,9 +8,10 @@ interface FocusSessionModalProps {
   onClose: () => void;
   task: Task | null;
   onComplete: (task: Task) => void;
+  showFocusPlant?: boolean;
 }
 
-export function FocusSessionModal({ isOpen, onClose, task, onComplete }: FocusSessionModalProps) {
+export function FocusSessionModal({ isOpen, onClose, task, onComplete, showFocusPlant = true }: FocusSessionModalProps) {
   if (!isOpen || !task) return null;
 
   return (
@@ -27,6 +28,7 @@ export function FocusSessionModal({ isOpen, onClose, task, onComplete }: FocusSe
           task={task}
           onComplete={onComplete}
           onStop={onClose}
+          showFocusPlant={showFocusPlant}
         />
       </div>
     </div>
