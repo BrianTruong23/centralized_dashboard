@@ -97,5 +97,40 @@ export const db = {
       throw error;
     }
     console.log('[db.deleteTask] Rows deleted:', count);
+  },
+
+  async fetchProjects() {
+    if (!supabase) throw new Error('Supabase not configured');
+    console.log('[db.fetchProjects] Fetching projects...');
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('[db.fetchProjects] Error:', error.code, error.message);
+      throw error;
+    }
+    return data;
+  },
+
+  async addProject(project: { user_id: string; name: string; color: string }) {
+    if (!supabase) throw new Error('Supabase not configured');
+    console.log('[db.addProject] Inserting project:', project.name);
+    const { data, error } = await supabase
+      .from('projects')
+      .insert({
+        user_id: project.user_id,
+        name: project.name,
+        color: project.color,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[db.addProject] Error:', error.code, error.message);
+      throw error;
+    }
+    return data;
   }
 };

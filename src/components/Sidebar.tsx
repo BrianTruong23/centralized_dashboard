@@ -14,9 +14,12 @@ import {
   Trash2
 } from 'lucide-react';
 import { Task } from '@/types/task';
+import { useTasks } from '@/hooks/useTasks';
+import { useProjects } from '@/hooks/useProjects';
 import clsx from 'clsx';
 import { ThemeToggle } from './ThemeToggle';
 import { UserDropdown } from './UserDropdown';
+import { CreateProjectModal } from './CreateProjectModal';
 import { projectsDb, Project } from '@/lib/projects';
 
 interface SidebarProps {
@@ -27,37 +30,35 @@ interface SidebarProps {
   className?: string;
   user: any; 
   onLogout: () => void;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
 }
 
-export const Sidebar = ({ 
-  currentView, 
-  onViewChange, 
-  tasks, 
+export const Sidebar = ({
+  currentView,
+  onViewChange,
+  user,
+  onLogout,
   onAddTask,
   className,
-  user,
-  onLogout
+  searchQuery,
+  onSearchChange
 }: SidebarProps) => {
-  const [projects, setProjects] = useState<Project[]>([]);
-
-  useEffect(() => {
-    if (user) {
-        projectsDb.fetchProjects().then(setProjects);
-    } else {
-        setProjects([]);
-    }
-  }, [user]);
+  const { tasks } = useTasks();
+  const { projects, addProject } = useProjects();
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
 
   // Calculate counts
   const inboxCount = tasks.filter(t => t.status !== 'done').length;
+  // Basic filtering for "Today" - this should ideally match page.tsx logic
+  // but for now a simple check is fine. 
+  // NOTE: page.tsx has more complex filtering for "Today", this is an approximation or we can replicate it.
+  // For standard "Today", we check deadline or if created today/recently if strictly inbox-zero style.
   const todayCount = tasks.filter(t => {
-    if (t.status === 'done') return false;
-    const deadline = t.deadline ? new Date(t.deadline) : null;
-    const now = new Date();
-    return deadline && 
-           deadline.getDate() === now.getDate() && 
-           deadline.getMonth() === now.getMonth() && 
-           deadline.getFullYear() === now.getFullYear();
+      if (t.status === 'done') return false;
+      if (!t.deadline) return false;
+      const today = new Date().toISOString().split('T')[0];
+      return t.deadline === today;
   }).length;
   
   // const tags = Array.from(new Set(tasks.flatMap(t => t.tags || []))).sort(); // REPLACED by explicit projects
@@ -130,12 +131,14 @@ export const Sidebar = ({
            <input 
              type="text" 
              placeholder="Search" 
+             value={searchQuery}
+             onChange={(e) => onSearchChange(e.target.value)}
              className="w-full bg-transparent border-none outline-none pl-9 py-1.5 text-sm text-gray-600 placeholder:text-gray-400 focus:ring-0"
            />
         </div>
 
-        <NavItem id="inbox" icon={Inbox} label="Inbox" count={inboxCount} />
         <NavItem id="today" icon={Calendar} label="Today" count={todayCount} />
+        <NavItem id="inbox" icon={Inbox} label="Inbox" count={inboxCount} />
         <NavItem id="upcoming" icon={CalendarDays} label="Upcoming" />
         <NavItem id="daily-notes" icon={NotebookPen} label="Daily Notes" />
         <NavItem id="kanban" icon={Columns} label="Kanban" />
@@ -143,48 +146,37 @@ export const Sidebar = ({
         <div className="mt-8 mb-2 px-2 flex items-center justify-between group">
             <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">Projects</h3>
             <button 
-                onClick={async () => {
-                    const name = prompt('Project Name:');
-                    if (name) {
-                        try {
-                            const newProject = await projectsDb.addProject(name);
-                            if (newProject) setProjects([...projects, newProject]);
-                        } catch (e) {
-                            console.error(e);
-                        }
-                    }
-                }}
-                className="text-gray-300 hover:text-gray-600 dark:hover:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={() => setIsProjectModalOpen(true)}
+                className="text-gray-400 hover:text-black dark:hover:text-white transition-colors"
+                title="Add Project"
             >
-                <Plus size={12} />
+                <Plus size={14} />
             </button>
         </div>
-        
-        {projects.length > 0 ? projects.map(project => (
-            <div key={project.id} className="group/item relative">
-                <NavItem 
-                    id={`project-${project.name}`} 
-                    icon={Hash} 
-                    label={project.name} 
-                    count={tasks.filter(t => t.tags?.includes(project.name) && t.status !== 'done').length}
-                />
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm(`Delete project "${project.name}"?`)) {
-                            projectsDb.deleteProject(project.id).then(() => {
-                                setProjects(projects.filter(p => p.id !== project.id));
-                            });
-                        }
-                    }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover/item:opacity-100 text-gray-400 hover:text-red-500 transition-opacity p-1"
-                >
-                    <Trash2 size={12} />
-                </button>
-            </div>
-        )) : (
-            <div className="px-3 py-2 text-xs text-gray-400 italic">No projects yet</div>
-        )}
+        <div className="space-y-0.5">
+           {projects.map(project => (
+               <button
+                 key={project.id}
+                 onClick={() => onViewChange(`project-${project.id}`)}
+                 className={clsx(
+                   "w-full flex items-center gap-3 px-3 py-2 text-sm font-medium transition-colors rounded-lg",
+                   currentView === `project-${project.id}`
+                     ? "bg-white dark:bg-gray-800 text-black dark:text-white shadow-sm"
+                     : "text-gray-500 dark:text-gray-400 hover:bg-gray-100/50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-200"
+                 )}
+               >
+                 <span 
+                    className="w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-black" 
+                    style={{ backgroundColor: project.color }}
+                 />
+                 <span className="truncate">{project.name}</span>
+               </button>
+           ))}
+           {projects.length === 0 && (
+               <p className="px-3 text-xs text-gray-400 italic">No projects yet</p>
+           )}
+        </div>
+
       </div>
 
       {/* Footer */}
@@ -194,6 +186,12 @@ export const Sidebar = ({
             <span>Settings</span>
          </button>
       </div>
+
+      <CreateProjectModal 
+        isOpen={isProjectModalOpen}
+        onClose={() => setIsProjectModalOpen(false)}
+        onAddProject={addProject}
+      />
     </aside>
   );
 };
