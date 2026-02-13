@@ -13,6 +13,7 @@ import {
   DragEndEvent,
   DragStartEvent,
   closestCorners,
+  useDroppable,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -176,11 +177,17 @@ export const KanbanBoard = ({
     color: string,
     type: 'task' | 'idea'
   }) => {
+    // Make the column itself droppable so we can drop into empty columns
+    const { setNodeRef } = useDroppable({
+        id: id,
+        data: { type: 'column', id }
+    });
+
     // For SortableContext, we need the list of IDs
     const itemIds = items.map(i => i.id);
 
     return (
-     <div className="flex-1 min-w-[300px] flex flex-col h-full rounded-xl bg-gray-50/30 dark:bg-gray-900/10">
+     <div ref={setNodeRef} className="flex-1 min-w-[300px] flex flex-col h-full rounded-xl bg-gray-50/30 dark:bg-gray-900/10">
        <div className="p-3 flex items-center justify-between sticky top-0 z-10">
           <div className="flex items-center gap-2">
              <div className={`w-1.5 h-1.5 rounded-full ${color}`} />
