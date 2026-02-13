@@ -27,6 +27,7 @@
 - **Dynamic Categories**: Replaced hardcoded categories with dynamic Projects.
 - **Refactoring**: Updated schemas and components to link Tasks to `project_id`.
 - **Organization**: Moved all SQL schema files into a dedicated `sql/` directory.
+- **Cleanup**: Moved internal documentation and context files (`*.md`) into `docs/` to keep the root directory clean.
 
 ### Fixes
 - **Build System**: Resolved `lightningcss` and Next.js build errors.
