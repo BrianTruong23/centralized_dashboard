@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useTasks } from '@/hooks/useTasks';
+import { useProjects } from '@/hooks/useProjects';
 import { TaskInput } from '@/components/TaskInput';
 import { TaskList } from '@/components/TaskList';
 import { CreateTaskModal } from '@/components/CreateTaskModal';
@@ -51,11 +52,21 @@ function LoadingScreen() {
 
 export default function Home() {
   const { tasks, addTask, updateTask, deleteTask, isLoaded } = useTasks();
+  const { projects } = useProjects();
   const [showPlan, setShowPlan] = useState(false);
   const [dayPlan, setDayPlan] = useState<Task[]>([]);
   const [isFocusing, setIsFocusing] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [currentView, setCurrentView] = useState('today');
+  
+  // Resolve project name for display
+  const currentProject = projects.find(p => `project-${p.id}` === currentView);
+  const viewTitle = currentProject 
+    ? `# ${currentProject.name}`
+    : currentView.startsWith('project-') 
+        ? currentView.replace('project-', '# ') 
+        : currentView.replace('-', ' ');
+
   const [manualFocusTaskId, setManualFocusTaskId] = useState<string | null>(null);
   const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
   const [activeFocusTask, setActiveFocusTask] = useState<Task | null>(null);
@@ -286,7 +297,7 @@ export default function Home() {
         <header className="mb-8 flex items-start justify-between max-w-4xl mx-auto relative">
           <div>
             <h1 className="text-3xl font-bold tracking-tighter mb-1 font-mono uppercase">
-               {currentView.startsWith('project-') ? currentView.replace('project-', '# ') : currentView.replace('-', ' ')}
+               {viewTitle}
             </h1>
             <p className="text-gray-500 dark:text-gray-400 text-sm">
                 {currentView === 'kanban' ? 'Visual workflow' : 'Design your day, master your time.'} 
