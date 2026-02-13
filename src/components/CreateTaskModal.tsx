@@ -15,11 +15,11 @@ interface CreateTaskModalProps {
   defaultDate?: string;
 }
 
-const CATEGORIES: TaskCategory[] = ['Research', 'Coding', 'Admin', 'Health', 'Life', 'Finance', 'Social', 'Content', 'UX'];
+
 const ENERGY_LEVELS: TaskEnergyLevel[] = ['low', 'medium', 'high'];
 
 export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDate }: CreateTaskModalProps) {
-  const { projects } = useProjects();
+  const { projects, isLoading } = useProjects();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<TaskCategory>('Life');
@@ -119,19 +119,29 @@ export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDat
 
            {/* Properties Grid */}
            <div className="grid grid-cols-2 gap-4">
-              {/* Project */}
-              <div className="space-y-1.5">
+              {/* Project (Labeled as Category per requirement) */}
+              <div className="space-y-1.5 col-span-2">
                 <label className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1.5">
-                  <FolderKanban size={12} /> Project
+                  <Tag size={12} /> Category
                 </label>
                 <select
                   value={projectId}
-                  onChange={(e) => setProjectId(e.target.value)}
-                  className="w-full text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md px-2 py-2 outline-none focus:border-black dark:focus:border-gray-500 transition-colors"
+                  onChange={(e) => {
+                     setProjectId(e.target.value);
+                     // Update internal category state for metadata
+                     const p = projects.find(proj => proj.id === e.target.value);
+                     if (p) setCategory(p.name);
+                  }}
+                  className={clsx(
+                      "w-full text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md px-2 py-2 outline-none focus:border-black dark:focus:border-gray-500 transition-colors",
+                      isLoading && "opacity-50 cursor-wait"
+                  )}
                   required
                 >
-                  {projects.length === 0 ? (
+                  {isLoading ? (
                     <option value="">Loading projects...</option>
+                  ) : projects.length === 0 ? (
+                    <option value="">No projects found</option>
                   ) : (
                     projects.map(p => (
                       <option key={p.id} value={p.id}>
@@ -139,20 +149,6 @@ export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDat
                       </option>
                     ))
                   )}
-                </select>
-              </div>
-
-              {/* Category */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1.5">
-                  <Tag size={12} /> Category
-                </label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as TaskCategory)}
-                  className="w-full text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md px-2 py-2 outline-none focus:border-black dark:focus:border-gray-500 transition-colors"
-                >
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
 

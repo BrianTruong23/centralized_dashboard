@@ -10,22 +10,44 @@ export const useProjects = () => {
   const userRef = useRef<any>(null);
 
   useEffect(() => {
-    const init = async () => {
-      await authReady;
-      const { data: { session } } = await supabase?.auth.getSession() || { data: { session: null } };
-      userRef.current = session?.user || null;
+    let mounted = true;
 
-      if (userRef.current) {
-        try {
+    // Safety timeout: If auth takes too long, stop loading so UI doesn't freeze
+    const safetyTimer = setTimeout(() => {
+        if (mounted) setIsLoading(false);
+    }, 2000);
+
+    const init = async () => {
+      try {
+        await authReady; // Ensure auth is initialized
+        const { data: { session }, error } = await supabase?.auth.getSession() || { data: { session: null }, error: null };
+        
+        if (error) {
+             console.error('[useProjects] Session error:', error);
+        }
+        
+        if (!mounted) return;
+
+        const user = session?.user || null;
+        userRef.current = user;
+
+        if (user) {
           // Ensure default projects exist for new users
-          await db.ensureDefaultProjects(userRef.current.id);
+          await db.ensureDefaultProjects(user.id);
           const dbProjects = await db.fetchProjects();
-          setProjects(dbProjects);
-        } catch (e) {
-          console.error('[useProjects] Failed to fetch projects:', e);
+          if (mounted) setProjects(dbProjects);
+        } else {
+            if (mounted) setProjects([]);
+        }
+      } catch (e) {
+        console.error('[useProjects] Failed to fetch projects:', e);
+        if (mounted) setProjects([]);
+      } finally {
+        if (mounted) {
+            setIsLoading(false);
+            clearTimeout(safetyTimer);
         }
       }
-      setIsLoading(false);
     };
 
     init();

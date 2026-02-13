@@ -15,6 +15,7 @@ import { AuthModal } from '@/components/AuthModal';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Zap, CalendarRange, Loader2, Filter, ChevronUp, ChevronDown, Play } from 'lucide-react';
 import { DailyNotes } from '@/components/DailyNotes';
+import { DailyNotesHistory } from '@/components/DailyNotesHistory';
 import { AmbientSound } from '@/components/AmbientSound';
 import { Sidebar } from '@/components/Sidebar';
 import { KanbanBoard } from '@/components/KanbanBoard';
@@ -56,7 +57,19 @@ export default function Home() {
   const [showPlan, setShowPlan] = useState(false);
   const [dayPlan, setDayPlan] = useState<Task[]>([]);
   const [isFocusing, setIsFocusing] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<any>(() => {
+    // Optimistic load from cache to speed up dashboard display
+    if (typeof window !== 'undefined') {
+        try {
+            const raw = localStorage.getItem(SESSION_KEY);
+            if (raw) {
+                const cached = JSON.parse(raw);
+                if (cached?.user) return cached.user;
+            }
+        } catch { /* ignore */ }
+    }
+    return null;
+  });
   const [currentView, setCurrentView] = useState('today');
   
   // Resolve project name for display
@@ -107,8 +120,11 @@ export default function Home() {
     const { data: authListener } = supabase?.auth.onAuthStateChange((event, session) => {
         if (session?.user) {
             setUser(session.user);
+            // Persist session to local storage for next load
+            localStorage.setItem(SESSION_KEY, JSON.stringify(session));
         } else {
             setUser(null);
+            localStorage.removeItem(SESSION_KEY);
         }
     }) || { data: { subscription: { unsubscribe: () => {} } } };
 
@@ -211,15 +227,34 @@ export default function Home() {
     }
 
     // 3. View-specific filtering
-    if (currentView === 'inbox' || currentView === 'kanban') {
+    
+    // Explicitly handle "Completed" view
+    if (currentView === 'completed') {
+        return result.filter(t => t.status === 'done');
+    }
+
+    // For other views (except Kanban/Search), usually hide completed tasks?
+    // User said: "not show up in inbox section" (and implies others).
+    // Let's filter out 'done' for Inbox, Today, Upcoming, Projects.
+    // Kanban usually needs 'done' for the Done column.
+    
+    const hideCompleted = currentView !== 'kanban';
+    if (hideCompleted) {
+        result = result.filter(t => t.status !== 'done');
+    }
+
+    if (currentView === 'inbox') {
         return result;
     }
+    if (currentView === 'kanban') {
+        return result; // filteredTasks passed to Kanban, but we just filtered out done if hideCompleted was true. Wait.
+        // If currentView is kanban, hideCompleted is false. So result has done tasks. Correct.
+    }
+
     if (currentView === 'today') {
         const now = new Date();
         return result.filter(t => {
             if (!t.deadline) return false;
-            // Parse as local date to compare day matches
-            // (Assuming deadline stored as YYYY-MM-DD or ISO)
             const d = new Date(t.deadline);
             return d.getDate() === now.getDate() && 
                    d.getMonth() === now.getMonth() && 
@@ -235,8 +270,17 @@ export default function Home() {
         });
     }
     if (currentView.startsWith('project-')) {
-        const tag = currentView.replace('project-', '');
-        return result.filter(t => t.tags?.includes(tag));
+        const project = projects.find(p => `project-${p.id}` === currentView);
+        if (project) {
+             return result.filter(t => t.project_id === project.id);
+        }
+        // Fallback for tags? Or just ID? 
+        // Previous code: const tag = currentView.replace('project-', ''); return result.filter(t => t.tags?.includes(tag));
+        // But we switched to project_id in Sidebar. Sidebar sends `project-${project.id}`.
+        // So we should match project_id.
+        // Let's stick to project_id.
+        const id = currentView.replace('project-', '');
+        return result.filter(t => t.project_id === id);
     }
     return result;
   }, [tasks, currentView, searchQuery, activeFilters]);
@@ -301,7 +345,7 @@ export default function Home() {
             </h1>
             <p className="text-gray-500 dark:text-gray-400 text-sm">
                 {currentView === 'kanban' ? 'Visual workflow' : 'Design your day, master your time.'} 
-                <Link href="/features" className="underline hover:text-black dark:hover:text-white ml-2">Features</Link>
+                <Link href="https://forms.gle/K8z21uKNX5ieb7Ai9" target="_blank" rel="noopener noreferrer" className="underline hover:text-black dark:hover:text-white ml-2">Features</Link>
             </p>
           </div>
 
@@ -352,12 +396,17 @@ export default function Home() {
                     />
                 </section>
             ) : currentView === 'daily-notes' ? (
-                <section className="mb-8">
-                    <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">
-                        Today&apos;s Notes
-                    </h2>
-                    <DailyNotes userId={userId} onAddTask={addTask} showHistory={true} />
-                </section>
+                <>
+                    <section className="mb-12">
+                        <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">
+                            Today&apos;s Notes
+                        </h2>
+                        <DailyNotes userId={userId} onAddTask={addTask} />
+                    </section>
+                    <section className="mb-8">
+                        <DailyNotesHistory userId={userId} />
+                    </section>
+                </>
             ) : (
                 <>
                     <section className="mb-8">
@@ -456,10 +505,11 @@ export default function Home() {
                     
                     {(currentView === 'inbox' || currentView === 'today') && (
                         <section className="mb-8">
-                            <DailyNotes userId={userId} onAddTask={addTask} showHistory={false} />
+                            <DailyNotes userId={userId} onAddTask={addTask} />
                         </section>
                     )}
                 </>
+            
             )}
         </div>
       </main>

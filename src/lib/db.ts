@@ -39,6 +39,22 @@ export const db = {
     return data.map(mapRowToTask);
   },
 
+  async logActivity(userId: string, action: string, entityId: string, details: any = null, entityType: string = 'task') {
+      if (!supabase) return;
+      try {
+          await supabase.from('activity_logs').insert({
+              user_id: userId,
+              action,
+              entity_id: entityId,
+              entity_type: entityType,
+              details
+          });
+      } catch (e) {
+          console.error('[db.logActivity] Failed to log activity:', e);
+          // Don't block main operation
+      }
+  },
+
   async addTask(task: Task) {
     if (!supabase) throw new Error('Supabase not configured');
     console.log('[db.addTask] Inserting task:', task.id);
@@ -62,6 +78,12 @@ export const db = {
       console.error('[db.addTask] Error:', error.code, error.message, error.details);
       throw error;
     }
+    
+    // Log activity
+    if (task.user_id) {
+        await this.logActivity(task.user_id, 'created_task', task.id, { title: task.title });
+    }
+    
     console.log('[db.addTask] Insert succeeded');
   },
 
@@ -88,17 +110,32 @@ export const db = {
       console.error('[db.updateTask] Error:', error.code, error.message, error.details);
       throw error;
     }
+
+    // Log activity logic
+    if (task.status === 'done' && task.user_id) {
+         await this.logActivity(task.user_id, 'completed_task', task.id, { title: task.title });
+    }
+    
     console.log('[db.updateTask] Update succeeded');
   },
 
   async deleteTask(taskId: string) {
     if (!supabase) throw new Error('Supabase not configured');
     console.log('[db.deleteTask] Deleting task:', taskId);
+    
+    // Fetch task for logging
+    const { data: task } = await supabase.from('tasks').select('user_id, text').eq('id', taskId).single();
+
     const { error, count } = await supabase.from('tasks').delete({ count: 'exact' }).eq('id', taskId);
     if (error) {
       console.error('[db.deleteTask] Error:', error.code, error.message, error.details);
       throw error;
     }
+
+    if (task && task.user_id) {
+        await this.logActivity(task.user_id, 'deleted_task', taskId, { title: task.text });
+    }
+    
     console.log('[db.deleteTask] Rows deleted:', count);
   },
 

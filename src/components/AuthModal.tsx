@@ -49,6 +49,7 @@ export function AuthModal({ isOpen, onAuthSuccess }: AuthModalProps) {
         });
         if (error) throw error;
         if (data.session) {
+          localStorage.setItem('app_auth_session', JSON.stringify(data.session));
           onAuthSuccess(data.session.user);
         }
       }

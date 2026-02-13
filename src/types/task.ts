@@ -2,16 +2,8 @@ export type TaskPriority = 1 | 2 | 3 | 4 | 5;
 export type TaskEnergyLevel = 'low' | 'medium' | 'high';
 export type TaskStatus = 'todo' | 'doing' | 'done';
 
-export type TaskCategory = 
-  | 'Research' 
-  | 'Coding' 
-  | 'Admin' 
-  | 'Health' 
-  | 'Life' 
-  | 'Finance' 
-  | 'Social' 
-  | 'Content' 
-  | 'UX';
+// Categories are now effectively Projects, so we allow any string
+export type TaskCategory = string;
 
 export interface Task {
   id: string;

@@ -12,7 +12,7 @@ interface TaskItemProps {
   onFocus: (task: Task) => void;
 }
 
-const categories: TaskCategory[] = ['Research', 'Coding', 'Admin', 'Health', 'Life', 'Finance', 'Social', 'Content', 'UX'];
+
 const energyLevels: TaskEnergyLevel[] = ['low', 'medium', 'high'];
 
 export const TaskItem = ({ task, onUpdate, onDelete, onFocus }: TaskItemProps) => {
@@ -74,10 +74,18 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus }: TaskItemProps) =
         {/* For brevity, I'll keep the grid controls but style them cleaner */}
         <div className="grid grid-cols-2 gap-4 pt-2">
             <div>
-              <label className="text-xs text-gray-500 block mb-1">Project</label>
+              <label className="text-xs text-gray-500 block mb-1">Category (Project)</label>
               <select
                 value={editForm.project_id || ''}
-                onChange={(e) => setEditForm({ ...editForm, project_id: e.target.value })}
+                onChange={(e) => {
+                    const pId = e.target.value;
+                    const p = projects.find(proj => proj.id === pId);
+                    setEditForm({ 
+                        ...editForm, 
+                        project_id: pId,
+                        category: p ? p.name : editForm.category 
+                    });
+                }}
                 className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none"
               >
                 {projects.map(p => (
@@ -109,18 +117,7 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus }: TaskItemProps) =
               />
             </div>
 
-            <div>
-              <label className="text-xs text-gray-500 block mb-1">Category</label>
-              <select
-                value={editForm.category}
-                onChange={(e) => setEditForm({ ...editForm, category: e.target.value as TaskCategory })}
-                className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none"
-              >
-                {categories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
+            {/* Removed old Category dropdown */}
 
             <div>
                <label className="text-xs text-gray-500 block mb-1">Priority</label>
@@ -202,8 +199,13 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus }: TaskItemProps) =
            <span className="flex items-center gap-1.5">
               {task.estimatedMinutes}m
            </span>
-           <span className="w-0.5 h-0.5 rounded-full bg-gray-300" />
-           <span>{task.category}</span>
+           {/* Only show category if it differs from project name (or no project) to avoid duplication */}
+           {(!project || task.category !== project.name) && (
+              <>
+                 <span className="w-0.5 h-0.5 rounded-full bg-gray-300" />
+                 <span>{task.category}</span>
+              </>
+           )}
 
            {task.priority < 4 && (
              <>
