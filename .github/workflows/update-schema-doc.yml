@@ -42,7 +42,7 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           echo "📊 Exporting database schema..."
-          npx ts-node scripts/export-schema.ts
+          npm run export-schema
 
       - name: Check for changes
         id: check_changes
