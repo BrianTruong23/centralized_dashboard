@@ -15,13 +15,11 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { Task } from '@/types/task';
-import { useTasks } from '@/hooks/useTasks';
-import { useProjects } from '@/hooks/useProjects';
+import { Project, CreateProjectInput } from '@/types/project';
 import clsx from 'clsx';
 import { ThemeToggle } from './ThemeToggle';
 import { UserDropdown } from './UserDropdown';
 import { CreateProjectModal } from './CreateProjectModal';
-import { projectsDb, Project } from '@/lib/projects';
 import { SettingsModal } from './SettingsModal';
 import { ActivityLogModal } from './ActivityLogModal';
 
@@ -31,24 +29,27 @@ interface SidebarProps {
   tasks: Task[];
   onAddTask: () => void;
   className?: string;
-  user: any; 
+  user: any;
   onLogout: () => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  projects?: Project[];
+  addProject?: (input: CreateProjectInput) => Promise<Project | undefined>;
 }
 
 export const Sidebar = ({
   currentView,
   onViewChange,
+  tasks,
   user,
   onLogout,
   onAddTask,
   className,
   searchQuery,
-  onSearchChange
+  onSearchChange,
+  projects = [],
+  addProject,
 }: SidebarProps) => {
-  const { tasks } = useTasks();
-  const { projects, addProject } = useProjects();
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isActivityLogOpen, setIsActivityLogOpen] = useState(false);
@@ -206,7 +207,7 @@ export const Sidebar = ({
       <CreateProjectModal 
         isOpen={isProjectModalOpen}
         onClose={() => setIsProjectModalOpen(false)}
-        onAddProject={addProject}
+        onAddProject={addProject as any}
       />
       
       <SettingsModal 

@@ -340,15 +340,17 @@ export default function Home() {
       )}
 
       {/* Sidebar */}
-       <Sidebar 
+       <Sidebar
           currentView={currentView}
           onViewChange={setCurrentView}
-          tasks={tasks} 
+          tasks={tasks}
           onAddTask={() => setIsCreateTaskModalOpen(true)}
           user={user}
           onLogout={handleLogout}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
+          projects={projects}
+          addProject={addProjectFn}
        />
 
        {/* CreateTaskModal rendered once at the bottom of the component */}
@@ -393,12 +395,13 @@ export default function Home() {
                  >
                     <Filter size={18} />
                  </button>
-                 <FilterPanel 
+                 <FilterPanel
                     isOpen={showFilters}
                     onClose={() => setShowFilters(false)}
                     activeFilters={activeFilters}
                     onFilterChange={handleFilterChange}
                     onClearFilters={clearFilters}
+                    projects={projects}
                  />
              </div>
           </div>
@@ -409,11 +412,12 @@ export default function Home() {
 
             {currentView === 'kanban' ? (
                 <section className="h-[calc(100vh-200px)]">
-                    <KanbanBoard 
-                        tasks={filteredTasks} 
-                        onUpdateTask={updateTask} 
+                    <KanbanBoard
+                        tasks={filteredTasks}
+                        onUpdateTask={updateTask}
                         onDeleteTask={deleteTask}
                         onFocusTask={handleFocusTask}
+                        projects={projects}
                     />
                 </section>
             ) : currentView === 'daily-notes' ? (
@@ -422,7 +426,7 @@ export default function Home() {
                         <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">
                             Today&apos;s Notes
                         </h2>
-                        <DailyNotes userId={userId} onAddTask={addTask} />
+                        <DailyNotes userId={userId} onAddTask={addTask} projects={projects} addProject={addProjectFn} />
                     </section>
                     <section className="mb-8">
                         <DailyNotesHistory userId={userId} />
@@ -491,11 +495,12 @@ export default function Home() {
                                         </div>
                                             <div className="flex-1 pb-1 flex items-start justify-between gap-4">
                                                 <div className="flex-1">
-                                                    <TaskItem 
-                                                        task={task} 
-                                                        onUpdate={updateTask} 
-                                                        onDelete={deleteTask} 
+                                                    <TaskItem
+                                                        task={task}
+                                                        onUpdate={updateTask}
+                                                        onDelete={deleteTask}
                                                         onFocus={handleFocusTask}
+                                                        projects={projects}
                                                     />
                                                 </div>
                                                 <button
@@ -533,12 +538,13 @@ export default function Home() {
                             onUpdateTask={updateTask}
                             onDeleteTask={deleteTask}
                             onFocusTask={handleFocusTask}
+                            projects={projects}
                         />
                     </section>
                     
                     {(currentView === 'inbox' || currentView === 'today') && (
                         <section className="mb-8">
-                            <DailyNotes userId={userId} onAddTask={addTask} />
+                            <DailyNotes userId={userId} onAddTask={addTask} projects={projects} addProject={addProjectFn} />
                         </section>
                     )}
                 </>

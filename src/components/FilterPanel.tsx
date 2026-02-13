@@ -2,7 +2,7 @@ import React from 'react';
 import { Filter, X, Check } from 'lucide-react';
 import clsx from 'clsx';
 import { TaskStatus, TaskPriority, TaskCategory } from '@/types/task';
-import { useProjects } from '@/hooks/useProjects';
+import { Project } from '@/types/project';
 
 interface FilterPanelProps {
   isOpen: boolean;
@@ -14,6 +14,7 @@ interface FilterPanelProps {
   };
   onFilterChange: (type: 'status' | 'priority' | 'category', value: any) => void;
   onClearFilters: () => void;
+  projects?: Project[];
 }
 
 const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
@@ -39,9 +40,10 @@ export const FilterPanel = ({
   onClose,
   activeFilters,
   onFilterChange,
-  onClearFilters
+  onClearFilters,
+  projects = [],
 }: FilterPanelProps) => {
-  const { projects, isLoading } = useProjects();
+  const isLoading = false;
   if (!isOpen) return null;
 
   const hasActiveFilters = 

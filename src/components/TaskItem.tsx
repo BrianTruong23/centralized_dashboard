@@ -1,22 +1,22 @@
 import { useState } from 'react';
 import { Task, TaskPriority, TaskStatus, TaskCategory, TaskEnergyLevel } from '@/types/task';
+import { Project } from '@/types/project';
 import clsx from 'clsx';
 import { CheckCircle2, Circle, Trash2, Zap, Clock, Calendar, Pencil, X, Check } from 'lucide-react';
 import { format } from 'date-fns';
-import { useProjects } from '@/hooks/useProjects';
 
 interface TaskItemProps {
   task: Task;
   onUpdate: (task: Task) => void;
   onDelete: (id: string) => void;
   onFocus: (task: Task) => void;
+  projects?: Project[];
 }
 
 
 const energyLevels: TaskEnergyLevel[] = ['low', 'medium', 'high'];
 
-export const TaskItem = ({ task, onUpdate, onDelete, onFocus }: TaskItemProps) => {
-  const { projects } = useProjects();
+export const TaskItem = ({ task, onUpdate, onDelete, onFocus, projects = [] }: TaskItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Task>(task);
 
