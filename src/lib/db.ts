@@ -57,8 +57,9 @@ export const db = {
 
   async addTask(task: Task) {
     if (!supabase) throw new Error('Supabase not configured');
-    console.log('[db.addTask] Inserting task:', task.id);
-    const { error } = await supabase.from('tasks').insert({
+    console.log('[db.addTask] Inserting task:', task.id, '| project_id:', task.project_id ?? 'NONE');
+    
+    const payload: Record<string, any> = {
       id: task.id,
       user_id: task.user_id,
       text: task.title,
@@ -71,20 +72,32 @@ export const db = {
       tags: task.tags,
       completed: task.status === 'done',
       status: task.status,
-      project_id: task.project_id,
       created_at: new Date(task.createdAt).toISOString(),
-    });
+    };
+    
+    // Only include project_id if it's actually set (avoids FK violations)
+    if (task.project_id) {
+      payload.project_id = task.project_id;
+    }
+
+    // Timeout protection: don't let a hanging Supabase call block forever
+    const insertPromise = supabase.from('tasks').insert(payload);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Insert timed out after 10s')), 10000)
+    );
+    
+    const { error } = await Promise.race([insertPromise, timeoutPromise]) as any;
     if (error) {
       console.error('[db.addTask] Error:', error.code, error.message, error.details);
       throw error;
     }
     
-    // Log activity
-    if (task.user_id) {
-        await this.logActivity(task.user_id, 'created_task', task.id, { title: task.title });
-    }
+    console.log('[db.addTask] ✓ Insert succeeded for:', task.id);
     
-    console.log('[db.addTask] Insert succeeded');
+    // Fire-and-forget activity log — don't block on it
+    if (task.user_id) {
+        this.logActivity(task.user_id, 'created_task', task.id, { title: task.title }).catch(() => {});
+    }
   },
 
   async updateTask(task: Task) {
@@ -139,25 +152,35 @@ export const db = {
     console.log('[db.deleteTask] Rows deleted:', count);
   },
 
-  async fetchProjects() {
+  async fetchProjects(userId?: string) {
     if (!supabase) throw new Error('Supabase not configured');
-    console.log('[db.fetchProjects] Fetching projects...');
-    const { data, error } = await supabase
+    console.log('[db.fetchProjects] Fetching projects for user:', userId ?? 'UNKNOWN');
+
+    let query = supabase
       .from('projects')
       .select('*')
       .order('created_at', { ascending: true });
+    
+    // Explicitly filter by user_id if provided (belt-and-suspenders with RLS)
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('[db.fetchProjects] Error:', error.code, error.message);
       throw error;
     }
-    return data;
+    console.log('[db.fetchProjects] Found', data?.length ?? 0, 'projects');
+    return data || [];
   },
 
   async addProject(project: { user_id: string; name: string; color: string }) {
     if (!supabase) throw new Error('Supabase not configured');
-    console.log('[db.addProject] Inserting project:', project.name);
-    const { data, error } = await supabase
+    console.log('[db.addProject] Inserting project:', project.name, '| user:', project.user_id);
+    
+    const insertPromise = supabase
       .from('projects')
       .insert({
         user_id: project.user_id,
@@ -166,11 +189,18 @@ export const db = {
       })
       .select()
       .single();
+    
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error(`addProject timed out after 10s for "${project.name}"`)), 10000)
+    );
+
+    const { data, error } = await Promise.race([insertPromise, timeoutPromise]) as any;
 
     if (error) {
       console.error('[db.addProject] Error:', error.code, error.message);
       throw error;
     }
+    console.log('[db.addProject] ✓ Project created:', data?.id, data?.name);
     return data;
   },
 
@@ -178,34 +208,37 @@ export const db = {
     if (!supabase) throw new Error('Supabase not configured');
     console.log('[db.ensureDefaultProjects] Checking for default projects...');
 
-    // Check if user already has projects
+    // Check if Life and Work projects exist by name
     const { data: existingProjects } = await supabase
       .from('projects')
-      .select('id')
+      .select('name')
       .eq('user_id', userId)
-      .limit(1);
+      .in('name', ['Life', 'Work']);
 
-    // If user already has projects, don't create defaults
-    if (existingProjects && existingProjects.length > 0) {
-      console.log('[db.ensureDefaultProjects] User already has projects, skipping defaults');
-      return;
-    }
-
-    // Create default Life and Work projects
-    const defaultProjects = [
+    const existingNames = new Set((existingProjects || []).map((p: any) => p.name));
+    
+    const defaults = [
       { user_id: userId, name: 'Life', color: '#22c55e' }, // Green
       { user_id: userId, name: 'Work', color: '#3b82f6' }, // Blue
     ];
+    
+    const toCreate = defaults.filter(d => !existingNames.has(d.name));
 
-    console.log('[db.ensureDefaultProjects] Creating default projects...');
+    if (toCreate.length === 0) {
+      console.log('[db.ensureDefaultProjects] Life and Work already exist, skipping');
+      return;
+    }
+
+    console.log('[db.ensureDefaultProjects] Creating missing defaults:', toCreate.map(p => p.name).join(', '));
     const { error } = await supabase
       .from('projects')
-      .insert(defaultProjects);
+      .insert(toCreate);
 
     if (error) {
       console.error('[db.ensureDefaultProjects] Error:', error.code, error.message);
-      throw error;
+      // Don't throw — this is a convenience function, not critical
+    } else {
+      console.log('[db.ensureDefaultProjects] Default projects created');
     }
-    console.log('[db.ensureDefaultProjects] Default projects created');
   }
 };
