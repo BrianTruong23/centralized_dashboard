@@ -2,6 +2,17 @@
 
 This project now supports Google OAuth via `supabase.auth.signInWithOAuth({ provider: 'google' })`.
 
+## What the app needs
+
+For Google sign-in to work in this app, you only need:
+
+1. Supabase project with Auth enabled.
+2. `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `.env.local`.
+3. Google provider enabled in Supabase Auth settings.
+4. Correct Supabase Auth URLs (`Site URL` + `Redirect URLs`) matching your app URLs.
+
+No backend API route and no Google client SDK is required in this repo. OAuth is handled by Supabase.
+
 ## 1. Create Google OAuth credentials
 
 1. Open Google Cloud Console: `APIs & Services` -> `Credentials`.
@@ -43,7 +54,25 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 
 No extra Google env vars are required in this app because OAuth is managed by Supabase.
 
-## 5. Test the flow
+## 5. Where this is wired in the app
+
+Google sign-in is triggered from:
+
+- `src/components/AuthModal.tsx`
+- `src/components/Auth.tsx`
+
+Both call:
+
+```ts
+supabase.auth.signInWithOAuth({
+  provider: 'google',
+  options: { redirectTo: window.location.origin },
+})
+```
+
+After Google consent, Supabase redirects back to your app URL. Auth state is then handled by the existing Supabase session listeners in this codebase.
+
+## 6. Test the flow
 
 1. Run the app.
 2. Open auth modal.
