@@ -20,16 +20,16 @@ describe('AuthModal Google sign-in', () => {
     mockSignInWithOAuth.mockResolvedValue({ error: null });
   });
 
-  it('shows a Continue with Google button when modal is open', () => {
+  it('shows a Sign in with Google button when modal is open', () => {
     render(<AuthModal isOpen={true} onAuthSuccess={jest.fn()} />);
 
-    expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeInTheDocument();
   });
 
   it('calls Supabase OAuth with the Google provider', async () => {
     render(<AuthModal isOpen={true} onAuthSuccess={jest.fn()} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Continue with Google' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
 
     await waitFor(() => {
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({

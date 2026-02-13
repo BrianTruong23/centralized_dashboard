@@ -2,15 +2,51 @@
 import { useState, useEffect, useRef } from 'react';
 import { Task } from '@/types/task';
 import { Play, Pause, Square, CheckCircle } from 'lucide-react';
-import clsx from 'clsx';
+import { getPlantStage } from '@/lib/focusPlant';
 
 interface FocusTimerProps {
   task: Task;
   onComplete: (task: Task) => void;
   onStop: () => void;
+  showFocusPlant?: boolean;
 }
 
-export const FocusTimer = ({ task, onComplete, onStop }: FocusTimerProps) => {
+function FocusPlant({ elapsedSeconds }: { elapsedSeconds: number }) {
+  const stage = getPlantStage(elapsedSeconds);
+  const stemHeight = [4, 10, 16, 22, 24][stage];
+  const leafScale = [0.4, 0.6, 0.8, 1, 1][stage];
+  const bloomScale = stage >= 4 ? 1 : 0;
+
+  return (
+    <div
+      className="absolute bottom-4 right-4 opacity-70 pointer-events-none"
+      aria-hidden="true"
+      title="Focus growth"
+    >
+      <div className="w-10 h-10 sm:w-11 sm:h-11 relative">
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-1.5 rounded-full bg-emerald-500/30" />
+        <div
+          className="absolute bottom-1 left-1/2 -translate-x-1/2 w-0.5 bg-emerald-300/80 rounded-full transition-all duration-500"
+          style={{ height: `${stemHeight}px` }}
+        />
+        <div
+          className="absolute bottom-2 left-[43%] w-2 h-1 rounded-full bg-emerald-300/70 transition-all duration-500"
+          style={{ transform: `rotate(-25deg) scale(${leafScale})` }}
+        />
+        <div
+          className="absolute bottom-3 right-[40%] w-2 h-1 rounded-full bg-emerald-300/70 transition-all duration-500"
+          style={{ transform: `rotate(25deg) scale(${leafScale})` }}
+        />
+        <div
+          className="absolute left-1/2 -translate-x-1/2 bottom-6 w-2 h-2 rounded-full bg-amber-200/80 transition-all duration-500"
+          style={{ transform: `scale(${bloomScale})` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+export const FocusTimer = ({ task, onComplete, onStop, showFocusPlant = true }: FocusTimerProps) => {
   const [isActive, setIsActive] = useState(true);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -92,6 +128,7 @@ export const FocusTimer = ({ task, onComplete, onStop }: FocusTimerProps) => {
           </button>
         </div>
       </div>
+      {showFocusPlant && <FocusPlant elapsedSeconds={elapsedSeconds} />}
     </div>
   );
 };

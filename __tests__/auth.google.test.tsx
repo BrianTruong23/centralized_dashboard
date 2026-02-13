@@ -31,17 +31,17 @@ describe('Auth Google sign-in', () => {
     });
   });
 
-  it('shows Continue with Google after opening auth modal', () => {
+  it('shows Sign in with Google after opening auth modal', () => {
     render(<Auth />);
     fireEvent.click(screen.getByRole('button', { name: 'Log In / Sign Up' }));
 
-    expect(screen.getByRole('button', { name: 'Continue with Google' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeInTheDocument();
   });
 
   it('calls Supabase OAuth with Google provider and redirect URL', async () => {
     render(<Auth />);
     fireEvent.click(screen.getByRole('button', { name: 'Log In / Sign Up' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Continue with Google' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
 
     await waitFor(() => {
       expect(mockSignInWithOAuth).toHaveBeenCalledWith({

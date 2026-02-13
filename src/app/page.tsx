@@ -86,6 +86,19 @@ export default function Home() {
   
   // Auto Plan State
   const [isAutoPlanModalOpen, setIsAutoPlanModalOpen] = useState(false);
+  const [focusPlantEnabled, setFocusPlantEnabled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const raw = localStorage.getItem('focus_plant_enabled');
+    return raw === null ? true : raw === 'true';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('focus_plant_enabled', String(focusPlantEnabled));
+    } catch {
+      // ignore storage errors
+    }
+  }, [focusPlantEnabled]);
 
   const getDefaultDate = () => {
     if (currentView === 'today') {
@@ -369,6 +382,8 @@ export default function Home() {
           onSearchChange={setSearchQuery}
           projects={projects}
           addProject={addProjectFn}
+          focusPlantEnabled={focusPlantEnabled}
+          onToggleFocusPlant={setFocusPlantEnabled}
        />
 
        {/* CreateTaskModal rendered once at the bottom of the component */}
@@ -614,6 +629,7 @@ export default function Home() {
         isOpen={isFocusModalOpen}
         onClose={() => setIsFocusModalOpen(false)}
         task={activeFocusTask}
+        showFocusPlant={focusPlantEnabled}
         onComplete={(task) => {
           updateTask({ ...task, status: 'done' });
           setIsFocusModalOpen(false);

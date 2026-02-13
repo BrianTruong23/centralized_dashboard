@@ -10,6 +10,14 @@ interface AuthModalProps {
   onAuthSuccess: (user: User) => void;
 }
 
+function GoogleMark() {
+  return (
+    <span aria-hidden="true" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-[11px] font-bold border border-gray-200">
+      <span className="text-[#4285F4]">G</span>
+    </span>
+  );
+}
+
 function getErrorMessage(err: unknown): string {
   if (typeof err === 'string') return err;
   if (err && typeof err === 'object' && 'message' in err) {
@@ -112,10 +120,10 @@ export function AuthModal({ isOpen, onAuthSuccess }: AuthModalProps) {
           type="button"
           onClick={handleGoogleSignIn}
           disabled={isGoogleLoading || isLoading}
-          className="w-full mb-4 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-semibold py-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          className="w-full mb-4 border border-gray-300 dark:border-gray-600 bg-white text-gray-800 dark:text-gray-100 font-semibold py-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
         >
-          {(isGoogleLoading || isLoading) && <Loader2 size={16} className="animate-spin" />}
-          Continue with Google
+          {(isGoogleLoading || isLoading) ? <Loader2 size={16} className="animate-spin" /> : <GoogleMark />}
+          <span className="text-[#1f1f1f] dark:text-gray-100">Sign in with Google</span>
         </button>
 
         <div className="relative mb-4">
