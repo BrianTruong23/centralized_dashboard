@@ -13,33 +13,36 @@ interface FocusTimerProps {
 
 function FocusPlant({ elapsedSeconds }: { elapsedSeconds: number }) {
   const stage = getPlantStage(elapsedSeconds);
-  const stemHeight = [4, 10, 16, 22, 24][stage];
-  const leafScale = [0.4, 0.6, 0.8, 1, 1][stage];
-  const bloomScale = stage >= 4 ? 1 : 0;
+  const progress = Math.min(elapsedSeconds / (45 * 60), 1);
+  const stemHeight = 10 + Math.round(50 * progress);
+  const leafScale = 0.75 + (0.85 * progress);
+  const bloomScale = stage >= 4 ? 1.15 : 0;
+  const bloomOpacity = stage >= 4 ? 0.95 : 0;
 
   return (
     <div
-      className="absolute bottom-4 right-4 opacity-70 pointer-events-none"
+      className="absolute bottom-4 right-4 sm:bottom-5 sm:right-5 opacity-85 pointer-events-none"
       aria-hidden="true"
       title="Focus growth"
     >
-      <div className="w-10 h-10 sm:w-11 sm:h-11 relative">
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-1.5 rounded-full bg-emerald-500/30" />
+      <div className="w-20 h-20 sm:w-24 sm:h-24 relative">
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-10 h-2.5 rounded-full bg-emerald-500/25" />
+        <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-12 h-6 rounded-[999px_999px_10px_10px] bg-emerald-900/35" />
         <div
-          className="absolute bottom-1 left-1/2 -translate-x-1/2 w-0.5 bg-emerald-300/80 rounded-full transition-all duration-500"
+          className="absolute bottom-5 left-1/2 -translate-x-1/2 w-1 bg-emerald-300/80 rounded-full transition-all duration-500"
           style={{ height: `${stemHeight}px` }}
         />
         <div
-          className="absolute bottom-2 left-[43%] w-2 h-1 rounded-full bg-emerald-300/70 transition-all duration-500"
+          className="absolute bottom-8 left-[39%] w-4 h-2 rounded-full bg-emerald-300/75 transition-all duration-500"
           style={{ transform: `rotate(-25deg) scale(${leafScale})` }}
         />
         <div
-          className="absolute bottom-3 right-[40%] w-2 h-1 rounded-full bg-emerald-300/70 transition-all duration-500"
+          className="absolute bottom-10 right-[35%] w-4 h-2 rounded-full bg-emerald-300/75 transition-all duration-500"
           style={{ transform: `rotate(25deg) scale(${leafScale})` }}
         />
         <div
-          className="absolute left-1/2 -translate-x-1/2 bottom-6 w-2 h-2 rounded-full bg-amber-200/80 transition-all duration-500"
-          style={{ transform: `scale(${bloomScale})` }}
+          className="absolute left-1/2 -translate-x-1/2 bottom-14 w-3 h-3 rounded-full bg-amber-200/90 transition-all duration-500"
+          style={{ transform: `scale(${bloomScale})`, opacity: bloomOpacity }}
         />
       </div>
     </div>
