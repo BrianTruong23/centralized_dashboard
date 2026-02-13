@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { Task, TaskPriority, TaskEnergyLevel, TaskCategory } from '@/types/task';
 import { generateId } from '@/lib/utils';
 import clsx from 'clsx';
-import { X, Calendar, Clock, Zap, Tag, Flag } from 'lucide-react';
+import { X, Calendar, Clock, Zap, Tag, Flag, FolderKanban } from 'lucide-react';
+import { Project } from '@/types/project';
 
 interface CreateTaskModalProps {
   isOpen: boolean;
@@ -12,12 +13,13 @@ interface CreateTaskModalProps {
   onAddTask: (task: Task) => void;
   userId?: string;
   defaultDate?: string;
+  projects: Project[];
 }
 
-const CATEGORIES: TaskCategory[] = ['Research', 'Coding', 'Admin', 'Health', 'Life', 'Finance', 'Social', 'Content', 'UX'];
+
 const ENERGY_LEVELS: TaskEnergyLevel[] = ['low', 'medium', 'high'];
 
-export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDate }: CreateTaskModalProps) {
+export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDate, projects }: CreateTaskModalProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<TaskCategory>('Life');
@@ -25,10 +27,18 @@ export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDat
   const [estimatedMinutes, setEstimatedMinutes] = useState(30);
   const [energyLevel, setEnergyLevel] = useState<TaskEnergyLevel>('medium');
   const [deadline, setDeadline] = useState(defaultDate || '');
+  const [projectId, setProjectId] = useState<string>('');
 
   useEffect(() => {
     if (isOpen && defaultDate) setDeadline(defaultDate);
   }, [isOpen, defaultDate]);
+
+  // Auto-select first project (Life) when projects load
+  useEffect(() => {
+    if (projects.length > 0 && !projectId) {
+      setProjectId(projects[0].id);
+    }
+  }, [projects, projectId]);
 
   if (!isOpen) return null;
 
@@ -49,6 +59,7 @@ export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDat
       tags: [],
       createdAt: Date.now(),
       deadline: deadline || undefined,
+      project_id: projectId || undefined,
     };
 
     onAddTask(newTask);
@@ -64,6 +75,7 @@ export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDat
     setEstimatedMinutes(30);
     setEnergyLevel('medium');
     setDeadline(defaultDate || '');
+    setProjectId(projects.length > 0 ? projects[0].id : '');
   };
 
   return (
@@ -107,17 +119,31 @@ export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDat
 
            {/* Properties Grid */}
            <div className="grid grid-cols-2 gap-4">
-              {/* Category */}
-              <div className="space-y-1.5">
+              {/* Project (Labeled as Category per requirement) */}
+              <div className="space-y-1.5 col-span-2">
                 <label className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1.5">
                   <Tag size={12} /> Category
                 </label>
                 <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as TaskCategory)}
+                  value={projectId}
+                  onChange={(e) => {
+                     setProjectId(e.target.value);
+                     // Update internal category state for metadata
+                     const p = projects.find(proj => proj.id === e.target.value);
+                     if (p) setCategory(p.name);
+                  }}
                   className="w-full text-sm bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md px-2 py-2 outline-none focus:border-black dark:focus:border-gray-500 transition-colors"
+                  required
                 >
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {projects.length === 0 ? (
+                    <option value="">No projects found</option>
+                  ) : (
+                    projects.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 

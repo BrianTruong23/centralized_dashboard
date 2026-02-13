@@ -1,20 +1,22 @@
 import { useState, useEffect } from 'react';
 import { Task, TaskPriority, TaskEnergyLevel, TaskCategory } from '@/types/task';
+import { Project } from '@/types/project';
 import { generateId } from '@/lib/utils';
 import clsx from 'clsx';
 import { Plus } from 'lucide-react';
+import { parseDateFromText, dayRegex, parseTagFromText, tagRegex } from '@/lib/smartDate';
 
 interface TaskInputProps {
   onAddTask: (task: Task) => void;
   defaultDate?: string;
+  projects?: Project[];
 }
 
-const CATEGORIES: TaskCategory[] = ['Research', 'Coding', 'Admin', 'Health', 'Life', 'Finance', 'Social', 'Content', 'UX'];
-
-export const TaskInput = ({ onAddTask, defaultDate }: TaskInputProps) => {
+export const TaskInput = ({ onAddTask, defaultDate, projects = [] }: TaskInputProps) => {
+  const isLoading = false;
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<TaskCategory>('Life');
+  const [projectId, setProjectId] = useState('');
   const [priority, setPriority] = useState<TaskPriority>(3);
   const [estimatedMinutes, setEstimatedMinutes] = useState(60);
   const [energyLevel, setEnergyLevel] = useState<TaskEnergyLevel>('medium');
@@ -26,15 +28,26 @@ export const TaskInput = ({ onAddTask, defaultDate }: TaskInputProps) => {
     setDeadline(defaultDate || '');
   }, [defaultDate]);
 
+  // Set default project when projects load
+  useEffect(() => {
+    if (projects.length > 0 && !projectId) {
+      setProjectId(projects[0].id);
+    }
+  }, [projects, projectId]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
+
+    // Resolve category name from project ID
+    const project = projects.find(p => p.id === projectId);
+    const categoryName = project ? project.name : 'Inbox';
 
     const newTask: Task = {
       id: generateId(),
       title,
       description,
-      category,
+      category: categoryName,
       priority,
       estimatedMinutes,
       energyLevel,
@@ -42,6 +55,7 @@ export const TaskInput = ({ onAddTask, defaultDate }: TaskInputProps) => {
       tags: [],
       createdAt: Date.now(),
       deadline: deadline || undefined,
+      project_id: projectId || undefined,
     };
 
     onAddTask(newTask);
@@ -57,25 +71,93 @@ export const TaskInput = ({ onAddTask, defaultDate }: TaskInputProps) => {
     setIsExpanded(false);
   };
 
+  // Parse date on title change
+  useEffect(() => {
+    const match = parseDateFromText(title);
+    if (match) {
+        setDeadline(match.date);
+    }
+  }, [title]);
+
+  // Combine regex for splitting: /((?:dayRegex)|(?:tagRegex))/gi
+  // But we need to keep the capture groups working.
+  // Easiest is to use a combined split logic or just check parts.
+  // Let's use a combined Regex for splitting:
+  const combinedRegex = new RegExp(`(${dayRegex.source}|${tagRegex.source})`, 'gi');
+
+  // Handle Input Change
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.value;
+      setTitle(val);
+      
+      // Date Check
+      const dateMatch = parseDateFromText(val);
+      if (dateMatch) {
+          setDeadline(dateMatch.date);
+      }
+
+      // Tag Check
+      const tagMatch = parseTagFromText(val);
+      if (tagMatch) {
+          // Find project matching the tag (case insensitive)
+          const project = projects.find(p => p.name.toLowerCase() === tagMatch.toLowerCase());
+          if (project) {
+              setProjectId(project.id);
+          }
+      }
+  };
+
   return (
-    <div className="mb-8">
-      <form onSubmit={handleSubmit} className="relative">
-        <div className="flex items-center gap-3 border-b border-gray-200 dark:border-gray-800 pb-2 focus-within:border-gray-400 dark:focus-within:border-gray-600 transition-colors">
-          <div className="text-gray-400">
+    <div className="mb-8 p-1">
+      <form onSubmit={handleSubmit} className="relative group">
+        <div className="relative flex items-center gap-3 border-b border-gray-200 dark:border-gray-800 pb-2 focus-within:border-gray-400 dark:focus-within:border-gray-600 transition-colors">
+          <div className="text-gray-400 z-20">
              <Plus size={20} />
           </div>
-          <input
-            type="text"
-            placeholder="Add new task..."
-            className="flex-1 text-lg bg-transparent border-none outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onFocus={() => setIsExpanded(true)}
-          />
+          
+          <div className="relative flex-1 h-8 flex items-center">
+             {/* Overlay for highlighting */}
+             <div className="absolute inset-0 flex items-center whitespace-pre text-lg font-normal pointer-events-none z-0">
+                  {title.split(combinedRegex).map((part, i) => {
+                     if (!part) return null; // Filter empty splits
+
+                     // Check Day
+                     if (dayRegex.test(part)) {
+                         return (
+                             <span key={i} className="bg-black text-white rounded-md px-1.5 -mx-1.5 relative z-10 box-decoration-clone dark:bg-white dark:text-black">
+                                 {part}
+                             </span>
+                         );
+                     }
+                     // Check Tag
+                     if (tagRegex.test(part)) {
+                         return (
+                             <span key={i} className="text-blue-600 dark:text-blue-400 font-bold">
+                                 {part}
+                             </span>
+                         );
+                     }
+                     return <span key={i} className="text-gray-900 dark:text-gray-100">{part}</span>;
+                  })}
+             </div>
+
+             {/* Transparent Input */}
+             <input
+                type="text"
+                placeholder={title ? "" : "Add new task..."}
+                className="absolute inset-0 w-full h-full text-lg bg-transparent border-none outline-none text-transparent caret-black dark:caret-white z-10 placeholder-gray-400"
+                value={title}
+                onChange={handleTitleChange}
+                onFocus={() => setIsExpanded(true)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+          </div>
+
           {title.trim() && (
              <button
                 type="submit"
-                className="text-sm font-semibold text-black dark:text-white hover:opacity-70"
+                className="text-sm font-semibold text-black dark:text-white hover:opacity-70 z-20"
              >
                 Enter
              </button>
@@ -112,13 +194,25 @@ export const TaskInput = ({ onAddTask, defaultDate }: TaskInputProps) => {
                 />
              </div>
 
-             {/* Category Select - Simple */}
+             {/* Project Select (Formerly Category) */}
              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value as TaskCategory)}
-                className="bg-gray-100 dark:bg-gray-800 text-xs font-medium rounded-md px-2 py-1 outline-none border-none"
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                disabled={isLoading}
+                className={clsx(
+                    "bg-gray-100 dark:bg-gray-800 text-xs font-medium rounded-md px-2 py-1 outline-none border-none max-w-[120px]",
+                    isLoading && "opacity-50 cursor-wait"
+                )}
              >
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                {isLoading ? (
+                    <option>Loading...</option>
+                ) : projects.length > 0 ? (
+                    projects.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                    ))
+                ) : (
+                    <option value="">No Projects</option>
+                )}
              </select>
 
              {/* Date Picker Input */}

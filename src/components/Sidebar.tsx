@@ -11,16 +11,17 @@ import {
   ChevronDown,
   Settings,
   NotebookPen,
-  Trash2
+  Trash2,
+  CheckCircle2
 } from 'lucide-react';
 import { Task } from '@/types/task';
-import { useTasks } from '@/hooks/useTasks';
-import { useProjects } from '@/hooks/useProjects';
+import { Project, CreateProjectInput } from '@/types/project';
 import clsx from 'clsx';
 import { ThemeToggle } from './ThemeToggle';
 import { UserDropdown } from './UserDropdown';
 import { CreateProjectModal } from './CreateProjectModal';
-import { projectsDb, Project } from '@/lib/projects';
+import { SettingsModal } from './SettingsModal';
+import { ActivityLogModal } from './ActivityLogModal';
 
 interface SidebarProps {
   currentView: string;
@@ -28,32 +29,34 @@ interface SidebarProps {
   tasks: Task[];
   onAddTask: () => void;
   className?: string;
-  user: any; 
+  user: any;
   onLogout: () => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  projects?: Project[];
+  addProject?: (input: CreateProjectInput) => Promise<Project | undefined>;
 }
 
 export const Sidebar = ({
   currentView,
   onViewChange,
+  tasks,
   user,
   onLogout,
   onAddTask,
   className,
   searchQuery,
-  onSearchChange
+  onSearchChange,
+  projects = [],
+  addProject,
 }: SidebarProps) => {
-  const { tasks } = useTasks();
-  const { projects, addProject } = useProjects();
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isActivityLogOpen, setIsActivityLogOpen] = useState(false);
 
   // Calculate counts
   const inboxCount = tasks.filter(t => t.status !== 'done').length;
   // Basic filtering for "Today" - this should ideally match page.tsx logic
-  // but for now a simple check is fine. 
-  // NOTE: page.tsx has more complex filtering for "Today", this is an approximation or we can replicate it.
-  // For standard "Today", we check deadline or if created today/recently if strictly inbox-zero style.
   const todayCount = tasks.filter(t => {
       if (t.status === 'done') return false;
       if (!t.deadline) return false;
@@ -61,8 +64,6 @@ export const Sidebar = ({
       return t.deadline === today;
   }).length;
   
-  // const tags = Array.from(new Set(tasks.flatMap(t => t.tags || []))).sort(); // REPLACED by explicit projects
-
   const NavItem = ({ 
     id, 
     icon: Icon, 
@@ -98,24 +99,32 @@ export const Sidebar = ({
 
   return (
     <aside className={clsx("w-64 flex flex-col h-screen bg-gray-50/50 dark:bg-black border-r border-gray-100 dark:border-gray-900", className)}>
-      {/* Header */}
+      {/* Header with Logo + UserDropdown */}
       <div className="p-4 mb-2 flex items-center justify-between">
-         {user ? (
-            <div className="flex-1 mr-2">
-                <UserDropdown user={user} onLogout={onLogout} />
-            </div>
-         ) : (
-            <div className="text-sm font-bold px-2">Minima</div>
-         )}
+         <div className="flex items-center gap-2 flex-1 mr-2">
+             <img src="/logo.svg" alt="Minima" width={48} height={48} className="rounded-lg" />
+             {user ? (
+                 <div className="flex-1">
+                     <UserDropdown 
+                       user={user} 
+                       onLogout={onLogout} 
+                       onOpenSettings={() => setIsSettingsOpen(true)}
+                       onOpenActivityLog={() => setIsActivityLogOpen(true)}
+                     />
+                 </div>
+             ) : (
+                 <span className="text-sm font-bold">Minima</span>
+             )}
+         </div>
          
          <div className="flex items-center gap-1 opacity-0 hover:opacity-100 transition-opacity">
              <ThemeToggle />
          </div>
       </div>
 
-      {/* Main Nav */}
+      {/* ... (Main Nav) ... */}
       <div className="flex-1 overflow-y-auto px-3 space-y-1 scrollbar-hide">
-        {/* Actions */}
+        {/* ... (Actions same as before) ... */}
         <button 
           onClick={onAddTask}
           className="w-full flex items-center gap-2 text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white px-2 py-2 mb-4 hover:bg-white dark:hover:bg-gray-900 rounded-md shadow-sm border border-transparent hover:border-gray-100 dark:hover:border-gray-800 transition-all group"
@@ -126,7 +135,8 @@ export const Sidebar = ({
           <span className="text-sm font-medium">Add task</span>
         </button>
 
-        <div className="relative group mb-6">
+        {/* Search (same) */}
+       <div className="relative group mb-6">
            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
            <input 
              type="text" 
@@ -142,7 +152,10 @@ export const Sidebar = ({
         <NavItem id="upcoming" icon={CalendarDays} label="Upcoming" />
         <NavItem id="daily-notes" icon={NotebookPen} label="Daily Notes" />
         <NavItem id="kanban" icon={Columns} label="Kanban" />
+        <NavItem id="completed" icon={CheckCircle2} label="Completed" />
+
         
+        {/* Projects section (same) */}
         <div className="mt-8 mb-2 px-2 flex items-center justify-between group">
             <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">Projects</h3>
             <button 
@@ -179,18 +192,35 @@ export const Sidebar = ({
 
       </div>
 
-      {/* Footer */}
+      {/* Footer Settings Button - Now Functional */}
       <div className="p-4">
-         <button className="flex items-center gap-3 text-gray-400 text-sm px-2 py-2 hover:text-gray-800 dark:hover:text-gray-200 transition-colors w-full">
+         <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="flex items-center gap-3 text-gray-400 text-sm px-2 py-2 hover:text-gray-800 dark:hover:text-gray-200 transition-colors w-full"
+         >
             <Settings size={18} strokeWidth={1.5} />
             <span>Settings</span>
          </button>
       </div>
 
+      {/* Modals */}
       <CreateProjectModal 
         isOpen={isProjectModalOpen}
         onClose={() => setIsProjectModalOpen(false)}
-        onAddProject={addProject}
+        onAddProject={addProject as any}
+      />
+      
+      <SettingsModal 
+         isOpen={isSettingsOpen}
+         onClose={() => setIsSettingsOpen(false)}
+         user={user}
+         onLogout={onLogout}
+      />
+
+      <ActivityLogModal
+        isOpen={isActivityLogOpen}
+        onClose={() => setIsActivityLogOpen(false)}
+        userId={user?.id}
       />
     </aside>
   );

@@ -2,6 +2,7 @@ import React from 'react';
 import { Filter, X, Check } from 'lucide-react';
 import clsx from 'clsx';
 import { TaskStatus, TaskPriority, TaskCategory } from '@/types/task';
+import { Project } from '@/types/project';
 
 interface FilterPanelProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ interface FilterPanelProps {
   };
   onFilterChange: (type: 'status' | 'priority' | 'category', value: any) => void;
   onClearFilters: () => void;
+  projects?: Project[];
 }
 
 const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
@@ -38,8 +40,10 @@ export const FilterPanel = ({
   onClose,
   activeFilters,
   onFilterChange,
-  onClearFilters
+  onClearFilters,
+  projects = [],
 }: FilterPanelProps) => {
+  const isLoading = false;
   if (!isOpen) return null;
 
   const hasActiveFilters = 
@@ -118,20 +122,24 @@ export const FilterPanel = ({
 
         {/* Category Section */}
         <div>
-          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Category</h4>
+          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Project / Category</h4>
           <div className="flex flex-wrap gap-2">
-            {CATEGORY_OPTIONS.map((cat) => (
+            {isLoading ? (
+                <span className="text-xs text-gray-400 animate-pulse">Loading projects...</span>
+            ) : projects.length === 0 ? (
+                <span className="text-xs text-gray-400 italic">No projects found</span>
+            ) : projects.map((project) => (
               <button
-                key={cat}
-                onClick={() => toggleFilter('category', cat)}
+                key={project.id}
+                onClick={() => toggleFilter('category', project.name)}
                 className={clsx(
                   "px-3 py-1.5 text-xs font-medium rounded-full border transition-all",
-                  activeFilters.category.includes(cat)
+                  activeFilters.category.includes(project.name as any)
                     ? "bg-black dark:bg-white text-white dark:text-black border-black dark:border-white"
                     : "bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-transparent hover:bg-gray-100 dark:hover:bg-gray-800"
                 )}
               >
-                {cat}
+                {project.name}
               </button>
             ))}
           </div>

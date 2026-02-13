@@ -1,4 +1,5 @@
 import { Task } from '@/types/task';
+import { Project } from '@/types/project';
 import { TaskItem } from './TaskItem';
 
 interface TaskListProps {
@@ -6,9 +7,10 @@ interface TaskListProps {
   onUpdateTask: (task: Task) => void;
   onDeleteTask: (id: string) => void;
   onFocusTask: (task: Task) => void;
+  projects?: Project[];
 }
 
-export const TaskList = ({ tasks, onUpdateTask, onDeleteTask, onFocusTask }: TaskListProps) => {
+export const TaskList = ({ tasks, onUpdateTask, onDeleteTask, onFocusTask, projects = [] }: TaskListProps) => {
   if (tasks.length === 0) {
     return (
       <div className="text-center py-12 text-gray-400">
@@ -28,12 +30,13 @@ export const TaskList = ({ tasks, onUpdateTask, onDeleteTask, onFocusTask }: Tas
   return (
     <div className="space-y-2">
       {sortedTasks.map((task) => (
-        <TaskItem 
-          key={task.id} 
-          task={task} 
-          onUpdate={onUpdateTask} 
-          onDelete={onDeleteTask} 
+        <TaskItem
+          key={task.id}
+          task={task}
+          onUpdate={onUpdateTask}
+          onDelete={onDeleteTask}
           onFocus={onFocusTask}
+          projects={projects}
         />
       ))}
     </div>

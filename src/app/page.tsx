@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useTasks } from '@/hooks/useTasks';
+import { useProjects } from '@/hooks/useProjects';
 import { TaskInput } from '@/components/TaskInput';
 import { TaskList } from '@/components/TaskList';
 import { CreateTaskModal } from '@/components/CreateTaskModal';
@@ -12,12 +13,14 @@ import { Task } from '@/types/task';
 import { FocusTimer } from '@/components/FocusTimer';
 import { AuthModal } from '@/components/AuthModal';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { Zap, CalendarRange, Loader2, Filter, ChevronUp, ChevronDown, Play } from 'lucide-react';
+import { Zap, CalendarRange, Loader2, Filter, ChevronUp, ChevronDown, Play, Sparkles } from 'lucide-react';
 import { DailyNotes } from '@/components/DailyNotes';
+import { DailyNotesHistory } from '@/components/DailyNotesHistory';
 import { AmbientSound } from '@/components/AmbientSound';
 import { Sidebar } from '@/components/Sidebar';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { FilterPanel } from '@/components/FilterPanel';
+import { AutoPlanModal } from '@/components/AutoPlanModal';
 import { TaskStatus, TaskPriority, TaskCategory } from '@/types/task';
 import clsx from 'clsx';
 import { supabase, authReady, SESSION_KEY } from '@/lib/supabase';
@@ -51,15 +54,40 @@ function LoadingScreen() {
 
 export default function Home() {
   const { tasks, addTask, updateTask, deleteTask, isLoaded } = useTasks();
+  const { projects, addProject: addProjectFn } = useProjects();
   const [showPlan, setShowPlan] = useState(false);
   const [dayPlan, setDayPlan] = useState<Task[]>([]);
   const [isFocusing, setIsFocusing] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<any>(() => {
+    // Optimistic load from cache to speed up dashboard display
+    if (typeof window !== 'undefined') {
+        try {
+            const raw = localStorage.getItem(SESSION_KEY);
+            if (raw) {
+                const cached = JSON.parse(raw);
+                if (cached?.user) return cached.user;
+            }
+        } catch { /* ignore */ }
+    }
+    return null;
+  });
   const [currentView, setCurrentView] = useState('today');
+  
+  // Resolve project name for display
+  const currentProject = projects.find(p => `project-${p.id}` === currentView);
+  const viewTitle = currentProject 
+    ? `# ${currentProject.name}`
+    : currentView.startsWith('project-') 
+        ? currentView.replace('project-', '# ') 
+        : currentView.replace('-', ' ');
+
   const [manualFocusTaskId, setManualFocusTaskId] = useState<string | null>(null);
   const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
   const [activeFocusTask, setActiveFocusTask] = useState<Task | null>(null);
   const [isFocusModalOpen, setIsFocusModalOpen] = useState(false);
+  
+  // Auto Plan State
+  const [isAutoPlanModalOpen, setIsAutoPlanModalOpen] = useState(false);
 
   const getDefaultDate = () => {
     if (currentView === 'today') {
@@ -96,8 +124,11 @@ export default function Home() {
     const { data: authListener } = supabase?.auth.onAuthStateChange((event, session) => {
         if (session?.user) {
             setUser(session.user);
+            // Persist session to local storage for next load
+            localStorage.setItem(SESSION_KEY, JSON.stringify(session));
         } else {
             setUser(null);
+            localStorage.removeItem(SESSION_KEY);
         }
     }) || { data: { subscription: { unsubscribe: () => {} } } };
 
@@ -162,6 +193,29 @@ export default function Home() {
     setIsFocusModalOpen(true);
   };
 
+  const handleAutoPlanTasks = async (newTasks: Task[]) => {
+      console.log(`[handleAutoPlanTasks] Received ${newTasks.length} tasks to add`);
+      
+      // Fire ALL addTask calls concurrently — don't let one blocking call stop the rest
+      const results = await Promise.allSettled(
+          newTasks.map(async (task) => {
+              console.log(`[handleAutoPlanTasks] Adding task: "${task.title}" | project_id: ${task.project_id || 'NONE'}`);
+              await addTask(task);
+              console.log(`[handleAutoPlanTasks] ✓ Task added: "${task.title}"`);
+              return task.title;
+          })
+      );
+      
+      const succeeded = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.filter(r => r.status === 'rejected');
+      console.log(`[handleAutoPlanTasks] Done: ${succeeded}/${newTasks.length} tasks added`);
+      failed.forEach((r, i) => {
+          if (r.status === 'rejected') {
+              console.error(`[handleAutoPlanTasks] ✗ Failed:`, r.reason);
+          }
+      });
+  };
+
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState<{
@@ -200,20 +254,33 @@ export default function Home() {
     }
 
     // 3. View-specific filtering
-    if (currentView === 'inbox' || currentView === 'kanban') {
+    
+    // Explicitly handle "Completed" view
+    if (currentView === 'completed') {
+        return result.filter(t => t.status === 'done');
+    }
+
+    // For other views (except Kanban/Search), usually hide completed tasks?
+    // User said: "not show up in inbox section" (and implies others).
+    // Let's filter out 'done' for Inbox, Today, Upcoming, Projects.
+    // Kanban usually needs 'done' for the Done column.
+    
+    const hideCompleted = currentView !== 'kanban';
+    if (hideCompleted) {
+        result = result.filter(t => t.status !== 'done');
+    }
+
+    if (currentView === 'inbox') {
         return result;
     }
+    if (currentView === 'kanban') {
+        return result; // filteredTasks passed to Kanban, but we just filtered out done if hideCompleted was true. Wait.
+        // If currentView is kanban, hideCompleted is false. So result has done tasks. Correct.
+    }
+
     if (currentView === 'today') {
-        const now = new Date();
-        return result.filter(t => {
-            if (!t.deadline) return false;
-            // Parse as local date to compare day matches
-            // (Assuming deadline stored as YYYY-MM-DD or ISO)
-            const d = new Date(t.deadline);
-            return d.getDate() === now.getDate() && 
-                   d.getMonth() === now.getMonth() && 
-                   d.getFullYear() === now.getFullYear();
-        });
+        const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+        return result.filter(t => t.deadline === todayStr);
     }
     if (currentView === 'upcoming') {
         const now = new Date();
@@ -224,8 +291,17 @@ export default function Home() {
         });
     }
     if (currentView.startsWith('project-')) {
-        const tag = currentView.replace('project-', '');
-        return result.filter(t => t.tags?.includes(tag));
+        const project = projects.find(p => `project-${p.id}` === currentView);
+        if (project) {
+             return result.filter(t => t.project_id === project.id);
+        }
+        // Fallback for tags? Or just ID? 
+        // Previous code: const tag = currentView.replace('project-', ''); return result.filter(t => t.tags?.includes(tag));
+        // But we switched to project_id in Sidebar. Sidebar sends `project-${project.id}`.
+        // So we should match project_id.
+        // Let's stick to project_id.
+        const id = currentView.replace('project-', '');
+        return result.filter(t => t.project_id === id);
     }
     return result;
   }, [tasks, currentView, searchQuery, activeFilters]);
@@ -264,33 +340,35 @@ export default function Home() {
       )}
 
       {/* Sidebar */}
-       <Sidebar 
+       <Sidebar
           currentView={currentView}
           onViewChange={setCurrentView}
-          tasks={tasks} 
+          tasks={tasks}
           onAddTask={() => setIsCreateTaskModalOpen(true)}
           user={user}
           onLogout={handleLogout}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
+          projects={projects}
+          addProject={addProjectFn}
        />
 
-       <CreateTaskModal
-          isOpen={isCreateTaskModalOpen}
-          onClose={() => setIsCreateTaskModalOpen(false)}
-          onAddTask={addTask}
-          userId={userId}
-       />
+       {/* CreateTaskModal rendered once at the bottom of the component */}
 
       <main className={`flex-1 overflow-y-auto px-8 py-8 ${!user ? 'blur-sm pointer-events-none select-none' : ''}`}>
         <header className="mb-8 flex items-start justify-between max-w-4xl mx-auto relative">
           <div>
             <h1 className="text-3xl font-bold tracking-tighter mb-1 font-mono uppercase">
-               {currentView.startsWith('project-') ? currentView.replace('project-', '# ') : currentView.replace('-', ' ')}
+               {viewTitle}
             </h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">
-                {currentView === 'kanban' ? 'Visual workflow' : 'Design your day, master your time.'} 
-                <Link href="/features" className="underline hover:text-black dark:hover:text-white ml-2">Features</Link>
+            <p className="text-gray-500 dark:text-gray-400 text-sm min-h-[20px]">
+                {currentView === 'kanban' ? 'Visual workflow' : 
+                 currentView === 'today' ? (
+                    <>
+                        Design your day, master your time. 
+                        <Link href="https://forms.gle/K8z21uKNX5ieb7Ai9" target="_blank" rel="noopener noreferrer" className="underline hover:text-black dark:hover:text-white ml-2">Features</Link>
+                    </>
+                 ) : null}
             </p>
           </div>
 
@@ -317,12 +395,13 @@ export default function Home() {
                  >
                     <Filter size={18} />
                  </button>
-                 <FilterPanel 
+                 <FilterPanel
                     isOpen={showFilters}
                     onClose={() => setShowFilters(false)}
                     activeFilters={activeFilters}
                     onFilterChange={handleFilterChange}
                     onClearFilters={clearFilters}
+                    projects={projects}
                  />
              </div>
           </div>
@@ -333,32 +412,50 @@ export default function Home() {
 
             {currentView === 'kanban' ? (
                 <section className="h-[calc(100vh-200px)]">
-                    <KanbanBoard 
-                        tasks={filteredTasks} 
-                        onUpdateTask={updateTask} 
+                    <KanbanBoard
+                        tasks={filteredTasks}
+                        onUpdateTask={updateTask}
                         onDeleteTask={deleteTask}
                         onFocusTask={handleFocusTask}
+                        projects={projects}
                     />
                 </section>
             ) : currentView === 'daily-notes' ? (
-                <section className="mb-8">
-                    <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">
-                        Today&apos;s Notes
-                    </h2>
-                    <DailyNotes userId={userId} onAddTask={addTask} showHistory={true} />
-                </section>
+                <>
+                    <section className="mb-12">
+                        <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">
+                            Today&apos;s Notes
+                        </h2>
+                        <DailyNotes userId={userId} onAddTask={addTask} projects={projects} addProject={addProjectFn} />
+                    </section>
+                    <section className="mb-8">
+                        <DailyNotesHistory userId={userId} />
+                    </section>
+                </>
             ) : (
                 <>
                     <section className="mb-8">
-                    <section className="mb-8">
-                        <TaskInput 
-                            onAddTask={addTask} 
+                        <TaskInput
+                            onAddTask={addTask}
                             defaultDate={getDefaultDate()}
+                            projects={projects}
                         />
                     </section>
-                    </section>
 
-                    {(currentView === 'inbox' || currentView === 'today') && (
+                    {/* Auto Plan Section for Inbox */}
+                     {currentView === 'inbox' && (
+                        <section className="mb-8">
+                             <button
+                                onClick={() => setIsAutoPlanModalOpen(true)}
+                                className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:border-black dark:hover:border-white hover:text-black dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-all font-medium"
+                             >
+                                <Sparkles size={18} />
+                                Auto Plan My Week
+                             </button>
+                        </section>
+                    )}
+
+                    {currentView === 'today' && (
                         <section className="mb-8">
                             {!showPlan ? (
                                 <button
@@ -398,11 +495,12 @@ export default function Home() {
                                         </div>
                                             <div className="flex-1 pb-1 flex items-start justify-between gap-4">
                                                 <div className="flex-1">
-                                                    <TaskItem 
-                                                        task={task} 
-                                                        onUpdate={updateTask} 
-                                                        onDelete={deleteTask} 
+                                                    <TaskItem
+                                                        task={task}
+                                                        onUpdate={updateTask}
+                                                        onDelete={deleteTask}
                                                         onFocus={handleFocusTask}
+                                                        projects={projects}
                                                     />
                                                 </div>
                                                 <button
@@ -430,7 +528,9 @@ export default function Home() {
                     <section className="mb-8">
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                {currentView === 'inbox' ? `All Tasks (${todoTasks.length})` : `${currentView} Tasks (${todoTasks.length})`}
+                                {currentProject ? `${currentProject.name} Tasks (${todoTasks.length})` : 
+                                 currentView === 'inbox' ? `All Tasks (${todoTasks.length})` : 
+                                 `${currentView.replace('-', ' ')} Tasks (${todoTasks.length})`}
                             </h2>
                         </div>
                         <TaskList
@@ -438,15 +538,17 @@ export default function Home() {
                             onUpdateTask={updateTask}
                             onDeleteTask={deleteTask}
                             onFocusTask={handleFocusTask}
+                            projects={projects}
                         />
                     </section>
                     
                     {(currentView === 'inbox' || currentView === 'today') && (
                         <section className="mb-8">
-                            <DailyNotes userId={userId} onAddTask={addTask} showHistory={false} />
+                            <DailyNotes userId={userId} onAddTask={addTask} projects={projects} addProject={addProjectFn} />
                         </section>
                     )}
                 </>
+            
             )}
         </div>
       </main>
@@ -456,6 +558,16 @@ export default function Home() {
         onAddTask={addTask}
         userId={user?.id}
         defaultDate={getDefaultDate()}
+        projects={projects}
+      />
+
+      <AutoPlanModal 
+        isOpen={isAutoPlanModalOpen}
+        onClose={() => setIsAutoPlanModalOpen(false)}
+        onAddTasks={handleAutoPlanTasks}
+        userId={user?.id}
+        projects={projects}
+        addProject={addProjectFn}
       />
 
       <FocusSessionModal 
