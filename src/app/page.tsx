@@ -441,7 +441,9 @@ export default function Home() {
                     <section className="mb-8">
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                {currentView === 'inbox' ? `All Tasks (${todoTasks.length})` : `${currentView} Tasks (${todoTasks.length})`}
+                                {currentProject ? `${currentProject.name} Tasks (${todoTasks.length})` : 
+                                 currentView === 'inbox' ? `All Tasks (${todoTasks.length})` : 
+                                 `${currentView.replace('-', ' ')} Tasks (${todoTasks.length})`}
                             </h2>
                         </div>
                         <TaskList
