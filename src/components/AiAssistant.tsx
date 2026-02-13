@@ -7,8 +7,6 @@ import {
   Send,
   X,
   CheckCircle2,
-  Maximize2,
-  Minimize2,
   Trash2,
   ListChecks,
   AlertTriangle,
@@ -64,7 +62,6 @@ export function AiAssistant({
   planningPreferences,
 }: AiAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,9 +86,15 @@ export function AiAssistant({
   const selectedPlanCount = selectedPlanTasks.size;
   const totalPlanCount = useMemo(() => weekPlan.reduce((acc, day) => acc + day.tasks.length, 0), [weekPlan]);
 
-  const panelClass = isExpanded
-    ? 'fixed left-1/2 top-1/2 z-[300] w-[min(96vw,1080px)] h-[min(88vh,820px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-2xl overflow-hidden animate-in fade-in duration-200'
-    : 'fixed bottom-20 right-4 sm:right-20 z-[300] w-[380px] max-w-[calc(100vw-2rem)] rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-200';
+  const panelClass =
+    'fixed left-1/2 top-1/2 z-[300] w-[min(92vw,720px)] max-h-[85vh] -translate-x-1/2 -translate-y-1/2 rounded-[18px] border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-[0_18px_40px_rgba(0,0,0,0.12)] overflow-hidden animate-in fade-in duration-200';
+
+  const quickPrompts = [
+    'Prioritize my inbox for today',
+    'Clear inbox',
+    'Delete duplicate inbox tasks',
+    'Plan this week from my notes',
+  ];
 
   const togglePlanSelected = (dayDate: string, idx: number) => {
     const key = `${dayDate}-${idx}`;
@@ -205,6 +208,13 @@ export function AiAssistant({
     }
   };
 
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      void runAssistant();
+    }
+  };
+
   const addSelectedPlanTasks = async () => {
     if (!userId) {
       setError('Please sign in to add tasks');
@@ -308,35 +318,58 @@ export function AiAssistant({
     <>
       {isOpen && (
         <div className={panelClass}>
-          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold flex items-center gap-2"><Sparkles size={14} /> AI Agent</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Conversational + action agent</p>
+          <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 bg-neutral-50/70 dark:bg-gray-900/40 flex items-start justify-between">
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold flex items-center gap-2 text-gray-900 dark:text-gray-100">
+                <Sparkles size={16} />
+                AI Agent
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                Conversational + action agent
+              </p>
             </div>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setIsExpanded((v) => !v)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1"
-                title={isExpanded ? 'Compact view' : 'Expand view'}
-              >
-                {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-              </button>
-              <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1"><X size={16} /></button>
-            </div>
+            <button
+              onClick={() => setIsOpen(false)}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1"
+              aria-label="Close AI Agent"
+              title="Close"
+            >
+              <X size={16} />
+            </button>
           </div>
 
-          <div className="p-4 h-[calc(100%-58px)] overflow-y-auto">
-            <div className={isExpanded ? 'mx-auto max-w-4xl space-y-3' : 'space-y-3'}>
+          <div className="p-5 space-y-4 overflow-y-auto max-h-[calc(85vh-120px)]">
+            <div className="space-y-3">
               <div className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-900/40 rounded-lg p-3">
                 {assistantMessage}
               </div>
 
+              <label htmlFor="ai-agent-prompt" className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Prompt
+              </label>
               <textarea
+                id="ai-agent-prompt"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleInputKeyDown}
                 placeholder="Ask me to plan, prioritize inbox, delete tasks, or clear inbox..."
-                className={`w-full ${isExpanded ? 'h-28' : 'h-24'} text-sm p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/20`}
+                aria-label="AI Agent prompt input"
+                className="w-full min-h-[120px] text-sm p-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/20"
               />
+              <p className="text-xs text-gray-500 dark:text-gray-400">Enter to run • Shift+Enter for new line</p>
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                {quickPrompts.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => setInput(prompt)}
+                    className="px-2.5 py-1.5 text-xs rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
 
               {error && (
                 <div className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded-lg border border-red-100 dark:border-red-900/40">
@@ -344,11 +377,19 @@ export function AiAssistant({
                 </div>
               )}
 
-              <div className={isExpanded ? 'flex justify-end' : ''}>
+              <div className="flex items-center justify-end gap-2 pt-1">
                 <button
+                  type="button"
+                  onClick={() => setIsOpen(false)}
+                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
                   onClick={runAssistant}
                   disabled={isLoading || !input.trim()}
-                  className={`${isExpanded ? 'px-5 py-2.5' : 'w-full py-2.5'} inline-flex items-center justify-center gap-2 rounded-lg bg-black dark:bg-white text-white dark:text-black text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-50`}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-black dark:bg-white text-white dark:text-black text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-50"
                 >
                   {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={14} />}
                   Run Agent
@@ -414,8 +455,8 @@ export function AiAssistant({
               )}
 
               {mode === 'plan' && totalPlanCount > 0 && (
-              <div className="space-y-3 pt-1">
-                <div className="text-xs text-gray-500 dark:text-gray-400">Suggested tasks: {selectedPlanCount}/{totalPlanCount} selected</div>
+                <div className="space-y-3 pt-1">
+                  <div className="text-xs text-gray-500 dark:text-gray-400">Suggested tasks: {selectedPlanCount}/{totalPlanCount} selected</div>
 
                 {assumptions.length > 0 && (
                   <div className="p-2 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700">
@@ -426,7 +467,7 @@ export function AiAssistant({
                   </div>
                 )}
 
-                <div className={`space-y-2 ${isExpanded ? 'max-h-[52vh]' : 'max-h-56'} overflow-y-auto pr-1`}>
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                   {weekPlan.map((day) => (
                     <div key={day.date} className="rounded-lg border border-gray-100 dark:border-gray-700 overflow-hidden">
                       <div className="px-2.5 py-1.5 text-[11px] font-semibold bg-gray-50 dark:bg-gray-900/40">{day.day} · {day.date}</div>
@@ -465,9 +506,9 @@ export function AiAssistant({
                   Add Selected Tasks
                 </button>
               </div>
-              )}
-            </div>
+            )}
           </div>
+        </div>
         </div>
       )}
 
