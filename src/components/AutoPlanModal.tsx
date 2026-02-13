@@ -1,15 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { useProjects } from '@/hooks/useProjects';
+import { Project, CreateProjectInput } from '@/types/project';
 import { Loader2, Sparkles, X, Check, Calendar, AlertTriangle } from 'lucide-react';
 import { Task, TaskCategory } from '@/types/task';
 
 interface AutoPlanModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddTasks: (tasks: Task[]) => void;
+  onAddTasks: (tasks: Task[]) => void | Promise<void>;
   userId: string;
+  projects: Project[];
+  addProject: (input: CreateProjectInput) => Promise<Project | undefined>;
 }
 
 interface PlannedTask {
@@ -29,8 +31,7 @@ interface WeekPlan {
   tasks: PlannedTask[];
 }
 
-export function AutoPlanModal({ isOpen, onClose, onAddTasks, userId }: AutoPlanModalProps) {
-  const { projects, addProject } = useProjects();
+export function AutoPlanModal({ isOpen, onClose, onAddTasks, userId, projects, addProject }: AutoPlanModalProps) {
   const [step, setStep] = useState<'input' | 'loading' | 'review'>('input');
   const [notes, setNotes] = useState('');
   const [weekPlan, setWeekPlan] = useState<WeekPlan[]>([]);
@@ -195,7 +196,7 @@ export function AutoPlanModal({ isOpen, onClose, onAddTasks, userId }: AutoPlanM
       });
 
       console.log(`[AutoPlan] Adding ${finalTasks.length} tasks...`);
-      onAddTasks(finalTasks);
+      await onAddTasks(finalTasks);
     } catch (e) {
       console.error('[AutoPlan] Unexpected error:', e);
     } finally {

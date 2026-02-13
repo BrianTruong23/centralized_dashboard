@@ -1,18 +1,19 @@
 import { useState, useEffect } from 'react';
 import { Task, TaskPriority, TaskEnergyLevel, TaskCategory } from '@/types/task';
+import { Project } from '@/types/project';
 import { generateId } from '@/lib/utils';
 import clsx from 'clsx';
 import { Plus } from 'lucide-react';
-import { useProjects } from '@/hooks/useProjects';
 import { parseDateFromText, dayRegex, parseTagFromText, tagRegex } from '@/lib/smartDate';
 
 interface TaskInputProps {
   onAddTask: (task: Task) => void;
   defaultDate?: string;
+  projects?: Project[];
 }
 
-export const TaskInput = ({ onAddTask, defaultDate }: TaskInputProps) => {
-  const { projects, isLoading } = useProjects();
+export const TaskInput = ({ onAddTask, defaultDate, projects = [] }: TaskInputProps) => {
+  const isLoading = false;
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [projectId, setProjectId] = useState('');
