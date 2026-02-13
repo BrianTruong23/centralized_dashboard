@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useProjects } from '@/hooks/useProjects';
 import { notesDb, Note } from '@/lib/notes';
 import { Loader2, Sparkles, Save, Plus, CheckCircle, ListPlus, Calendar, Pencil, X } from 'lucide-react';
 import { Task, TaskCategory, TaskEnergyLevel } from '@/types/task';
+import { Project, CreateProjectInput } from '@/types/project';
 
 interface ActionItem {
   title: string;
@@ -20,10 +20,11 @@ interface DailyNotesProps {
   userId?: string;
   onAddTask?: (task: Task) => void;
   showHistory?: boolean;
+  projects?: Project[];
+  addProject?: (input: CreateProjectInput) => Promise<Project | undefined>;
 }
 
-export function DailyNotes({ userId, onAddTask, showHistory = false }: DailyNotesProps) {
-  const { projects, addProject } = useProjects();
+export function DailyNotes({ userId, onAddTask, showHistory = false, projects = [], addProject }: DailyNotesProps) {
   const [noteContent, setNoteContent] = useState('');
   const [summary, setSummary] = useState('');
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
@@ -250,7 +251,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false }: DailyNote
     // Create projects sequentially to ensure we get IDs
     for (const name of missingProjects) {
         try {
-            const newProject = await addProject({ name, color: 'blue' }); // Default color
+            const newProject = await addProject?.({ name, color: 'blue' }); // Default color
             if (newProject) {
                 newProjectMap[name] = newProject.id;
             }

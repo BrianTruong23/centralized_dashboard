@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Task, TaskStatus } from '@/types/task';
+import { Project } from '@/types/project';
 import { Idea, IdeaStatus } from '@/types/idea';
 import { TaskItem } from './TaskItem';
 import { Plus } from 'lucide-react';
@@ -28,18 +29,20 @@ interface KanbanBoardProps {
   onUpdateTask?: (task: Task) => void;
   onDeleteTask?: (id: string) => void;
   onFocusTask?: (task: Task) => void;
-  
+  projects?: Project[];
+
   // Idea Mode Props
   initialIdeas?: Idea[];
   userId?: string;
 }
 
 // Wrapper for Sortable Task Item
-const SortableTaskItem = ({ task, onUpdate, onDelete, onFocus }: { 
-    task: Task; 
-    onUpdate: (task: Task) => void; 
+const SortableTaskItem = ({ task, onUpdate, onDelete, onFocus, projects }: {
+    task: Task;
+    onUpdate: (task: Task) => void;
     onDelete: (id: string) => void;
     onFocus: (task: Task) => void;
+    projects?: Project[];
 }) => {
     const {
         attributes,
@@ -58,21 +61,23 @@ const SortableTaskItem = ({ task, onUpdate, onDelete, onFocus }: {
 
     return (
         <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-            <TaskItem 
-                task={task} 
-                onUpdate={onUpdate} 
-                onDelete={onDelete} 
+            <TaskItem
+                task={task}
+                onUpdate={onUpdate}
+                onDelete={onDelete}
                 onFocus={onFocus}
+                projects={projects}
             />
         </div>
     );
 };
 
-export const KanbanBoard = ({ 
-  tasks, 
-  onUpdateTask, 
-  onDeleteTask, 
+export const KanbanBoard = ({
+  tasks,
+  onUpdateTask,
+  onDeleteTask,
   onFocusTask,
+  projects = [],
   initialIdeas,
   userId
 }: KanbanBoardProps) => {
@@ -204,12 +209,13 @@ export const KanbanBoard = ({
              <SortableContext id={id} items={itemIds} strategy={verticalListSortingStrategy}>
                  <div className="space-y-2 min-h-[50px]"> {/* min-h ensures drop target exists when empty */}
                      {items.map(item => (
-                         <SortableTaskItem 
-                            key={item.id} 
-                            task={item as Task} 
-                            onUpdate={onUpdateTask!} 
-                            onDelete={onDeleteTask!} 
+                         <SortableTaskItem
+                            key={item.id}
+                            task={item as Task}
+                            onUpdate={onUpdateTask!}
+                            onDelete={onDeleteTask!}
                             onFocus={onFocusTask!}
+                            projects={projects}
                          />
                      ))}
                      {items.length === 0 && (
@@ -282,11 +288,12 @@ export const KanbanBoard = ({
         <DragOverlay>
             {activeTask ? (
                <div className="opacity-90 rotate-2 scale-105 cursor-grabbing">
-                    <TaskItem 
-                        task={activeTask} 
-                        onUpdate={() => {}} 
-                        onDelete={() => {}} 
+                    <TaskItem
+                        task={activeTask}
+                        onUpdate={() => {}}
+                        onDelete={() => {}}
                         onFocus={() => {}}
+                        projects={projects}
                     />
                </div>
             ) : null}
