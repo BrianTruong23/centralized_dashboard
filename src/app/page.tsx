@@ -4,13 +4,15 @@ import { useState, useMemo, useEffect } from 'react';
 import { useTasks } from '@/hooks/useTasks';
 import { TaskInput } from '@/components/TaskInput';
 import { TaskList } from '@/components/TaskList';
+import { CreateTaskModal } from '@/components/CreateTaskModal';
+import { FocusSessionModal } from '@/components/FocusSessionModal';
 import { TaskItem } from '@/components/TaskItem';
 import { pickNextTask, generateDayPlan } from '@/lib/scheduler';
 import { Task } from '@/types/task';
 import { FocusTimer } from '@/components/FocusTimer';
 import { AuthModal } from '@/components/AuthModal';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { Zap, CalendarRange, Loader2, Filter } from 'lucide-react';
+import { Zap, CalendarRange, Loader2, Filter, ChevronUp, ChevronDown, Play } from 'lucide-react';
 import { DailyNotes } from '@/components/DailyNotes';
 import { AmbientSound } from '@/components/AmbientSound';
 import { Sidebar } from '@/components/Sidebar';
@@ -53,8 +55,23 @@ export default function Home() {
   const [dayPlan, setDayPlan] = useState<Task[]>([]);
   const [isFocusing, setIsFocusing] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const [currentView, setCurrentView] = useState('inbox');
+  const [currentView, setCurrentView] = useState('today');
   const [manualFocusTaskId, setManualFocusTaskId] = useState<string | null>(null);
+  const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
+  const [activeFocusTask, setActiveFocusTask] = useState<Task | null>(null);
+  const [isFocusModalOpen, setIsFocusModalOpen] = useState(false);
+
+  const getDefaultDate = () => {
+    if (currentView === 'today') {
+      return new Date().toISOString().split('T')[0];
+    }
+    if (currentView === 'upcoming') {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return tomorrow.toISOString().split('T')[0];
+    }
+    return undefined;
+  };
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -118,8 +135,31 @@ export default function Home() {
     setShowPlan(true);
   };
 
+  const moveTaskUp = (index: number) => {
+    if (index <= 0) return;
+    setDayPlan(prev => {
+        const newPlan = [...prev];
+        [newPlan[index], newPlan[index - 1]] = [newPlan[index - 1], newPlan[index]];
+        return newPlan;
+    });
+  };
+
+  const moveTaskDown = (index: number) => {
+    if (index >= dayPlan.length - 1) return;
+    setDayPlan(prev => {
+        const newPlan = [...prev];
+        [newPlan[index], newPlan[index + 1]] = [newPlan[index + 1], newPlan[index]];
+        return newPlan;
+    });
+  };
+
   const handleFocusTask = (task: Task) => {
     setManualFocusTaskId(task.id);
+  };
+
+  const handleStartFocusSession = (task: Task) => {
+    setActiveFocusTask(task);
+    setIsFocusModalOpen(true);
   };
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -224,16 +264,23 @@ export default function Home() {
       )}
 
       {/* Sidebar */}
-      <Sidebar 
-         currentView={currentView}
-         onViewChange={setCurrentView}
-         tasks={tasks} 
-         onAddTask={() => {
-            if (currentView !== 'inbox') setCurrentView('inbox');
-         }}
-         user={user}
-         onLogout={handleLogout}
-      />
+       <Sidebar 
+          currentView={currentView}
+          onViewChange={setCurrentView}
+          tasks={tasks} 
+          onAddTask={() => setIsCreateTaskModalOpen(true)}
+          user={user}
+          onLogout={handleLogout}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+       />
+
+       <CreateTaskModal
+          isOpen={isCreateTaskModalOpen}
+          onClose={() => setIsCreateTaskModalOpen(false)}
+          onAddTask={addTask}
+          userId={userId}
+       />
 
       <main className={`flex-1 overflow-y-auto px-8 py-8 ${!user ? 'blur-sm pointer-events-none select-none' : ''}`}>
         <header className="mb-8 flex items-start justify-between max-w-4xl mx-auto relative">
@@ -282,54 +329,7 @@ export default function Home() {
         </header>
 
         <div className="max-w-4xl mx-auto">
-            {suggestedTask && currentView !== 'kanban' && (
-            <section className="mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
-                {isFocusing ? (
-                <FocusTimer 
-                    task={suggestedTask} 
-                    onComplete={(t) => {
-                    updateTask({ ...t, status: 'done' });
-                    setIsFocusing(false);
-                    setManualFocusTaskId(null); 
-                    }}
-                    onStop={() => setIsFocusing(false)}
-                />
-                ) : (
-                    <div className="bg-black dark:bg-gray-800 text-white p-6 rounded-2xl shadow-lg relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-10">
-                        <Zap size={100} />
-                    </div>
-                    <div className="relative z-10">
-                        <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Focus Now</h2>
-                        <h3 className="text-2xl font-bold mb-2">{suggestedTask.title}</h3>
-                        <p className="text-gray-400 text-sm mb-4 line-clamp-2">
-                        {suggestedTask.description || 'No description provided.'}
-                        </p>
-                        <div className="flex items-center gap-3">
-                            <span className="text-xs bg-gray-800 px-2 py-1 rounded border border-gray-700">
-                            {suggestedTask.estimatedMinutes}m
-                            </span>
-                            <span className="text-xs bg-gray-800 px-2 py-1 rounded border border-gray-700 capitalize">
-                            {suggestedTask.category}
-                            </span>
-                            {suggestedTask.deadline && (
-                            <span className="text-xs text-red-400 font-medium">
-                                Due soon
-                            </span>
-                            )}
-                        </div>
-                        <button 
-                        onClick={() => setIsFocusing(true)}
-                        className="mt-6 w-full bg-white text-black font-bold py-2 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center gap-2"
-                        >
-                        <Zap size={16} fill="currentColor" />
-                        Start Focus Session
-                        </button>
-                    </div>
-                    </div>
-                )}
-            </section>
-            )}
+            {/* Focus Now section removed */}
 
             {currentView === 'kanban' ? (
                 <section className="h-[calc(100vh-200px)]">
@@ -350,8 +350,82 @@ export default function Home() {
             ) : (
                 <>
                     <section className="mb-8">
-                        <TaskInput onAddTask={addTask} />
+                    <section className="mb-8">
+                        <TaskInput 
+                            onAddTask={addTask} 
+                            defaultDate={getDefaultDate()}
+                        />
                     </section>
+                    </section>
+
+                    {(currentView === 'inbox' || currentView === 'today') && (
+                        <section className="mb-8">
+                            {!showPlan ? (
+                                <button
+                                onClick={handleGeneratePlan}
+                                className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 transition-all"
+                                >
+                                <CalendarRange size={18} />
+                                Generate Today&apos;s Plan
+                                </button>
+                            ) : (
+                                <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Today&apos;s Schedule</h2>
+                                    <button onClick={() => setShowPlan(false)} className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
+                                </div>
+                                {dayPlan.length > 0 ? (
+                                    <div className="space-y-4">
+                                    {dayPlan.map((task, idx) => (
+                                        <div key={task.id} className="flex gap-3 relative">
+                                        {idx !== dayPlan.length - 1 && <div className="absolute left-3.5 top-8 bottom-[-16px] w-0.5 bg-gray-100" />}
+                                        <div className="flex-shrink-0 w-7 h-[60px] flex flex-col items-center justify-between py-1 bg-blue-50 text-blue-600 rounded-full border border-blue-100 z-10">
+                                            <button 
+                                                onClick={() => moveTaskUp(idx)} 
+                                                disabled={idx === 0}
+                                                className="p-0.5 text-blue-400 hover:text-blue-700 disabled:opacity-30"
+                                            >
+                                                <ChevronUp size={12} />
+                                            </button>
+                                            <span className="text-xs font-bold leading-none">{idx + 1}</span>
+                                            <button 
+                                                onClick={() => moveTaskDown(idx)} 
+                                                disabled={idx === dayPlan.length - 1}
+                                                className="p-0.5 text-blue-400 hover:text-blue-700 disabled:opacity-30"
+                                            >
+                                                <ChevronDown size={12} />
+                                            </button>
+                                        </div>
+                                            <div className="flex-1 pb-1 flex items-start justify-between gap-4">
+                                                <div className="flex-1">
+                                                    <TaskItem 
+                                                        task={task} 
+                                                        onUpdate={updateTask} 
+                                                        onDelete={deleteTask} 
+                                                        onFocus={handleFocusTask}
+                                                    />
+                                                </div>
+                                                <button
+                                                    onClick={() => handleStartFocusSession(task)}
+                                                    className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-black dark:bg-white text-white dark:text-black text-xs font-bold rounded-lg hover:opacity-80 transition-opacity mt-1"
+                                                >
+                                                    <Play size={10} fill="currentColor" />
+                                                    Focus
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <div className="mt-4 pt-4 border-t text-center text-xs text-gray-400">
+                                        Total Focus: {dayPlan.reduce((acc, t) => acc + t.estimatedMinutes, 0) / 60} hours
+                                    </div>
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-gray-400 text-center py-4">No suitable tasks found for plan.</p>
+                                )}
+                                </div>
+                            )}
+                        </section>
+                    )}
 
                     <section className="mb-8">
                         <div className="flex items-center justify-between mb-4">
@@ -368,60 +442,32 @@ export default function Home() {
                     </section>
                     
                     {(currentView === 'inbox' || currentView === 'today') && (
-                        <>
-                            <section className="mb-8">
-                                {!showPlan ? (
-                                    <button
-                                    onClick={handleGeneratePlan}
-                                    className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 transition-all"
-                                    >
-                                    <CalendarRange size={18} />
-                                    Generate Today&apos;s Plan
-                                    </button>
-                                ) : (
-                                    <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Today&apos;s Schedule</h2>
-                                        <button onClick={() => setShowPlan(false)} className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
-                                    </div>
-                                    {dayPlan.length > 0 ? (
-                                        <div className="space-y-4">
-                                        {dayPlan.map((task, idx) => (
-                                            <div key={task.id} className="flex gap-3 relative">
-                                            {idx !== dayPlan.length - 1 && <div className="absolute left-3.5 top-8 bottom-[-16px] w-0.5 bg-gray-100" />}
-                                            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xs font-bold border border-blue-100 z-10">
-                                                {idx + 1}
-                                            </div>
-                                            <div className="flex-1 pb-1">
-                                                <TaskItem 
-                                                    task={task} 
-                                                    onUpdate={updateTask} 
-                                                    onDelete={deleteTask} 
-                                                    onFocus={handleFocusTask}
-                                                />
-                                            </div>
-                                            </div>
-                                        ))}
-                                        <div className="mt-4 pt-4 border-t text-center text-xs text-gray-400">
-                                            Total Focus: {dayPlan.reduce((acc, t) => acc + t.estimatedMinutes, 0) / 60} hours
-                                        </div>
-                                        </div>
-                                    ) : (
-                                        <p className="text-sm text-gray-400 text-center py-4">No suitable tasks found for plan.</p>
-                                    )}
-                                    </div>
-                                )}
-                            </section>
-
-                            <section className="mb-8">
-                                <DailyNotes userId={userId} onAddTask={addTask} showHistory={false} />
-                            </section>
-                        </>
+                        <section className="mb-8">
+                            <DailyNotes userId={userId} onAddTask={addTask} showHistory={false} />
+                        </section>
                     )}
                 </>
             )}
         </div>
       </main>
+      <CreateTaskModal 
+        isOpen={isCreateTaskModalOpen}
+        onClose={() => setIsCreateTaskModalOpen(false)}
+        onAddTask={addTask}
+        userId={user?.id}
+        defaultDate={getDefaultDate()}
+      />
+
+      <FocusSessionModal 
+        isOpen={isFocusModalOpen}
+        onClose={() => setIsFocusModalOpen(false)}
+        task={activeFocusTask}
+        onComplete={(task) => {
+          updateTask({ ...task, status: 'done' });
+          setIsFocusModalOpen(false);
+          setActiveFocusTask(null);
+        }}
+      />
       <AmbientSound />
     </div>
   );
