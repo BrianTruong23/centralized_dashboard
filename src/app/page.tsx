@@ -696,9 +696,11 @@ export default function Home() {
       />
       <AiAssistant
         userId={user?.id}
+        tasks={tasks}
         projects={projects}
         addProject={addProjectFn}
         onAddTasks={handleAutoPlanTasks}
+        onDeleteTask={deleteTask}
         proOverride={forceProUser}
         planningPreferences={planningPreferences}
       />
