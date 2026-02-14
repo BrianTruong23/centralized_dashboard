@@ -335,23 +335,54 @@ export const db = {
 
   async createOnboardingStatus(userId: string, preferences: { weekStartsMonday: boolean; maxTasksPerDay: number }): Promise<void> {
     const token = requireToken();
-    await rawInsert('onboarding_status', {
+    const payload = {
       user_id: userId,
       completed: true,
       completed_at: new Date().toISOString(),
       week_starts_monday: preferences.weekStartsMonday,
       max_tasks_per_day: preferences.maxTasksPerDay,
-    }, token);
+    };
+
+    try {
+      await rawInsert('onboarding_status', payload, token);
+    } catch (e: any) {
+      if (e.code === '23505') {
+        // Already exists, so update it
+        // We need to exclude user_id from the update payload technically, or just include it, it doesn't matter for update usually if it matches.
+        // But rawUpdate takes a filter.
+        await rawUpdate('onboarding_status', {
+           completed: true,
+           completed_at: payload.completed_at,
+           week_starts_monday: payload.week_starts_monday,
+           max_tasks_per_day: payload.max_tasks_per_day,
+        }, { 'user_id': `eq.${userId}` }, token);
+      } else {
+        throw e;
+      }
+    }
   },
 
   async skipOnboarding(userId: string): Promise<void> {
     const token = requireToken();
-    await rawInsert('onboarding_status', {
+    const payload = {
       user_id: userId,
       completed: true,
       completed_at: new Date().toISOString(),
       week_starts_monday: true,
       max_tasks_per_day: 8,
-    }, token);
+    };
+
+    try {
+      await rawInsert('onboarding_status', payload, token);
+    } catch (e: any) {
+      if (e.code === '23505') {
+        await rawUpdate('onboarding_status', {
+           completed: true,
+           completed_at: payload.completed_at,
+        }, { 'user_id': `eq.${userId}` }, token);
+      } else {
+        throw e;
+      }
+    }
   },
 };

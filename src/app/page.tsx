@@ -11,6 +11,7 @@ import { pickNextTask, generateDayPlan, filterTasksDueToday } from '@/lib/schedu
 import { Task } from '@/types/task';
 import { AuthModal } from '@/components/AuthModal';
 import { Zap, CalendarRange, Loader2, Filter, ChevronUp, ChevronDown, Play, Sparkles, Trash2 } from 'lucide-react';
+import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { DailyNotes } from '@/components/DailyNotes';
 import { DailyNotesHistory } from '@/components/DailyNotesHistory';
 import { AmbientSound } from '@/components/AmbientSound';
@@ -71,8 +72,17 @@ function LoadingScreen() {
 }
 
 export default function Home() {
-  const { tasks, addTask, addTasksBatch, updateTask, deleteTask, isLoaded } = useTasks();
+  const { tasks, addTask: _addTask, addTasksBatch, updateTask, deleteTask, isLoaded } = useTasks();
   const { projects, addProject: addProjectFn } = useProjects();
+  
+  const [tutorialStep, setTutorialStep] = useState<'none' | 'input' | 'list'>('none');
+
+  const addTask = async (task: Task) => {
+    if (tutorialStep === 'input') {
+      setTutorialStep('list');
+    }
+    await _addTask(task);
+  };
   const { isPro, loading: premiumLoading } = usePremium();
   const [forceProUser, setForceProUser] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -96,6 +106,14 @@ export default function Home() {
   });
   const [currentView, setCurrentView] = useState('today');
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+
+  const handleStartTutorial = () => {
+    setTutorialStep('input');
+  };
+
+  const handleDismissTutorial = () => {
+    setTutorialStep('none');
+  };
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   
   // Resolve project name for display
@@ -502,6 +520,7 @@ export default function Home() {
           onToggleForceProUser={setForceProUser}
           planningPreferences={planningPreferences}
           onPlanningPreferencesChange={setPlanningPreferences}
+          onRestartOnboarding={() => setIsOnboardingOpen(true)}
        />
 
        {/* CreateTaskModal rendered once at the bottom of the component */}
@@ -783,7 +802,26 @@ export default function Home() {
         isOpen={isOnboardingOpen}
         onComplete={handleOnboardingComplete}
         onSkip={handleOnboardingSkip}
+        onStartTutorial={handleStartTutorial}
       />
+
+      {tutorialStep === 'input' && (
+        <TutorialOverlay
+          targetId="task-input"
+          message="This is where you add tasks"
+          position="bottom"
+          onDismiss={handleDismissTutorial}
+        />
+      )}
+
+      {tutorialStep === 'list' && (
+        <TutorialOverlay
+          targetId="first-task"
+          message="Great! Your task is now here"
+          position="right"
+          onDismiss={handleDismissTutorial}
+        />
+      )}
 
       <FocusSessionModal 
         isOpen={isFocusModalOpen}

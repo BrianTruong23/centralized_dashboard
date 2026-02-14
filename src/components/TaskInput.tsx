@@ -113,7 +113,7 @@ export const TaskInput = ({ onAddTask, defaultDate, projects = [], defaultProjec
   };
 
   return (
-    <div className="mb-8 p-1">
+    <div className="mb-8 p-1" data-tutorial="task-input">
       <form onSubmit={handleSubmit} className="relative group">
         <div className="relative flex items-center gap-3 border-b border-gray-200 dark:border-gray-800 pb-2 focus-within:border-gray-400 dark:focus-within:border-gray-600 transition-colors">
           <div className="text-gray-400 z-20">
