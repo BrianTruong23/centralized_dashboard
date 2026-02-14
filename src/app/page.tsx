@@ -29,6 +29,10 @@ import { PlanningPreferences, defaultPlanningPreferences } from '@/types/plannin
 import OnboardingModal from '@/components/OnboardingModal';
 import { OnboardingPreferences } from '@/types/onboarding';
 import { db } from '@/lib/db';
+import { DailyWinPrompt } from '@/components/DailyWinPrompt';
+import { WeeklyRecapModal } from '@/components/WeeklyRecapModal';
+import { PostponePrompt } from '@/components/PostponePrompt';
+import { shouldShowWeeklyRecap, markWeeklyRecapShown, getTasksNeedingAttention, incrementPostponeCount } from '@/lib/accountability';
 
 const loadingMessages = [
   'Loading dashboard...',
@@ -97,6 +101,10 @@ export default function Home() {
   const [currentView, setCurrentView] = useState('today');
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
+
+  // Gentle Accountability State
+  const [isWeeklyRecapOpen, setIsWeeklyRecapOpen] = useState(false);
+  const [postponedTask, setPostponedTask] = useState<Task | null>(null);
   
   // Resolve project name for display
   const currentProject = projects.find(p => `project-${p.id}` === currentView);
@@ -152,6 +160,23 @@ export default function Home() {
       // ignore storage errors
     }
   }, [planningPreferences]);
+
+  // Check if weekly recap should be shown
+  useEffect(() => {
+    if (user && tasks.length > 0 && shouldShowWeeklyRecap()) {
+      setIsWeeklyRecapOpen(true);
+    }
+  }, [user, tasks]);
+
+  // Check for tasks needing attention (repeatedly postponed)
+  useEffect(() => {
+    if (user && tasks.length > 0) {
+      const tasksNeedingAttention = getTasksNeedingAttention(tasks);
+      if (tasksNeedingAttention.length > 0 && !postponedTask) {
+        setPostponedTask(tasksNeedingAttention[0]);
+      }
+    }
+  }, [user, tasks, postponedTask]);
 
   const getDefaultDate = () => {
     if (currentView === 'today') {
@@ -358,6 +383,40 @@ export default function Home() {
       } catch (e: any) {
           console.error(`[handleAutoPlanTasks] ✗ Batch insert failed:`, e?.message || e);
       }
+  };
+
+  // Handlers for Gentle Accountability
+  const handlePostponeDelete = (taskId: string) => {
+    deleteTask(taskId);
+    setPostponedTask(null);
+  };
+
+  const handlePostponeDefer = (task: Task, newDeadline: string) => {
+    updateTask({
+      ...task,
+      deadline: newDeadline,
+      postponeCount: (task.postponeCount || 0) + 1,
+      lastPostponedAt: new Date().toISOString(),
+    });
+    setPostponedTask(null);
+  };
+
+  const handlePostponeSchedule = (task: Task) => {
+    // Open the task edit modal or focus session
+    handleFocusTask(task);
+    setPostponedTask(null);
+  };
+
+  const handleSelectDailyWin = (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (task) {
+      handleFocusTask(task);
+    }
+  };
+
+  const handleCloseWeeklyRecap = () => {
+    markWeeklyRecapShown();
+    setIsWeeklyRecapOpen(false);
   };
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -799,6 +858,32 @@ export default function Home() {
         userId={user?.id}
       />
       <AmbientSound />
+
+      {/* Gentle Accountability Components */}
+      {user && (
+        <>
+          <DailyWinPrompt
+            tasks={tasks}
+            onSelectTask={handleSelectDailyWin}
+            userId={user.id}
+          />
+          <WeeklyRecapModal
+            tasks={tasks}
+            onDeleteTask={deleteTask}
+            onClose={handleCloseWeeklyRecap}
+            isOpen={isWeeklyRecapOpen}
+          />
+          {postponedTask && (
+            <PostponePrompt
+              task={postponedTask}
+              onDelete={handlePostponeDelete}
+              onDefer={handlePostponeDefer}
+              onSchedule={handlePostponeSchedule}
+              onDismiss={() => setPostponedTask(null)}
+            />
+          )}
+        </>
+      )}
     </div>
   );
 }

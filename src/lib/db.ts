@@ -117,6 +117,9 @@ const mapRowToTask = (row: any): Task => ({
   tags: row.tags || [],
   createdAt: new Date(row.created_at).getTime(),
   project_id: row.project_id,
+  intentLabel: row.intent_label,
+  postponeCount: row.postpone_count || 0,
+  lastPostponedAt: row.last_postponed_at,
 });
 
 function taskToRow(task: Task): Record<string, any> {
@@ -134,6 +137,9 @@ function taskToRow(task: Task): Record<string, any> {
     completed: task.status === 'done',
     status: task.status,
     created_at: new Date(task.createdAt).toISOString(),
+    intent_label: task.intentLabel || null,
+    postpone_count: task.postponeCount || 0,
+    last_postponed_at: task.lastPostponedAt || null,
   };
   if (task.project_id) {
     row.project_id = task.project_id;
@@ -197,6 +203,9 @@ export const db = {
       completed: task.status === 'done',
       status: task.status,
       project_id: task.project_id,
+      intent_label: task.intentLabel || null,
+      postpone_count: task.postponeCount || 0,
+      last_postponed_at: task.lastPostponedAt || null,
     }, { 'id': `eq.${task.id}` }, token);
     if (task.status === 'done' && task.user_id) {
       logActivity(token, task.user_id, 'completed_task', task.id, { title: task.title });

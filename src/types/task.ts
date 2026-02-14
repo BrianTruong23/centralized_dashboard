@@ -1,6 +1,7 @@
 export type TaskPriority = 1 | 2 | 3 | 4 | 5;
 export type TaskEnergyLevel = 'low' | 'medium' | 'high';
 export type TaskStatus = 'todo' | 'doing' | 'done';
+export type IntentLabel = 'Deep' | 'Quick' | 'Waiting' | 'Errand' | 'Message';
 
 // Categories are now effectively Projects, so we allow any string
 export type TaskCategory = string;
@@ -26,4 +27,9 @@ export interface Task {
   suggestedEnd?: string;
   planningWeekId?: string;
   planningMetadata?: Record<string, any>;
+
+  // Intent Labels & Gentle Accountability
+  intentLabel?: IntentLabel;
+  postponeCount?: number; // Number of times this task has been postponed
+  lastPostponedAt?: string; // ISO timestamp of last postpone
 }

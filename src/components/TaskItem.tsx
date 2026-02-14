@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Task, TaskPriority, TaskStatus, TaskCategory, TaskEnergyLevel } from '@/types/task';
+import { Task, TaskPriority, TaskStatus, TaskCategory, TaskEnergyLevel, IntentLabel } from '@/types/task';
 import { Project } from '@/types/project';
 import clsx from 'clsx';
 import { CheckCircle2, Circle, Trash2, Zap, Clock, Calendar, Pencil, X, Check } from 'lucide-react';
@@ -16,6 +16,19 @@ interface TaskItemProps {
 
 
 const energyLevels: TaskEnergyLevel[] = ['low', 'medium', 'high'];
+const intentLabels: IntentLabel[] = ['Deep', 'Quick', 'Waiting', 'Errand', 'Message'];
+
+// Intent label styling
+const getIntentLabelStyle = (label?: IntentLabel) => {
+  switch (label) {
+    case 'Deep': return { bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-700 dark:text-purple-300', border: 'border-purple-200 dark:border-purple-800' };
+    case 'Quick': return { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-300', border: 'border-green-200 dark:border-green-800' };
+    case 'Waiting': return { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-700 dark:text-yellow-300', border: 'border-yellow-200 dark:border-yellow-800' };
+    case 'Errand': return { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-800' };
+    case 'Message': return { bg: 'bg-pink-100 dark:bg-pink-900/30', text: 'text-pink-700 dark:text-pink-300', border: 'border-pink-200 dark:border-pink-800' };
+    default: return { bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-600 dark:text-gray-400', border: 'border-gray-200 dark:border-gray-700' };
+  }
+};
 
 export const TaskItem = ({ task, onUpdate, onDelete, onFocus, projects = [] }: TaskItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -137,7 +150,7 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus, projects = [] }: T
 
             <div>
               <label className="text-xs text-gray-500 block mb-1">Est. Minutes</label>
-              <input 
+              <input
                 type="number"
                 value={editForm.estimatedMinutes}
                 onChange={(e) => setEditForm({ ...editForm, estimatedMinutes: Number(e.target.value) })}
@@ -145,6 +158,29 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus, projects = [] }: T
                 min={0}
                 step={5}
               />
+            </div>
+
+            <div className="col-span-2">
+              <label className="text-xs text-gray-500 block mb-1">Intent Label</label>
+              <div className="flex gap-2">
+                {intentLabels.map(label => {
+                  const style = getIntentLabelStyle(label);
+                  const isSelected = editForm.intentLabel === label;
+                  return (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, intentLabel: isSelected ? undefined : label })}
+                      className={clsx(
+                        'px-3 py-1.5 text-xs font-medium rounded-full border transition-all',
+                        isSelected ? `${style.bg} ${style.text} ${style.border}` : 'bg-white dark:bg-gray-900 text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                      )}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
         </div>
 
@@ -179,6 +215,17 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus, projects = [] }: T
           )}>
             {task.title}
           </span>
+          {/* Intent label badge */}
+          {task.intentLabel && (
+            <span className={clsx(
+              'px-2 py-0.5 text-[10px] font-medium rounded-full border',
+              getIntentLabelStyle(task.intentLabel).bg,
+              getIntentLabelStyle(task.intentLabel).text,
+              getIntentLabelStyle(task.intentLabel).border
+            )}>
+              {task.intentLabel}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-3 text-[11px] text-gray-400 dark:text-gray-500 font-medium h-4">
