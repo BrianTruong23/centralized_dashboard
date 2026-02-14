@@ -16,7 +16,7 @@ export async function POST(req: Request) {
 
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
-      log('ERROR: API Key missing. Check OPENROUTER_API_KEY in .env.local');
+      log('ERROR: API Key missing. Please add OPENROUTER_API_KEY to your environment variables (e.g. Vercel Project Settings or .env.local).');
       return NextResponse.json({ error: 'OpenRouter API key is missing' }, { status: 500 });
     }
     log(`API Key found (ends with ...${apiKey.slice(-4)})`);
