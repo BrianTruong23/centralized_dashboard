@@ -11,6 +11,7 @@ import { pickNextTask, generateDayPlan, filterTasksDueToday } from '@/lib/schedu
 import { Task } from '@/types/task';
 import { AuthModal } from '@/components/AuthModal';
 import { Zap, CalendarRange, Loader2, Filter, ChevronUp, ChevronDown, Play, Sparkles, Trash2 } from 'lucide-react';
+import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { DailyNotes } from '@/components/DailyNotes';
 import { DailyNotesHistory } from '@/components/DailyNotesHistory';
 import { AmbientSound } from '@/components/AmbientSound';
@@ -29,6 +30,7 @@ import { PlanningPreferences, defaultPlanningPreferences } from '@/types/plannin
 import OnboardingModal from '@/components/OnboardingModal';
 import { OnboardingPreferences } from '@/types/onboarding';
 import { db } from '@/lib/db';
+import confetti from 'canvas-confetti';
 
 const loadingMessages = [
   'Loading dashboard...',
@@ -71,8 +73,40 @@ function LoadingScreen() {
 }
 
 export default function Home() {
-  const { tasks, addTask, addTasksBatch, updateTask, deleteTask, isLoaded } = useTasks();
+  const { tasks, addTask: _addTask, addTasksBatch, updateTask: _updateTask, deleteTask, isLoaded } = useTasks();
   const { projects, addProject: addProjectFn } = useProjects();
+  
+  const [tutorialStep, setTutorialStep] = useState<'none' | 'input' | 'list'>('none');
+
+  const updateTask = async (task: Task) => {
+      // Check if we are completing the FIRST task (tutorial step 'list')
+      if (tutorialStep === 'list' && task.status === 'done') {
+          // Fire confetti for completion
+          confetti({
+            particleCount: 150,
+            spread: 100,
+            origin: { y: 0.6 },
+            colors: ['#22c55e', '#3b82f6', '#f59e0b'] // Green/Blue/Amber
+          });
+          setTutorialStep('none'); // End tutorial
+      }
+      await _updateTask(task);
+  };
+
+  const addTask = async (task: Task) => {
+    if (tutorialStep === 'input') {
+      setTutorialStep('list');
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+    }
+    await _addTask(task);
+  };
+
+
+
   const { isPro, loading: premiumLoading } = usePremium();
   const [forceProUser, setForceProUser] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -94,8 +128,17 @@ export default function Home() {
     }
     return null;
   });
+
   const [currentView, setCurrentView] = useState('today');
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+
+  const handleStartTutorial = () => {
+    setTutorialStep('input');
+  };
+
+  const handleDismissTutorial = () => {
+    setTutorialStep('none');
+  };
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   
   // Resolve project name for display
@@ -214,8 +257,9 @@ export default function Home() {
         if (!status || !status.completed) {
           setIsOnboardingOpen(true);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error checking onboarding status:', error);
+        if (error.details) console.error('Error details:', error.details);
         setOnboardingChecked(true);
       }
     };
@@ -501,6 +545,7 @@ export default function Home() {
           onToggleForceProUser={setForceProUser}
           planningPreferences={planningPreferences}
           onPlanningPreferencesChange={setPlanningPreferences}
+          onRestartOnboarding={() => setIsOnboardingOpen(true)}
        />
 
        {/* CreateTaskModal rendered once at the bottom of the component */}
@@ -610,6 +655,7 @@ export default function Home() {
                             defaultDate={getDefaultDate()}
                             projects={projects}
                             defaultProjectId={currentProject?.id}
+                            isHighlighted={tutorialStep === 'input'}
                         />
                     </section>
 
@@ -782,8 +828,37 @@ export default function Home() {
         isOpen={isOnboardingOpen}
         onComplete={handleOnboardingComplete}
         onSkip={handleOnboardingSkip}
+        onStartTutorial={handleStartTutorial}
       />
 
+      {tutorialStep === 'input' && (
+        <>
+          <TutorialOverlay
+            targetId="task-input"
+            message="This is where you add tasks"
+            position="bottom"
+            onDismiss={handleDismissTutorial}
+          />
+          <TutorialOverlay
+            targetId="sidebar-add-task"
+            message="Or use this button"
+            position="right"
+            onDismiss={handleDismissTutorial}
+          />
+        </>
+      )}
+
+      {tutorialStep === 'list' && (
+        <TutorialOverlay
+          targetId="first-task"
+          message="Awesome! You just added your first task. Mark it done!"
+          position="right"
+          onDismiss={handleDismissTutorial}
+        />
+      )}
+
+      {/* Show completion message briefly? Actually user said: "when user is done... confetti... and 'Way to go! You just finished your first task!'" */}
+      
       <FocusSessionModal 
         isOpen={isFocusModalOpen}
         onClose={() => setIsFocusModalOpen(false)}

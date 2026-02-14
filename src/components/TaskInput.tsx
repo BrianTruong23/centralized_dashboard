@@ -11,9 +11,10 @@ interface TaskInputProps {
   defaultDate?: string;
   projects?: Project[];
   defaultProjectId?: string;
+  isHighlighted?: boolean;
 }
 
-export const TaskInput = ({ onAddTask, defaultDate, projects = [], defaultProjectId }: TaskInputProps) => {
+export const TaskInput = ({ onAddTask, defaultDate, projects = [], defaultProjectId, isHighlighted }: TaskInputProps) => {
   const isLoading = false;
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -113,7 +114,13 @@ export const TaskInput = ({ onAddTask, defaultDate, projects = [], defaultProjec
   };
 
   return (
-    <div className="mb-8 p-1">
+    <div 
+      className={clsx(
+        "mb-8 p-1 transition-all duration-300 rounded-xl", 
+        isHighlighted && "ring-4 ring-blue-500/30 bg-blue-50/50 dark:bg-blue-900/20"
+      )} 
+      data-tutorial="task-input"
+    >
       <form onSubmit={handleSubmit} className="relative group">
         <div className="relative flex items-center gap-3 border-b border-gray-200 dark:border-gray-800 pb-2 focus-within:border-gray-400 dark:focus-within:border-gray-600 transition-colors">
           <div className="text-gray-400 z-20">

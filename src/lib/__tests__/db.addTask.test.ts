@@ -25,7 +25,12 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockToken = 'test-jwt-token';
   // Default: all fetches succeed
-  mockFetch.mockResolvedValue({ ok: true, status: 201, json: () => Promise.resolve({}) });
+  mockFetch.mockResolvedValue({ 
+    ok: true, 
+    status: 201, 
+    json: () => Promise.resolve({}),
+    text: () => Promise.resolve('{}') 
+  });
 });
 
 const task = {
@@ -75,6 +80,7 @@ describe('db.addTask', () => {
   test('throws on insert error', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false, status: 403,
+      text: () => Promise.resolve(JSON.stringify({ code: '42501', message: 'RLS violation' })),
       json: () => Promise.resolve({ code: '42501', message: 'RLS violation' }),
     });
     await expect(db.addTask(task)).rejects.toMatchObject({ code: '42501' });

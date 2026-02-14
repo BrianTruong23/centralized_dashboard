@@ -29,15 +29,16 @@ export const TaskList = ({ tasks, onUpdateTask, onDeleteTask, onFocusTask, proje
 
   return (
     <div className="space-y-2">
-      {sortedTasks.map((task) => (
-        <TaskItem
-          key={task.id}
-          task={task}
-          onUpdate={onUpdateTask}
-          onDelete={onDeleteTask}
-          onFocus={onFocusTask}
-          projects={projects}
-        />
+      {sortedTasks.map((task, index) => (
+        <div key={task.id} data-tutorial={index === 0 ? "first-task" : undefined}>
+          <TaskItem
+            task={task}
+            onUpdate={onUpdateTask}
+            onDelete={onDeleteTask}
+            onFocus={onFocusTask}
+            projects={projects}
+          />
+        </div>
       ))}
     </div>
   );
