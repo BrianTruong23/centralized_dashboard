@@ -44,6 +44,7 @@ interface SidebarProps {
   onToggleForceProUser: (enabled: boolean) => void;
   planningPreferences: PlanningPreferences;
   onPlanningPreferencesChange: (next: PlanningPreferences) => void;
+  onRestartOnboarding: () => void;
 }
 
 export const Sidebar = ({
@@ -65,6 +66,7 @@ export const Sidebar = ({
   onToggleForceProUser,
   planningPreferences,
   onPlanningPreferencesChange,
+  onRestartOnboarding,
 }: SidebarProps) => {
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -238,6 +240,7 @@ export const Sidebar = ({
          onToggleForceProUser={onToggleForceProUser}
          planningPreferences={planningPreferences}
          onPlanningPreferencesChange={onPlanningPreferencesChange}
+         onRestartOnboarding={onRestartOnboarding}
       />
 
       <ActivityLogModal
