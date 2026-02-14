@@ -30,6 +30,7 @@ import { PlanningPreferences, defaultPlanningPreferences } from '@/types/plannin
 import OnboardingModal from '@/components/OnboardingModal';
 import { OnboardingPreferences } from '@/types/onboarding';
 import { db } from '@/lib/db';
+import confetti from 'canvas-confetti';
 
 const loadingMessages = [
   'Loading dashboard...',
@@ -72,14 +73,34 @@ function LoadingScreen() {
 }
 
 export default function Home() {
-  const { tasks, addTask: _addTask, addTasksBatch, updateTask, deleteTask, isLoaded } = useTasks();
+  const { tasks, addTask: _addTask, addTasksBatch, updateTask: _updateTask, deleteTask, isLoaded } = useTasks();
   const { projects, addProject: addProjectFn } = useProjects();
   
   const [tutorialStep, setTutorialStep] = useState<'none' | 'input' | 'list'>('none');
 
+  const updateTask = async (task: Task) => {
+      // Check if we are completing the FIRST task (tutorial step 'list')
+      if (tutorialStep === 'list' && task.status === 'done') {
+          // Fire confetti for completion
+          confetti({
+            particleCount: 150,
+            spread: 100,
+            origin: { y: 0.6 },
+            colors: ['#22c55e', '#3b82f6', '#f59e0b'] // Green/Blue/Amber
+          });
+          setTutorialStep('none'); // End tutorial
+      }
+      await _updateTask(task);
+  };
+
   const addTask = async (task: Task) => {
     if (tutorialStep === 'input') {
       setTutorialStep('list');
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
     }
     await _addTask(task);
   };
@@ -630,6 +651,7 @@ export default function Home() {
                             defaultDate={getDefaultDate()}
                             projects={projects}
                             defaultProjectId={currentProject?.id}
+                            isHighlighted={tutorialStep === 'input'}
                         />
                     </section>
 
@@ -806,23 +828,33 @@ export default function Home() {
       />
 
       {tutorialStep === 'input' && (
-        <TutorialOverlay
-          targetId="task-input"
-          message="This is where you add tasks"
-          position="bottom"
-          onDismiss={handleDismissTutorial}
-        />
+        <>
+          <TutorialOverlay
+            targetId="task-input"
+            message="This is where you add tasks"
+            position="bottom"
+            onDismiss={handleDismissTutorial}
+          />
+          <TutorialOverlay
+            targetId="sidebar-add-task"
+            message="Or use this button"
+            position="right"
+            onDismiss={handleDismissTutorial}
+          />
+        </>
       )}
 
       {tutorialStep === 'list' && (
         <TutorialOverlay
           targetId="first-task"
-          message="Great! Your task is now here"
+          message="Awesome! You just added your first task. Mark it done!"
           position="right"
           onDismiss={handleDismissTutorial}
         />
       )}
 
+      {/* Show completion message briefly? Actually user said: "when user is done... confetti... and 'Way to go! You just finished your first task!'" */}
+      
       <FocusSessionModal 
         isOpen={isFocusModalOpen}
         onClose={() => setIsFocusModalOpen(false)}
