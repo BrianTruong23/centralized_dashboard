@@ -104,6 +104,9 @@ export default function Home() {
     }
     await _addTask(task);
   };
+
+
+
   const { isPro, loading: premiumLoading } = usePremium();
   const [forceProUser, setForceProUser] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -125,6 +128,7 @@ export default function Home() {
     }
     return null;
   });
+
   const [currentView, setCurrentView] = useState('today');
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
