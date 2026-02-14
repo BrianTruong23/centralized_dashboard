@@ -31,3 +31,14 @@ export function parseDateKey(dateKey: string): Date {
   // Interpret YYYY-MM-DD as local calendar date.
   return new Date(year, month - 1, day);
 }
+
+export function formatDateDisplay(dateKey: string): string {
+  if (!dateKey) return '';
+  const normalized = dateKey.slice(0, 10);
+  const [year, month, day] = normalized.split('-').map(Number);
+  
+  if (!year || !month || !day) return dateKey;
+
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[month - 1]} ${day}`;
+}
