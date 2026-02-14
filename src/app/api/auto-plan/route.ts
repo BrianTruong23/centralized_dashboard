@@ -48,7 +48,8 @@ export async function POST(req: Request) {
 
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: 'OpenRouter API key is missing' }, { status: 500 });
+      console.error('ERROR: OpenRouter API Key is missing. Please add OPENROUTER_API_KEY to your environment variables (e.g. Vercel Project Settings or .env.local).');
+      return NextResponse.json({ error: 'OpenRouter API key is missing in server environment' }, { status: 500 });
     }
 
     const controller = new AbortController();
