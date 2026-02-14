@@ -19,6 +19,7 @@ interface SettingsModalProps {
   onToggleForceProUser: (enabled: boolean) => void;
   planningPreferences: PlanningPreferences;
   onPlanningPreferencesChange: (next: PlanningPreferences) => void;
+  onRestartOnboarding: () => void;
 }
 
 export function SettingsModal({
@@ -33,6 +34,7 @@ export function SettingsModal({
   onToggleForceProUser,
   planningPreferences,
   onPlanningPreferencesChange,
+  onRestartOnboarding,
 }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'billing' | 'security' | 'danger' | 'debug'>('profile');
   const [loading, setLoading] = useState(false);
@@ -377,6 +379,17 @@ export function SettingsModal({
                               className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900 min-h-20"
                             />
                         </div>
+                    </div>
+                    <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+                        <button
+                            onClick={() => {
+                                onClose();
+                                onRestartOnboarding();
+                            }}
+                            className="w-full py-2 bg-black dark:bg-white text-white dark:text-black font-medium rounded-lg hover:opacity-90 transition-opacity"
+                        >
+                            Restart Onboarding
+                        </button>
                     </div>
                 </div>
             )}

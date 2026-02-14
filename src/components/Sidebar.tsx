@@ -44,6 +44,7 @@ interface SidebarProps {
   onToggleForceProUser: (enabled: boolean) => void;
   planningPreferences: PlanningPreferences;
   onPlanningPreferencesChange: (next: PlanningPreferences) => void;
+  onRestartOnboarding: () => void;
 }
 
 export const Sidebar = ({
@@ -65,6 +66,7 @@ export const Sidebar = ({
   onToggleForceProUser,
   planningPreferences,
   onPlanningPreferencesChange,
+  onRestartOnboarding,
 }: SidebarProps) => {
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -143,6 +145,7 @@ export const Sidebar = ({
         {/* ... (Actions same as before) ... */}
         <button 
           onClick={onAddTask}
+          data-tutorial="sidebar-add-task"
           className="w-full flex items-center gap-2 text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white px-2 py-2 mb-4 hover:bg-white dark:hover:bg-gray-900 rounded-md shadow-sm border border-transparent hover:border-gray-100 dark:hover:border-gray-800 transition-all group"
         >
           <div className="bg-gray-900 dark:bg-gray-100 rounded-full p-0.5 text-white dark:text-black">
@@ -238,6 +241,7 @@ export const Sidebar = ({
          onToggleForceProUser={onToggleForceProUser}
          planningPreferences={planningPreferences}
          onPlanningPreferencesChange={onPlanningPreferencesChange}
+         onRestartOnboarding={onRestartOnboarding}
       />
 
       <ActivityLogModal

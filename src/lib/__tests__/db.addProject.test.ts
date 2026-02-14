@@ -24,10 +24,21 @@ beforeEach(() => {
 });
 
 function ok(data: any, status = 200) {
-  return { ok: true, status, json: () => Promise.resolve(data) } as Response;
+  return { 
+    ok: true, 
+    status, 
+    json: () => Promise.resolve(data),
+    text: () => Promise.resolve(JSON.stringify(data)) 
+  } as Response;
 }
 function err(body: any, status: number) {
-  return { ok: false, status, statusText: 'Error', json: () => Promise.resolve(body) } as Response;
+  return { 
+    ok: false, 
+    status, 
+    statusText: 'Error', 
+    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body))
+  } as Response;
 }
 
 const project = { id: 'p1', user_id: 'u1', name: 'Side', color: '#f00', created_at: '2025-01-01' };
