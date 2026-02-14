@@ -22,6 +22,41 @@ function headers(token: string): Record<string, string> {
   };
 }
 
+// ── Error Handling ─────────────────────────────────────────────────────────
+
+export class DbError extends Error {
+  code: string;
+  details?: any;
+
+  constructor(code: string, message: string, details?: any) {
+    super(message);
+    this.code = code;
+    this.details = details;
+    this.name = 'DbError';
+  }
+}
+
+async function parseErrorBody(res: Response): Promise<{ code: string; message: string; details?: any }> {
+  try {
+    const text = await res.text();
+    if (!text) {
+      return { code: String(res.status), message: res.statusText };
+    }
+    try {
+      const json = JSON.parse(text);
+      return {
+        code: json.code || String(res.status),
+        message: json.message || res.statusText,
+        details: json.details
+      };
+    } catch {
+      return { code: String(res.status), message: text || res.statusText };
+    }
+  } catch (e) {
+    return { code: String(res.status), message: res.statusText };
+  }
+}
+
 async function rawInsert(
   table: string,
   payload: Record<string, any> | Record<string, any>[],
@@ -33,8 +68,8 @@ async function rawInsert(
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw { code: body.code || String(res.status), message: body.message || res.statusText, details: body.details };
+    const err = await parseErrorBody(res);
+    throw new DbError(err.code, err.message, err.details);
   }
 }
 
@@ -55,8 +90,8 @@ async function rawSelect<T = any>(
     headers: headers(token),
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw { code: body.code || String(res.status), message: body.message || res.statusText };
+    const err = await parseErrorBody(res);
+    throw new DbError(err.code, err.message, err.details);
   }
   return res.json();
 }
@@ -77,8 +112,8 @@ async function rawUpdate(
     body: JSON.stringify(updates),
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw { code: body.code || String(res.status), message: body.message || res.statusText, details: body.details };
+    const err = await parseErrorBody(res);
+    throw new DbError(err.code, err.message, err.details);
   }
 }
 
@@ -96,8 +131,8 @@ async function rawDelete(
     headers: headers(token),
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw { code: body.code || String(res.status), message: body.message || res.statusText, details: body.details };
+    const err = await parseErrorBody(res);
+    throw new DbError(err.code, err.message, err.details);
   }
 }
 

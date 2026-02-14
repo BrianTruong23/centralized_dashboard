@@ -214,8 +214,9 @@ export default function Home() {
         if (!status || !status.completed) {
           setIsOnboardingOpen(true);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error checking onboarding status:', error);
+        if (error.details) console.error('Error details:', error.details);
         setOnboardingChecked(true);
       }
     };
