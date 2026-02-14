@@ -7,10 +7,11 @@ interface TaskListProps {
   onUpdateTask: (task: Task) => void;
   onDeleteTask: (id: string) => void;
   onFocusTask: (task: Task) => void;
+  onBreakdown?: (task: Task) => void;
   projects?: Project[];
 }
 
-export const TaskList = ({ tasks, onUpdateTask, onDeleteTask, onFocusTask, projects = [] }: TaskListProps) => {
+export const TaskList = ({ tasks, onUpdateTask, onDeleteTask, onFocusTask, onBreakdown, projects = [] }: TaskListProps) => {
   if (tasks.length === 0) {
     return (
       <div className="text-center py-12 text-gray-400">
@@ -27,6 +28,14 @@ export const TaskList = ({ tasks, onUpdateTask, onDeleteTask, onFocusTask, proje
     return b.createdAt - a.createdAt;
   });
 
+  // Calculate subtask counts for parent tasks
+  const subtaskCounts = tasks.reduce((acc, task) => {
+    if (task.parent_task_id) {
+      acc[task.parent_task_id] = (acc[task.parent_task_id] || 0) + 1;
+    }
+    return acc;
+  }, {} as Record<string, number>);
+
   return (
     <div className="space-y-2">
       {sortedTasks.map((task) => (
@@ -36,7 +45,9 @@ export const TaskList = ({ tasks, onUpdateTask, onDeleteTask, onFocusTask, proje
           onUpdate={onUpdateTask}
           onDelete={onDeleteTask}
           onFocus={onFocusTask}
+          onBreakdown={onBreakdown}
           projects={projects}
+          subtaskCount={subtaskCounts[task.id] || 0}
         />
       ))}
     </div>

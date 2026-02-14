@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Task, TaskPriority, TaskStatus, TaskCategory, TaskEnergyLevel } from '@/types/task';
 import { Project } from '@/types/project';
 import clsx from 'clsx';
-import { CheckCircle2, Circle, Trash2, Zap, Clock, Calendar, Pencil, X, Check } from 'lucide-react';
+import { CheckCircle2, Circle, Trash2, Zap, Clock, Calendar, Pencil, X, Check, GitBranch } from 'lucide-react';
 import { format } from 'date-fns';
 import { parseDateKey } from '@/lib/dateKey';
 
@@ -11,13 +11,15 @@ interface TaskItemProps {
   onUpdate: (task: Task) => void;
   onDelete: (id: string) => void;
   onFocus: (task: Task) => void;
+  onBreakdown?: (task: Task) => void;
   projects?: Project[];
+  subtaskCount?: number;
 }
 
 
 const energyLevels: TaskEnergyLevel[] = ['low', 'medium', 'high'];
 
-export const TaskItem = ({ task, onUpdate, onDelete, onFocus, projects = [] }: TaskItemProps) => {
+export const TaskItem = ({ task, onUpdate, onDelete, onFocus, onBreakdown, projects = [], subtaskCount = 0 }: TaskItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Task>(task);
 
@@ -228,6 +230,22 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus, projects = [] }: T
 
       {/* Actions - Visible on group hover */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Show subtask count badge if parent has subtasks */}
+        {subtaskCount > 0 && !task.is_subtask && (
+          <span className="opacity-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 rounded">
+            {subtaskCount}
+          </span>
+        )}
+        {/* Only show breakdown for non-subtasks */}
+        {!task.is_subtask && onBreakdown && (
+          <button
+            onClick={() => onBreakdown(task)}
+            className="p-1.5 text-gray-300 hover:text-purple-600 transition-colors"
+            title="Break down into subtasks"
+          >
+            <GitBranch size={14} strokeWidth={1.5} />
+          </button>
+        )}
         <button
           onClick={() => onFocus(task)}
           className="p-1.5 text-gray-300 hover:text-yellow-600 transition-colors"

@@ -20,6 +20,10 @@ export interface Task {
   createdAt: number; // timestamp
   project_id?: string; // Project this task belongs to
 
+  // Parent-child task relationships (for task breakdown)
+  parent_task_id?: string; // Reference to parent task if this is a subtask
+  is_subtask?: boolean; // Flag indicating if this is a subtask
+
   // Weekly planning fields
   source?: 'user' | 'agent';
   suggestedStart?: string;

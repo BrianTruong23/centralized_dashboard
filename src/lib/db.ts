@@ -117,6 +117,8 @@ const mapRowToTask = (row: any): Task => ({
   tags: row.tags || [],
   createdAt: new Date(row.created_at).getTime(),
   project_id: row.project_id,
+  parent_task_id: row.parent_task_id,
+  is_subtask: row.is_subtask || false,
 });
 
 function taskToRow(task: Task): Record<string, any> {
@@ -137,6 +139,12 @@ function taskToRow(task: Task): Record<string, any> {
   };
   if (task.project_id) {
     row.project_id = task.project_id;
+  }
+  if (task.parent_task_id) {
+    row.parent_task_id = task.parent_task_id;
+  }
+  if (task.is_subtask !== undefined) {
+    row.is_subtask = task.is_subtask;
   }
   return row;
 }
@@ -185,7 +193,7 @@ export const db = {
 
   async updateTask(task: Task): Promise<void> {
     const token = requireToken();
-    await rawUpdate('tasks', {
+    const updates: Record<string, any> = {
       text: task.title,
       description: task.description,
       category: task.category,
@@ -197,7 +205,14 @@ export const db = {
       completed: task.status === 'done',
       status: task.status,
       project_id: task.project_id,
-    }, { 'id': `eq.${task.id}` }, token);
+    };
+    if (task.parent_task_id !== undefined) {
+      updates.parent_task_id = task.parent_task_id;
+    }
+    if (task.is_subtask !== undefined) {
+      updates.is_subtask = task.is_subtask;
+    }
+    await rawUpdate('tasks', updates, { 'id': `eq.${task.id}` }, token);
     if (task.status === 'done' && task.user_id) {
       logActivity(token, task.user_id, 'completed_task', task.id, { title: task.title });
     }
