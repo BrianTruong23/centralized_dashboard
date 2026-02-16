@@ -184,53 +184,53 @@ export function SettingsModal({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl h-[90vh] md:h-[500px] flex flex-col md:flex-row overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-4xl h-[90vh] md:h-[600px] flex flex-col lg:flex-row overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         
         {/* Sidebar */}
-        <div className="w-full md:w-1/3 bg-gray-50 dark:bg-gray-950 border-b md:border-b-0 md:border-r border-gray-100 dark:border-gray-800 p-4 overflow-y-auto md:overflow-visible shrink-0">
-            <h2 className="text-lg font-bold mb-4 md:mb-6 px-2">Settings</h2>
-            <nav className="flex md:flex-col gap-2 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 scrollbar-hide">
+        <div className="w-full lg:w-64 bg-gray-50 dark:bg-gray-950 border-b lg:border-b-0 lg:border-r border-gray-100 dark:border-gray-800 p-4 overflow-y-auto lg:overflow-visible shrink-0 text-left">
+            <h2 className="text-lg font-bold mb-4 lg:mb-6 px-2">Settings</h2>
+            <nav className="flex lg:flex-col gap-2 overflow-x-auto lg:overflow-x-visible pb-2 lg:pb-0 scrollbar-hide">
                 <button 
                   onClick={() => setActiveTab('profile')}
-                  className={`flex-shrink-0 w-auto md:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'profile' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                  className={`flex-shrink-0 w-auto lg:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'profile' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
-                    <UserIcon size={16} /> <span className="hidden md:inline">Profile</span><span className="md:hidden">Profile</span>
+                    <UserIcon size={16} /> <span className="whitespace-nowrap">Profile</span>
                 </button>
                 <button 
                   onClick={() => setActiveTab('preferences')}
-                  className={`flex-shrink-0 w-auto md:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'preferences' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                  className={`flex-shrink-0 w-auto lg:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'preferences' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
-                    <Leaf size={16} /> <span className="hidden md:inline">Preferences</span><span className="md:hidden">Prefs</span>
+                    <Leaf size={16} /> <span className="whitespace-nowrap">Preferences</span>
                 </button>
                 <button 
                   onClick={() => setActiveTab('billing')}
-                  className={`flex-shrink-0 w-auto md:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'billing' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                  className={`flex-shrink-0 w-auto lg:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'billing' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
-                    <Crown size={16} /> Billing
+                    <Crown size={16} /> <span className="whitespace-nowrap">Billing</span>
                 </button>
                 <button 
                   onClick={() => setActiveTab('security')}
-                  className={`flex-shrink-0 w-auto md:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'security' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                  className={`flex-shrink-0 w-auto lg:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'security' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
-                    <Lock size={16} /> Security
+                    <Lock size={16} /> <span className="whitespace-nowrap">Security</span>
                 </button>
                 <button 
                   onClick={() => setActiveTab('danger')}
-                  className={`flex-shrink-0 w-auto md:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'danger' ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                  className={`flex-shrink-0 w-auto lg:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'danger' ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
-                    <Trash2 size={16} /> <span className="hidden md:inline">Danger Zone</span><span className="md:hidden">Danger</span>
+                    <Trash2 size={16} /> <span className="whitespace-nowrap">Danger Zone</span>
                 </button>
                 <button 
                   onClick={() => setActiveTab('debug')}
-                  className={`flex-shrink-0 w-auto md:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'debug' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                  className={`flex-shrink-0 w-auto lg:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'debug' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
-                    <Bug size={16} /> Debug
+                    <Bug size={16} /> <span className="whitespace-nowrap">Debug</span>
                 </button>
             </nav>
         </div>
 
         {/* Content */}
-        <div className="flex-1 p-8 relative overflow-y-auto">
+        <div className="flex-1 p-4 md:p-6 lg:p-8 relative overflow-y-auto">
             <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-black dark:hover:text-white">
                 <X size={20} />
             </button>
