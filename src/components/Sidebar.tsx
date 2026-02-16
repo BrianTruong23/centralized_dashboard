@@ -21,9 +21,6 @@ import { Project, CreateProjectInput } from '@/types/project';
 import clsx from 'clsx';
 import { ThemeToggle } from './ThemeToggle';
 import { UserDropdown } from './UserDropdown';
-import { CreateProjectModal } from './CreateProjectModal';
-import { SettingsModal } from './SettingsModal';
-import { ActivityLogModal } from './ActivityLogModal';
 import { formatDateKey } from '@/lib/dateKey';
 import { PlanningPreferences } from '@/types/planningPreferences';
 
@@ -37,8 +34,10 @@ interface SidebarProps {
   onLogout: () => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  onOpenSettings: () => void;
   projects?: Project[];
-  addProject?: (input: CreateProjectInput) => Promise<Project | undefined>;
+  onOpenProjectModal: () => void;
+  onOpenActivityLog: () => void;
   focusPlantEnabled: boolean;
   onToggleFocusPlant: (enabled: boolean) => void;
   isPro: boolean;
@@ -60,7 +59,8 @@ export const Sidebar = ({
   searchQuery,
   onSearchChange,
   projects = [],
-  addProject,
+  onOpenProjectModal,
+  onOpenActivityLog,
   focusPlantEnabled,
   onToggleFocusPlant,
   isPro,
@@ -69,10 +69,8 @@ export const Sidebar = ({
   planningPreferences,
   onPlanningPreferencesChange,
   onRestartOnboarding,
+  onOpenSettings,
 }: SidebarProps) => {
-  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isActivityLogOpen, setIsActivityLogOpen] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   // Close mobile menu when view changes
@@ -159,8 +157,8 @@ export const Sidebar = ({
                        <UserDropdown 
                          user={user} 
                          onLogout={onLogout} 
-                         onOpenSettings={() => setIsSettingsOpen(true)}
-                         onOpenActivityLog={() => setIsActivityLogOpen(true)}
+                         onOpenSettings={onOpenSettings}
+                         onOpenActivityLog={onOpenActivityLog}
                        />
                    </div>
                ) : (
@@ -214,7 +212,7 @@ export const Sidebar = ({
           <div className="mt-8 mb-2 px-2 flex items-center justify-between group">
               <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">Projects</h3>
               <button 
-                  onClick={() => setIsProjectModalOpen(true)}
+                  onClick={onOpenProjectModal}
                   className="text-gray-400 hover:text-black dark:hover:text-white transition-colors"
                   title="Add Project"
               >
@@ -250,7 +248,7 @@ export const Sidebar = ({
         {/* Footer Settings Button - Now Functional */}
         <div className="p-4">
            <button 
-              onClick={() => setIsSettingsOpen(true)}
+              onClick={onOpenSettings}
               className="flex items-center gap-3 text-gray-400 text-sm px-2 py-2 hover:text-gray-800 dark:hover:text-gray-200 transition-colors w-full"
            >
               <Settings size={18} strokeWidth={1.5} />
@@ -258,33 +256,6 @@ export const Sidebar = ({
            </button>
         </div>
 
-        {/* Modals */}
-        <CreateProjectModal 
-          isOpen={isProjectModalOpen}
-          onClose={() => setIsProjectModalOpen(false)}
-          onAddProject={addProject as any}
-        />
-        
-        <SettingsModal 
-           isOpen={isSettingsOpen}
-           onClose={() => setIsSettingsOpen(false)}
-           user={user}
-           onLogout={onLogout}
-           focusPlantEnabled={focusPlantEnabled}
-           onToggleFocusPlant={onToggleFocusPlant}
-           isPro={isPro}
-           forceProUser={forceProUser}
-           onToggleForceProUser={onToggleForceProUser}
-           planningPreferences={planningPreferences}
-           onPlanningPreferencesChange={onPlanningPreferencesChange}
-           onRestartOnboarding={onRestartOnboarding}
-        />
-
-        <ActivityLogModal
-          isOpen={isActivityLogOpen}
-          onClose={() => setIsActivityLogOpen(false)}
-          userId={user?.id}
-        />
       </aside>
     </>
   );
