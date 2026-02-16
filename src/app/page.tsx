@@ -19,6 +19,9 @@ import { Sidebar } from '@/components/Sidebar';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { FilterPanel } from '@/components/FilterPanel';
 import { AutoPlanModal } from '@/components/AutoPlanModal';
+import { CreateProjectModal } from '@/components/CreateProjectModal';
+import { ActivityLogModal } from '@/components/ActivityLogModal';
+import { SettingsModal } from '@/components/SettingsModal';
 import { TaskStatus, TaskPriority, TaskCategory } from '@/types/task';
 import clsx from 'clsx';
 import { supabase, authReady, SESSION_KEY } from '@/lib/supabase';
@@ -156,6 +159,9 @@ export default function Home() {
   
   // Auto Plan State
   const [isAutoPlanModalOpen, setIsAutoPlanModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [isActivityLogOpen, setIsActivityLogOpen] = useState(false);
   const [focusPlantEnabled, setFocusPlantEnabled] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     const raw = localStorage.getItem('focus_plant_enabled');
@@ -537,7 +543,7 @@ export default function Home() {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           projects={projects}
-          addProject={addProjectFn}
+
           focusPlantEnabled={focusPlantEnabled}
           onToggleFocusPlant={setFocusPlantEnabled}
           isPro={effectiveIsPro}
@@ -546,6 +552,9 @@ export default function Home() {
           planningPreferences={planningPreferences}
           onPlanningPreferencesChange={setPlanningPreferences}
           onRestartOnboarding={() => setIsOnboardingOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenProjectModal={() => setIsProjectModalOpen(true)}
+          onOpenActivityLog={() => setIsActivityLogOpen(true)}
        />
 
        {/* CreateTaskModal rendered once at the bottom of the component */}
@@ -874,6 +883,33 @@ export default function Home() {
         userId={user?.id}
       />
       <AmbientSound />
+      
+      <SettingsModal 
+         isOpen={isSettingsOpen}
+         onClose={() => setIsSettingsOpen(false)}
+         user={user}
+         onLogout={handleLogout}
+         focusPlantEnabled={focusPlantEnabled}
+         onToggleFocusPlant={setFocusPlantEnabled}
+         isPro={effectiveIsPro}
+         forceProUser={forceProUser}
+         onToggleForceProUser={setForceProUser}
+         planningPreferences={planningPreferences}
+         onPlanningPreferencesChange={setPlanningPreferences}
+         onRestartOnboarding={() => setIsOnboardingOpen(true)}
+      />
+
+      <CreateProjectModal 
+        isOpen={isProjectModalOpen}
+        onClose={() => setIsProjectModalOpen(false)}
+        onAddProject={addProjectFn}
+      />
+
+      <ActivityLogModal
+        isOpen={isActivityLogOpen}
+        onClose={() => setIsActivityLogOpen(false)}
+        userId={user?.id}
+      />
     </div>
   );
 }
