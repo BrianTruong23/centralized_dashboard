@@ -550,8 +550,8 @@ export default function Home() {
 
        {/* CreateTaskModal rendered once at the bottom of the component */}
 
-      <main className={`flex-1 overflow-y-auto px-8 py-8 ${!user ? 'blur-sm pointer-events-none select-none' : ''}`}>
-        <header className="mb-8 flex items-start justify-between max-w-4xl mx-auto relative">
+      <main className={`flex-1 overflow-y-auto p-4 md:p-8 ${!user ? 'blur-sm pointer-events-none select-none' : ''}`}>
+        <header className="mb-8 flex flex-col md:flex-row md:items-start justify-between gap-4 md:gap-0 max-w-4xl mx-auto relative">
           <div>
             <h1 className="text-3xl font-bold tracking-tighter mb-1 font-mono uppercase">
                {viewTitle}
@@ -567,14 +567,14 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-             <div className="relative group">
+          <div className="flex items-center gap-2 w-full md:w-auto">
+             <div className="relative group flex-1 md:flex-none">
                  <input 
                    type="text" 
                    placeholder="Search..." 
                    value={searchQuery}
                    onChange={(e) => setSearchQuery(e.target.value)}
-                   className="bg-transparent border-b border-gray-200 dark:border-gray-700 focus:border-black dark:focus:border-white outline-none px-2 py-1 text-sm w-32 focus:w-48 transition-all"
+                   className="bg-transparent border-b border-gray-200 dark:border-gray-700 focus:border-black dark:focus:border-white outline-none px-2 py-1 text-sm w-full md:w-32 focus:w-full md:focus:w-48 transition-all"
                  />
              </div>
              

@@ -184,45 +184,45 @@ export function SettingsModal({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl h-[500px] flex overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl h-[90vh] md:h-[500px] flex flex-col md:flex-row overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         
         {/* Sidebar */}
-        <div className="w-1/3 bg-gray-50 dark:bg-gray-950 border-r border-gray-100 dark:border-gray-800 p-4">
-            <h2 className="text-lg font-bold mb-6 px-2">Settings</h2>
-            <nav className="space-y-1">
+        <div className="w-full md:w-1/3 bg-gray-50 dark:bg-gray-950 border-b md:border-b-0 md:border-r border-gray-100 dark:border-gray-800 p-4 overflow-y-auto md:overflow-visible shrink-0">
+            <h2 className="text-lg font-bold mb-4 md:mb-6 px-2">Settings</h2>
+            <nav className="flex md:flex-col gap-2 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 scrollbar-hide">
                 <button 
                   onClick={() => setActiveTab('profile')}
-                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'profile' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                  className={`flex-shrink-0 w-auto md:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'profile' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
-                    <UserIcon size={16} /> Profile
+                    <UserIcon size={16} /> <span className="hidden md:inline">Profile</span><span className="md:hidden">Profile</span>
                 </button>
                 <button 
                   onClick={() => setActiveTab('preferences')}
-                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'preferences' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                  className={`flex-shrink-0 w-auto md:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'preferences' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
-                    <Leaf size={16} /> Preferences
+                    <Leaf size={16} /> <span className="hidden md:inline">Preferences</span><span className="md:hidden">Prefs</span>
                 </button>
                 <button 
                   onClick={() => setActiveTab('billing')}
-                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'billing' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                  className={`flex-shrink-0 w-auto md:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'billing' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
                     <Crown size={16} /> Billing
                 </button>
                 <button 
                   onClick={() => setActiveTab('security')}
-                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'security' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                  className={`flex-shrink-0 w-auto md:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'security' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
                     <Lock size={16} /> Security
                 </button>
                 <button 
                   onClick={() => setActiveTab('danger')}
-                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'danger' ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                  className={`flex-shrink-0 w-auto md:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'danger' ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
-                    <Trash2 size={16} /> Danger Zone
+                    <Trash2 size={16} /> <span className="hidden md:inline">Danger Zone</span><span className="md:hidden">Danger</span>
                 </button>
                 <button 
                   onClick={() => setActiveTab('debug')}
-                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'debug' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                  className={`flex-shrink-0 w-auto md:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'debug' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
                     <Bug size={16} /> Debug
                 </button>
