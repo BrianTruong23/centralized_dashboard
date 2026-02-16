@@ -12,16 +12,15 @@ import {
   Settings,
   NotebookPen,
   Trash2,
-  CheckCircle2
+  CheckCircle2,
+  Menu,
+  X
 } from 'lucide-react';
 import { Task } from '@/types/task';
 import { Project, CreateProjectInput } from '@/types/project';
 import clsx from 'clsx';
 import { ThemeToggle } from './ThemeToggle';
 import { UserDropdown } from './UserDropdown';
-import { CreateProjectModal } from './CreateProjectModal';
-import { SettingsModal } from './SettingsModal';
-import { ActivityLogModal } from './ActivityLogModal';
 import { formatDateKey } from '@/lib/dateKey';
 import { PlanningPreferences } from '@/types/planningPreferences';
 
@@ -35,8 +34,10 @@ interface SidebarProps {
   onLogout: () => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  onOpenSettings: () => void;
   projects?: Project[];
-  addProject?: (input: CreateProjectInput) => Promise<Project | undefined>;
+  onOpenProjectModal: () => void;
+  onOpenActivityLog: () => void;
   focusPlantEnabled: boolean;
   onToggleFocusPlant: (enabled: boolean) => void;
   isPro: boolean;
@@ -58,7 +59,8 @@ export const Sidebar = ({
   searchQuery,
   onSearchChange,
   projects = [],
-  addProject,
+  onOpenProjectModal,
+  onOpenActivityLog,
   focusPlantEnabled,
   onToggleFocusPlant,
   isPro,
@@ -67,10 +69,14 @@ export const Sidebar = ({
   planningPreferences,
   onPlanningPreferencesChange,
   onRestartOnboarding,
+  onOpenSettings,
 }: SidebarProps) => {
-  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isActivityLogOpen, setIsActivityLogOpen] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  // Close mobile menu when view changes
+  useEffect(() => {
+    setIsMobileOpen(false);
+  }, [currentView]);
 
   // Calculate counts
   const inboxCount = tasks.filter(t => t.status !== 'done').length;
@@ -116,139 +122,141 @@ export const Sidebar = ({
   };
 
   return (
-    <aside className={clsx("w-64 flex flex-col h-screen bg-gray-50/50 dark:bg-black border-r border-gray-100 dark:border-gray-900", className)}>
-      {/* Header with Logo + UserDropdown */}
-      <div className="p-4 mb-2 flex items-center gap-3">
-         <img src="/logo.svg" alt="Minima" width={48} height={48} className="rounded-lg flex-shrink-0" />
-         <div className="min-w-0 flex-1">
-             {user ? (
-                 <div className="min-w-0">
-                     <UserDropdown 
-                       user={user} 
-                       onLogout={onLogout} 
-                       onOpenSettings={() => setIsSettingsOpen(true)}
-                       onOpenActivityLog={() => setIsActivityLogOpen(true)}
-                     />
-                 </div>
-             ) : (
-                 <span className="text-sm font-bold">Minima</span>
-             )}
-         </div>
-         
-         <div className="flex items-center pl-1 flex-shrink-0">
-             <ThemeToggle />
-         </div>
-      </div>
+    <>
+      {/* Mobile Menu Button */}
+      <button
+        onClick={() => setIsMobileOpen(!isMobileOpen)}
+        className="md:hidden fixed top-4 right-4 z-50 p-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300"
+        aria-label="Toggle menu"
+      >
+        {isMobileOpen ? <X size={20} /> : <Menu size={20} />}
+      </button>
 
-      {/* ... (Main Nav) ... */}
-      <div className="flex-1 overflow-y-auto px-3 space-y-1 scrollbar-hide">
-        {/* ... (Actions same as before) ... */}
-        <button 
-          onClick={onAddTask}
-          data-tutorial="sidebar-add-task"
-          className="w-full flex items-center gap-2 text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white px-2 py-2 mb-4 hover:bg-white dark:hover:bg-gray-900 rounded-md shadow-sm border border-transparent hover:border-gray-100 dark:hover:border-gray-800 transition-all group"
-        >
-          <div className="bg-gray-900 dark:bg-gray-100 rounded-full p-0.5 text-white dark:text-black">
-            <Plus size={14} />
+      {/* Mobile Backdrop */}
+      {isMobileOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Container */}
+      <aside 
+        className={clsx(
+          "fixed md:static inset-y-0 left-0 z-40 w-64 flex flex-col h-screen bg-gray-50/50 dark:bg-black border-r border-gray-100 dark:border-gray-900 transition-transform duration-300 ease-in-out md:translate-x-0",
+          isMobileOpen ? "translate-x-0" : "-translate-x-full",
+          className
+        )}
+      >
+        {/* Header with Logo + UserDropdown */}
+        <div className="p-4 mb-2 flex items-center gap-3">
+           <img src="/logo.svg" alt="Minima" width={48} height={48} className="rounded-lg flex-shrink-0" />
+           <div className="min-w-0 flex-1">
+               {user ? (
+                   <div className="min-w-0">
+                       <UserDropdown 
+                         user={user} 
+                         onLogout={onLogout} 
+                         onOpenSettings={onOpenSettings}
+                         onOpenActivityLog={onOpenActivityLog}
+                       />
+                   </div>
+               ) : (
+                   <span className="text-sm font-bold">Minima</span>
+               )}
+           </div>
+           
+           <div className="flex items-center pl-1 flex-shrink-0">
+               <ThemeToggle />
+           </div>
+        </div>
+
+        {/* ... (Main Nav) ... */}
+        <div className="flex-1 overflow-y-auto px-3 space-y-1 scrollbar-hide">
+          {/* ... (Actions same as before) ... */}
+          <button 
+            onClick={() => {
+              onAddTask();
+              setIsMobileOpen(false);
+            }}
+            data-tutorial="sidebar-add-task"
+            className="w-full flex items-center gap-2 text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white px-2 py-2 mb-4 hover:bg-white dark:hover:bg-gray-900 rounded-md shadow-sm border border-transparent hover:border-gray-100 dark:hover:border-gray-800 transition-all group"
+          >
+            <div className="bg-gray-900 dark:bg-gray-100 rounded-full p-0.5 text-white dark:text-black">
+              <Plus size={14} />
+            </div>
+            <span className="text-sm font-medium">Add task</span>
+          </button>
+
+          {/* Search (same) */}
+         <div className="relative group mb-6">
+             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+             <input 
+               type="text" 
+               placeholder="Search" 
+               value={searchQuery}
+               onChange={(e) => onSearchChange(e.target.value)}
+               className="w-full bg-transparent border-none outline-none pl-9 py-1.5 text-sm text-gray-600 placeholder:text-gray-400 focus:ring-0"
+             />
           </div>
-          <span className="text-sm font-medium">Add task</span>
-        </button>
 
-        {/* Search (same) */}
-       <div className="relative group mb-6">
-           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-           <input 
-             type="text" 
-             placeholder="Search" 
-             value={searchQuery}
-             onChange={(e) => onSearchChange(e.target.value)}
-             className="w-full bg-transparent border-none outline-none pl-9 py-1.5 text-sm text-gray-600 placeholder:text-gray-400 focus:ring-0"
-           />
+          <NavItem id="today" icon={Calendar} label="Today" count={todayCount} />
+          <NavItem id="inbox" icon={Inbox} label="Inbox" count={inboxCount} />
+          <NavItem id="upcoming" icon={CalendarDays} label="Upcoming" />
+          <NavItem id="daily-notes" icon={NotebookPen} label="Daily Notes" />
+          <NavItem id="kanban" icon={Columns} label="Kanban" />
+          <NavItem id="completed" icon={CheckCircle2} label="Completed" />
+
+          
+          {/* Projects section (same) */}
+          <div className="mt-8 mb-2 px-2 flex items-center justify-between group">
+              <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">Projects</h3>
+              <button 
+                  onClick={onOpenProjectModal}
+                  className="text-gray-400 hover:text-black dark:hover:text-white transition-colors"
+                  title="Add Project"
+              >
+                  <Plus size={14} />
+              </button>
+          </div>
+          <div className="space-y-0.5">
+             {projects.map(project => (
+                 <button
+                   key={project.id}
+                   onClick={() => onViewChange(`project-${project.id}`)}
+                   className={clsx(
+                     "w-full flex items-center gap-3 px-3 py-2 text-sm font-medium transition-colors rounded-lg",
+                     currentView === `project-${project.id}`
+                       ? "bg-white dark:bg-gray-800 text-black dark:text-white shadow-sm"
+                       : "text-gray-500 dark:text-gray-400 hover:bg-gray-100/50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-200"
+                   )}
+                 >
+                   <span 
+                      className="w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-black" 
+                      style={{ backgroundColor: project.color }}
+                   />
+                   <span className="truncate">{project.name}</span>
+                 </button>
+             ))}
+             {projects.length === 0 && (
+                 <p className="px-3 text-xs text-gray-400 italic">No projects yet</p>
+             )}
+          </div>
+
         </div>
 
-        <NavItem id="today" icon={Calendar} label="Today" count={todayCount} />
-        <NavItem id="inbox" icon={Inbox} label="Inbox" count={inboxCount} />
-        <NavItem id="upcoming" icon={CalendarDays} label="Upcoming" />
-        <NavItem id="daily-notes" icon={NotebookPen} label="Daily Notes" />
-        <NavItem id="kanban" icon={Columns} label="Kanban" />
-        <NavItem id="completed" icon={CheckCircle2} label="Completed" />
-
-        
-        {/* Projects section (same) */}
-        <div className="mt-8 mb-2 px-2 flex items-center justify-between group">
-            <h3 className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">Projects</h3>
-            <button 
-                onClick={() => setIsProjectModalOpen(true)}
-                className="text-gray-400 hover:text-black dark:hover:text-white transition-colors"
-                title="Add Project"
-            >
-                <Plus size={14} />
-            </button>
-        </div>
-        <div className="space-y-0.5">
-           {projects.map(project => (
-               <button
-                 key={project.id}
-                 onClick={() => onViewChange(`project-${project.id}`)}
-                 className={clsx(
-                   "w-full flex items-center gap-3 px-3 py-2 text-sm font-medium transition-colors rounded-lg",
-                   currentView === `project-${project.id}`
-                     ? "bg-white dark:bg-gray-800 text-black dark:text-white shadow-sm"
-                     : "text-gray-500 dark:text-gray-400 hover:bg-gray-100/50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-200"
-                 )}
-               >
-                 <span 
-                    className="w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-black" 
-                    style={{ backgroundColor: project.color }}
-                 />
-                 <span className="truncate">{project.name}</span>
-               </button>
-           ))}
-           {projects.length === 0 && (
-               <p className="px-3 text-xs text-gray-400 italic">No projects yet</p>
-           )}
+        {/* Footer Settings Button - Now Functional */}
+        <div className="p-4">
+           <button 
+              onClick={onOpenSettings}
+              className="flex items-center gap-3 text-gray-400 text-sm px-2 py-2 hover:text-gray-800 dark:hover:text-gray-200 transition-colors w-full"
+           >
+              <Settings size={18} strokeWidth={1.5} />
+              <span>Settings</span>
+           </button>
         </div>
 
-      </div>
-
-      {/* Footer Settings Button - Now Functional */}
-      <div className="p-4">
-         <button 
-            onClick={() => setIsSettingsOpen(true)}
-            className="flex items-center gap-3 text-gray-400 text-sm px-2 py-2 hover:text-gray-800 dark:hover:text-gray-200 transition-colors w-full"
-         >
-            <Settings size={18} strokeWidth={1.5} />
-            <span>Settings</span>
-         </button>
-      </div>
-
-      {/* Modals */}
-      <CreateProjectModal 
-        isOpen={isProjectModalOpen}
-        onClose={() => setIsProjectModalOpen(false)}
-        onAddProject={addProject as any}
-      />
-      
-      <SettingsModal 
-         isOpen={isSettingsOpen}
-         onClose={() => setIsSettingsOpen(false)}
-         user={user}
-         onLogout={onLogout}
-         focusPlantEnabled={focusPlantEnabled}
-         onToggleFocusPlant={onToggleFocusPlant}
-         isPro={isPro}
-         forceProUser={forceProUser}
-         onToggleForceProUser={onToggleForceProUser}
-         planningPreferences={planningPreferences}
-         onPlanningPreferencesChange={onPlanningPreferencesChange}
-         onRestartOnboarding={onRestartOnboarding}
-      />
-
-      <ActivityLogModal
-        isOpen={isActivityLogOpen}
-        onClose={() => setIsActivityLogOpen(false)}
-        userId={user?.id}
-      />
-    </aside>
+      </aside>
+    </>
   );
 };
