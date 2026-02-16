@@ -246,7 +246,7 @@ export function AutoPlanModal({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">
             {step === 'input' && (
                 <div className="space-y-4">
                     <p className="text-sm text-gray-600 dark:text-gray-300">
@@ -299,7 +299,7 @@ export function AutoPlanModal({
                                 New Projects Detected
                             </h4>
                             <p className="text-xs text-blue-600 dark:text-blue-400 mb-3">
-                                The AI found these new projects. Select the ones you want to create automatically. Unselected projects will likely end up in Inbox.
+                                The AI found these projects. Select ones to create.
                             </p>
                             <div className="flex flex-wrap gap-2">
                                 {Array.from(pendingProjects).map(proj => (
@@ -384,7 +384,7 @@ export function AutoPlanModal({
                                                                     className="text-[10px] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-300 border-none outline-none focus:ring-1 focus:ring-gray-400 w-16 min-w-0"
                                                                 />
                                                                 
-                                                                {/* Priority - click to cycle */}
+                                                                {/* Priority */}
                                                                 <button
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
@@ -435,16 +435,16 @@ export function AutoPlanModal({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 flex justify-between items-center">
+        <div className="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 flex flex-col-reverse gap-3 md:flex-row md:justify-between md:items-center">
             {step === 'input' ? (
                 <>
-                    <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                    <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 w-full md:w-auto">
                         Cancel
                     </button>
                     <button 
                         onClick={handleGenerate}
                         disabled={!notes.trim()}
-                        className="px-6 py-2 bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                        className="px-6 py-2 bg-black hover:bg-gray-800 dark:bg-white dark:hover:bg-gray-200 text-white dark:text-black text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm w-full md:w-auto"
                     >
                         Generate Plan
                     </button>
@@ -453,18 +453,18 @@ export function AutoPlanModal({
                 <>
                     <button 
                         onClick={() => setStep('input')}
-                        className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                        className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 w-full md:w-auto"
                     >
                         Back to Edit
                     </button>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
                         <span className="text-xs text-gray-500 font-medium">
-                            {selectedTasks.size} tasks selected
+                            {selectedTasks.size} selected
                         </span>
                         <button 
                             onClick={handleCreateTasks}
                             disabled={selectedTasks.size === 0 || isCreatingProjects}
-                            className="px-6 py-2 bg-black dark:bg-white text-white dark:text-black text-sm font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            className="px-6 py-2 bg-black dark:bg-white text-white dark:text-black text-sm font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 w-full md:w-auto"
                         >
                             {isCreatingProjects ? <Loader2 size={16} className="animate-spin" /> : <Calendar size={16} />}
                             Add to Schedule

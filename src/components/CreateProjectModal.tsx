@@ -49,7 +49,7 @@ export function CreateProjectModal({ isOpen, onClose, onAddProject }: CreateProj
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden relative animate-in zoom-in-95 duration-200">
-        <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+        <div className="px-4 py-3 md:px-6 md:py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">New Project</h2>
           <button 
             onClick={onClose}
@@ -59,7 +59,7 @@ export function CreateProjectModal({ isOpen, onClose, onAddProject }: CreateProj
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-4 md:p-6 space-y-6">
           <div className="space-y-2">
             <label className="text-xs font-semibold text-gray-500 uppercase">Project Name</label>
             <input

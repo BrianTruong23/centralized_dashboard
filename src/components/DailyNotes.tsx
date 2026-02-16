@@ -305,7 +305,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
   if (!userId) return null;
 
   return (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
+    <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
       
       {/* Missing Projects Confirmation Modal */}
       {missingProjects.length > 0 && (
