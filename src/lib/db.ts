@@ -279,6 +279,18 @@ export const db = {
     return rows[0];
   },
 
+  async deleteProject(projectId: string): Promise<void> {
+    const token = requireToken();
+    try {
+      await rawDelete('projects', { 'id': `eq.${projectId}` }, token);
+    } catch (e: any) {
+      if (e.code === '23503') { // foreign_key_violation
+         throw new Error('Cannot delete project because it has tasks. Please delete or move the tasks first.');
+      }
+      throw e;
+    }
+  },
+
   async ensureDefaultProjects(userId: string): Promise<any[]> {
     const token = requireToken();
 

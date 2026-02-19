@@ -29,6 +29,7 @@ export async function POST(req: Request) {
         },
       });
       if (!subRes.ok) {
+        console.error('AutoPlan: Subscription check failed', await subRes.text());
         return NextResponse.json({ error: 'Could not verify subscription status' }, { status: 403 });
       }
       const rows = await subRes.json();
@@ -40,11 +41,15 @@ export async function POST(req: Request) {
     }
 
     log('Request received, parsing body...');
-    const { notes, startDate, preferences } = await req.json();
+    const { notes, startDate, preferences, projects } = await req.json();
 
     if (!notes) {
       return NextResponse.json({ error: 'Notes are required' }, { status: 400 });
     }
+
+    const availableProjects = (projects && Array.isArray(projects) && projects.length > 0)
+      ? projects.join(', ')
+      : 'Work, Life';
 
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
@@ -59,6 +64,7 @@ export async function POST(req: Request) {
       Current Context:
       - Today is ${startDate || new Date().toISOString().split('T')[0]}.
       - User Notes: "${notes}"
+      - Available Projects: [${availableProjects}]
       - User Planning Preferences:
         - Peak energy time: ${preferences?.energyPeak || 'morning'}
         - Preferred deep-work block: ${preferences?.deepWorkMinutes || 90} minutes
@@ -74,7 +80,7 @@ export async function POST(req: Request) {
       2. Front-load urgent tasks (Mon/Tue).
       3. Spread out high-effort tasks (max 1-2 per day).
       4. Respect "Weekend" (Sat/Sun) - keep lighter unless requested.
-      5. Infer Project (default "Life" or "Work").
+      5. STRICTLY Use ONLY the provided Available Projects. Do NOT create new project names. If a task doesn't fit, use "Life" or "Work".
       6. PRIORITY MAPPING (Strict):
          - 1 = Urgent / Critical / Must Do Today.
          - 2 = High Priority / Important.
