@@ -147,9 +147,28 @@ export const useProjects = () => {
     }
   };
 
+  const deleteProject = async (projectId: string) => {
+    const projectToDelete = projects.find(p => p.id === projectId);
+    if (!projectToDelete) return;
+
+    // Optimistic remove
+    setProjects(prev => prev.filter(p => p.id !== projectId));
+
+    try {
+        await db.deleteProject(projectId);
+        console.log('[useProjects.deleteProject] ✓ Project deleted:', projectId);
+    } catch (e: any) {
+        console.error('[useProjects.deleteProject] ✗ Failed to delete:', projectId, e);
+        // Rollback
+        setProjects(prev => [...prev, projectToDelete]);
+        throw e;
+    }
+  };
+
   return {
     projects,
     addProject,
+    deleteProject,
     isLoading
   };
 };
