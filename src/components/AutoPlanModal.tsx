@@ -80,10 +80,14 @@ export function AutoPlanModal({
             notes, 
             startDate: new Date().toLocaleDateString('en-CA'), // Send LOCAL date yyyy-mm-dd
             preferences: planningPreferences,
+            projects: projects.map(p => p.name),
         }),
       });
 
-      if (!res.ok) throw new Error('Failed to generate plan');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to generate plan');
+      }
 
       const data = await res.json();
       setWeekPlan(data.week_plan || []);
@@ -127,6 +131,48 @@ export function AutoPlanModal({
         newSelected.add(key);
     }
     setSelectedTasks(newSelected);
+  };
+
+
+
+  const moveTask = (fromDayIndex: number, taskIndex: number, toDayIndex: number) => {
+    if (fromDayIndex === toDayIndex) return;
+    
+    const newPlan = [...weekPlan];
+    const task = newPlan[fromDayIndex].tasks[taskIndex];
+    
+    // Remove from source
+    newPlan[fromDayIndex].tasks.splice(taskIndex, 1);
+    
+    // Add to target
+    // Update date fields on the moved task to match the new day
+    const targetDay = newPlan[toDayIndex];
+    if (!targetDay) return;
+    
+    const movedTask = {
+        ...task,
+        day: targetDay.day,
+        date: targetDay.date
+    };
+    
+    newPlan[toDayIndex].tasks.push(movedTask);
+    
+    // Update selection state if needed
+    // The key is `${day.date}-${idx}`, so moving changes the index and potentially the date
+    // It's safer to just deselect it or try to re-map, but let's just keep it simple: 
+    // user might need to re-select if they move it. 
+    // Actually, let's auto-select it in the new position for convenience.
+    const oldKey = `${weekPlan[fromDayIndex].date}-${taskIndex}`;
+    if (selectedTasks.has(oldKey)) {
+        const newSelected = new Set(selectedTasks);
+        newSelected.delete(oldKey);
+        // The new index is the last one since we pushed
+        const newKey = `${targetDay.date}-${newPlan[toDayIndex].tasks.length - 1}`;
+        newSelected.add(newKey);
+        setSelectedTasks(newSelected);
+    }
+    
+    setWeekPlan(newPlan);
   };
 
   const toggleProjectConfirmation = (projectName: string) => {
@@ -419,6 +465,23 @@ export function AutoPlanModal({
                                                                     />
                                                                     <span className="text-[10px] text-gray-400">m</span>
                                                                 </div>
+                                                            </div>
+
+                                                            {/* Move to another day */}
+                                                            <div className="flex items-center gap-2 pt-1 border-t border-gray-100 dark:border-gray-700/50 mt-1">
+                                                                <span className="text-[10px] text-gray-400">Move to:</span>
+                                                                <select
+                                                                    value={dayIdx}
+                                                                    onChange={(e) => moveTask(dayIdx, idx, parseInt(e.target.value))}
+                                                                    className="text-[10px] bg-transparent text-gray-500 dark:text-gray-400 border-none outline-none cursor-pointer hover:text-gray-700 dark:hover:text-gray-200"
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                >
+                                                                    {weekPlan.map((d, i) => (
+                                                                        <option key={i} value={i}>
+                                                                            {d.day.substring(0, 3)}
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
                                                             </div>
                                                         </div>
                                                     </div>

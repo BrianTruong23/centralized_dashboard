@@ -77,7 +77,7 @@ function LoadingScreen() {
 
 export default function Home() {
   const { tasks, addTask: _addTask, addTasksBatch, updateTask: _updateTask, deleteTask, isLoaded } = useTasks();
-  const { projects, addProject: addProjectFn } = useProjects();
+  const { projects, addProject: addProjectFn, deleteProject } = useProjects();
   
   const [tutorialStep, setTutorialStep] = useState<'none' | 'input' | 'list'>('none');
 
@@ -543,6 +543,7 @@ export default function Home() {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           projects={projects}
+          onDeleteProject={deleteProject}
 
           focusPlantEnabled={focusPlantEnabled}
           onToggleFocusPlant={setFocusPlantEnabled}

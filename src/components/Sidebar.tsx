@@ -37,6 +37,7 @@ interface SidebarProps {
   onOpenSettings: () => void;
   projects?: Project[];
   onOpenProjectModal: () => void;
+  onDeleteProject?: (id: string) => Promise<void> | void;
   onOpenActivityLog: () => void;
   focusPlantEnabled: boolean;
   onToggleFocusPlant: (enabled: boolean) => void;
@@ -60,6 +61,7 @@ export const Sidebar = ({
   onSearchChange,
   projects = [],
   onOpenProjectModal,
+  onDeleteProject,
   onOpenActivityLog,
   focusPlantEnabled,
   onToggleFocusPlant,
@@ -221,22 +223,39 @@ export const Sidebar = ({
           </div>
           <div className="space-y-0.5">
              {projects.map(project => (
-                 <button
-                   key={project.id}
-                   onClick={() => onViewChange(`project-${project.id}`)}
-                   className={clsx(
-                     "w-full flex items-center gap-3 px-3 py-2 text-sm font-medium transition-colors rounded-lg",
-                     currentView === `project-${project.id}`
-                       ? "bg-white dark:bg-gray-800 text-black dark:text-white shadow-sm"
-                       : "text-gray-500 dark:text-gray-400 hover:bg-gray-100/50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-200"
-                   )}
-                 >
-                   <span 
-                      className="w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-black" 
-                      style={{ backgroundColor: project.color }}
-                   />
-                   <span className="truncate">{project.name}</span>
-                 </button>
+                 <div key={project.id} className="group relative">
+                     <button
+                       onClick={() => onViewChange(`project-${project.id}`)}
+                       className={clsx(
+                         "w-full flex items-center gap-3 px-3 py-2 text-sm font-medium transition-colors rounded-lg",
+                         currentView === `project-${project.id}`
+                           ? "bg-white dark:bg-gray-800 text-black dark:text-white shadow-sm"
+                           : "text-gray-500 dark:text-gray-400 hover:bg-gray-100/50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-200"
+                       )}
+                     >
+                       <span 
+                          className="w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-black" 
+                          style={{ backgroundColor: project.color }}
+                       />
+                       <span className="truncate flex-1 text-left">{project.name}</span>
+                     </button>
+                     
+                     {/* Delete Button - Only visible on hover */}
+                     <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Are you sure you want to delete project "${project.name}"? This action cannot be undone.`)) {
+                                Promise.resolve(onDeleteProject?.(project.id)).catch((err: any) => {
+                                    alert(err.message || 'Failed to delete project');
+                                });
+                            }
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md opacity-0 group-hover:opacity-100 transition-all"
+                        title="Delete project"
+                     >
+                        <Trash2 size={14} />
+                     </button>
+                 </div>
              ))}
              {projects.length === 0 && (
                  <p className="px-3 text-xs text-gray-400 italic">No projects yet</p>
