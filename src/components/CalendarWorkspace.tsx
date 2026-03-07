@@ -223,6 +223,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
     await Promise.resolve(
       onUpdateTask({
         ...task,
+        deadline: dayKey,
         scheduled_date: dayKey,
         scheduled_time: newTime,
         planningMetadata: nextMetadata,
