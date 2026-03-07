@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { notesDb } from '@/lib/notes';
-import { Loader2, Sparkles, Save, Plus, CheckCircle, ListPlus, Calendar, Pencil, X } from 'lucide-react';
+import { Loader2, Sparkles, Save, Plus, CheckCircle, ListPlus, Calendar, Pencil } from 'lucide-react';
 import { Task, TaskCategory, TaskEnergyLevel } from '@/types/task';
 import { Project, CreateProjectInput } from '@/types/project';
 
@@ -48,6 +48,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
   const [error, setError] = useState<string | null>(null);
   const [isSummaryVisible, setIsSummaryVisible] = useState(false);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
 
   // State for missing projects handling
   const [missingProjects, setMissingProjects] = useState<string[]>([]);
@@ -118,12 +119,14 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
             setSummary(selected.summary || '');
             setIsSummaryExpanded(false);
             setCurrentNoteId(selected.id);
+            setLastSavedAt(selected.updatedAt || selected.createdAt);
         } else {
             // Reset if no note selected
             setNoteContent('');
             setSummary('');
             setIsSummaryExpanded(false);
             setCurrentNoteId(null);
+            setLastSavedAt(null);
         }
 
       } else {
@@ -131,6 +134,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
         setSummary('');
         setIsSummaryExpanded(false);
         setCurrentNoteId(null);
+        setLastSavedAt(null);
       }
     } catch (err) {
       console.error('Failed to load notes', err);
@@ -143,7 +147,8 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
     setError(null);
     try {
       if (currentNoteId) {
-        await notesDb.updateNote(currentNoteId, { content: noteContent, summary });
+        const updated = await notesDb.updateNote(currentNoteId, { content: noteContent, summary });
+        setLastSavedAt(updated.updatedAt);
       } else {
         const newNote = await notesDb.addNote({
           user_id: userId,
@@ -151,6 +156,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
           summary
         });
         setCurrentNoteId(newNote.id);
+        setLastSavedAt(newNote.updatedAt || newNote.createdAt);
       }
       await loadLatestNote();
       onNoteSaved?.();
@@ -172,6 +178,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
     setIsSummaryExpanded(false);
     setEditingIndex(null);
     setEditForm(null);
+    setLastSavedAt(null);
   };
 
   const handleSummarize = async () => {
@@ -220,7 +227,8 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
       // Persist note content + summary together to avoid missing summaries on new notes.
       if (userId) {
         if (currentNoteId) {
-          await notesDb.updateNote(currentNoteId, { content: noteContent, summary: data.summary });
+          const updated = await notesDb.updateNote(currentNoteId, { content: noteContent, summary: data.summary });
+          setLastSavedAt(updated.updatedAt);
           log('Updated existing note with summary');
         } else {
           const created = await notesDb.addNote({
@@ -229,6 +237,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
             summary: data.summary,
           });
           setCurrentNoteId(created.id);
+          setLastSavedAt(created.updatedAt || created.createdAt);
           log(`Created note with summary: ${created.id}`);
         }
         onNoteSaved?.();
@@ -399,11 +408,17 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
   if (!userId) return null;
 
   const wordCount = countWords(noteContent);
+  const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  const saveStatusLabel = isSaving
+    ? 'Saving...'
+    : lastSavedAt
+      ? `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+      : 'Not saved yet';
   const previewSummaryPoints = isSummaryExpanded ? summaryPoints : summaryPoints.slice(0, 5);
   const hasHiddenSummaryPoints = summaryPoints.length > 5 && !isSummaryExpanded;
 
   return (
-    <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
+    <div className="bg-white dark:bg-gray-800 p-5 md:p-7 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
       
       {/* Missing Projects Confirmation Modal */}
       {missingProjects.length > 0 && (
@@ -438,32 +453,43 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold">Daily Notes & Dump</h2>
-        <div className="flex gap-2">
+      <div className="mb-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-[28px] md:text-[32px] leading-tight font-semibold tracking-tight text-gray-900 dark:text-gray-100">
+              Daily Notes
+            </h2>
+            <div className="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <span>{todayLabel}</span>
+              <span>•</span>
+              <span>{saveStatusLabel}</span>
+            </div>
+          </div>
+          <div className="flex gap-1.5">
             <button
                 onClick={handleCreateNewNote}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-transparent border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
             >
-                <Plus size={14} />
-                New note
+                <Plus size={13} />
+                New
             </button>
             <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700/70 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
             >
-                {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                {isSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
                 Save
             </button>
             <button
                 onClick={handleSummarize}
                 disabled={isLoading || !noteContent.trim()}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 accent-solid-btn"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors disabled:opacity-50 border border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] hover:opacity-90"
             >
-                {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                Summarize with AI
+                {isLoading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                Summarize
             </button>
+          </div>
         </div>
       </div>
 
@@ -474,20 +500,21 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
       )}
 
       <div className="space-y-6">
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold uppercase text-gray-400">Your Thoughts</label>
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Writing</label>
             <span className={`text-xs ${wordCount >= MAX_NOTE_WORDS ? 'text-red-500' : 'text-gray-400'}`}>
               {wordCount}/{MAX_NOTE_WORDS} words
             </span>
           </div>
-          <textarea
-            value={noteContent}
-            onChange={(e) => setNoteContent(clampToMaxWords(e.target.value, MAX_NOTE_WORDS))}
-            placeholder="Dump your tasks, ideas, and thoughts here..."
-            className="w-full h-64 p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 resize-none focus:ring-2 focus:outline-none transition-all"
-            style={{ ['--tw-ring-color' as any]: 'var(--accent-ring)' }}
-          />
+          <div className="rounded-2xl bg-gray-50/70 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800 px-5 py-4">
+            <textarea
+              value={noteContent}
+              onChange={(e) => setNoteContent(clampToMaxWords(e.target.value, MAX_NOTE_WORDS))}
+              placeholder="Start writing your notes..."
+              className="w-full min-h-[320px] md:min-h-[360px] bg-transparent border-0 outline-none resize-none text-[17px] leading-8 tracking-[0.01em] text-gray-800 dark:text-gray-200 placeholder:text-gray-400/90 dark:placeholder:text-gray-500"
+            />
+          </div>
         </div>
 
         {isSummaryVisible && (

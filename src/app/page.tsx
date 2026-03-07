@@ -228,6 +228,12 @@ export default function Home() {
   });
 
   const [currentView, setCurrentView] = useState('today');
+  const [inboxDisplayView, setInboxDisplayView] = useState<'inbox' | 'kanban' | 'calendar'>(() => {
+    if (typeof window === 'undefined') return 'inbox';
+    const stored = localStorage.getItem('inbox_display_view');
+    if (stored === 'kanban' || stored === 'calendar' || stored === 'inbox') return stored;
+    return 'inbox';
+  });
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [notesRefreshToken, setNotesRefreshToken] = useState(0);
 
@@ -299,6 +305,35 @@ export default function Home() {
       // ignore storage errors
     }
   }, [planningPreferences]);
+
+  useEffect(() => {
+    if (currentView === 'inbox' || currentView === 'kanban' || currentView === 'calendar') {
+      setInboxDisplayView(currentView);
+      try {
+        localStorage.setItem('inbox_display_view', currentView);
+      } catch {
+        // ignore storage errors
+      }
+    }
+  }, [currentView]);
+
+  const switchInboxDisplayView = (next: 'inbox' | 'kanban' | 'calendar') => {
+    setInboxDisplayView(next);
+    try {
+      localStorage.setItem('inbox_display_view', next);
+    } catch {
+      // ignore storage errors
+    }
+    setCurrentView(next);
+  };
+
+  const handleSidebarViewChange = (nextView: string) => {
+    if (nextView === 'inbox') {
+      setCurrentView(inboxDisplayView);
+      return;
+    }
+    setCurrentView(nextView);
+  };
 
   const getDefaultDate = () => {
     if (currentView === 'today') {
@@ -726,7 +761,7 @@ export default function Home() {
       {/* Sidebar */}
        <Sidebar
           currentView={currentView}
-          onViewChange={setCurrentView}
+          onViewChange={handleSidebarViewChange}
           tasks={tasks}
           onAddTask={() => setIsCreateTaskModalOpen(true)}
           user={user}
@@ -815,7 +850,7 @@ export default function Home() {
                      <button
                        type="button"
                        onClick={() => {
-                         setCurrentView('inbox');
+                         switchInboxDisplayView('inbox');
                          setShowViewDropdown(false);
                        }}
                        className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
@@ -825,7 +860,7 @@ export default function Home() {
                      <button
                        type="button"
                        onClick={() => {
-                         setCurrentView('kanban');
+                         switchInboxDisplayView('kanban');
                          setShowViewDropdown(false);
                        }}
                        className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
@@ -835,7 +870,7 @@ export default function Home() {
                      <button
                        type="button"
                        onClick={() => {
-                         setCurrentView('calendar');
+                         switchInboxDisplayView('calendar');
                          setShowViewDropdown(false);
                        }}
                        className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
