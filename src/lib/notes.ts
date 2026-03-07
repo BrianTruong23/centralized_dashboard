@@ -68,5 +68,15 @@ export const notesDb = {
 
     if (error) throw error;
     return mapRowToNote(data);
+  },
+
+  async deleteNote(id: string) {
+    if (!supabase) throw new Error('Supabase not configured');
+    const { error } = await supabase
+      .from('notes')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
   }
 };

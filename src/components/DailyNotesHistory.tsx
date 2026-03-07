@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { notesDb, Note } from '@/lib/notes';
-import { Sparkles, Calendar } from 'lucide-react';
+import { Sparkles, Calendar, Trash2 } from 'lucide-react';
 
 interface DailyNotesHistoryProps {
   userId?: string;
@@ -47,6 +47,17 @@ export function DailyNotesHistory({ userId }: DailyNotesHistoryProps) {
     setExpandedNotes((prev) => ({ ...prev, [noteId]: !prev[noteId] }));
   };
 
+  const handleDelete = async (noteId: string) => {
+    if (!confirm('Are you sure you want to delete this note?')) return;
+    try {
+      await notesDb.deleteNote(noteId);
+      setPastNotes(prev => prev.filter(note => note.id !== noteId));
+    } catch (err) {
+      console.error('Failed to delete note', err);
+      alert('Failed to delete note');
+    }
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
         <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-6">Previous Days</h3>
@@ -63,10 +74,18 @@ export function DailyNotesHistory({ userId }: DailyNotesHistoryProps) {
                           return (
                             <>
                         
-                        <div className="mb-3">
+                        <div className="mb-3 flex items-center justify-between">
                             <span className="text-lg font-bold text-gray-900 dark:text-gray-100">
                                 {new Date(note.createdAt).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                             </span>
+                            <button
+                                type="button"
+                                onClick={() => handleDelete(note.id)}
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                                title="Delete note"
+                            >
+                                <Trash2 size={16} />
+                            </button>
                         </div>
                         
                         <div className="prose dark:prose-invert max-w-none text-gray-600 dark:text-gray-400 mb-4">
