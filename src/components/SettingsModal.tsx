@@ -622,7 +622,7 @@ export function SettingsModal({
                         </div>
                     </div>
                     <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
-                        <div className="flex items-center gap-2 mb-3">
+                        <div className="flex items-center gap-2">
                             <button
                                 type="button"
                                 onClick={() => {
@@ -641,15 +641,17 @@ export function SettingsModal({
                                 Reset
                             </button>
                         </div>
-                        <button
-                            onClick={() => {
-                                onClose();
-                                onRestartOnboarding();
-                            }}
-                            className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] border-[var(--accent-border)] hover:bg-[var(--accent-solid)] hover:text-[var(--accent-solid-foreground)]"
-                        >
-                            Restart Onboarding
-                        </button>
+                        <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                            <button
+                                onClick={() => {
+                                    onClose();
+                                    onRestartOnboarding();
+                                }}
+                                className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 underline underline-offset-2 transition-colors"
+                            >
+                                Restart onboarding
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
