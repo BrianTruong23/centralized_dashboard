@@ -764,7 +764,6 @@ export default function Home() {
                </div>
              )}
 
-             {currentView !== 'calendar' && (
              <div className="relative group flex-1 md:flex-none">
                  <input 
                    type="text" 
@@ -774,9 +773,7 @@ export default function Home() {
                    className="bg-transparent border-b border-gray-200 dark:border-gray-700 focus:border-black dark:focus:border-white outline-none px-2 py-1 text-sm w-full md:w-32 focus:w-full md:focus:w-48 transition-all"
                  />
              </div>
-             )}
              
-             {currentView !== 'calendar' && (
              <div className="relative">
                      <button 
                     onClick={() => setShowFilters(!showFilters)}
@@ -798,7 +795,6 @@ export default function Home() {
                     projects={projects}
                  />
                    </div>
-             )}
                 </div>
         </header>
 
