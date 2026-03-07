@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { X, AlertTriangle, User as UserIcon, Lock, Trash2, Bug, LogOut, Leaf, Crown, Paintbrush, Download, FileText, FileSpreadsheet, CalendarDays } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
@@ -54,11 +54,16 @@ export function SettingsModal({
   const [diagnostics, setDiagnostics] = useState<string[]>([]);
   const router = useRouter();
   const { palette, setPalette, paletteOptions } = useTheme();
+  const [draftPalette, setDraftPalette] = useState(palette);
   const [exportScope, setExportScope] = useState<'all' | 'filtered' | 'completed' | 'upcoming' | 'project'>('all');
   const [exportProjectId, setExportProjectId] = useState<string>('');
 
   // Form states
   const [newPassword, setNewPassword] = useState('');
+
+  useEffect(() => {
+    if (isOpen) setDraftPalette(palette);
+  }, [isOpen, palette]);
   
   if (!isOpen) return null;
 
@@ -508,7 +513,7 @@ export function SettingsModal({
 
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                             {paletteOptions.map((option) => {
-                                const isActive = palette === option.id;
+                                const isActive = draftPalette === option.id;
                                 const palettePreview: Record<typeof option.id, { solid: string; soft: string; ring: string }> = {
                                   neutral: { solid: '#171717', soft: '#f5f5f5', ring: '#525252' },
                                   yellow: { solid: '#b45309', soft: '#fef3c7', ring: '#d97706' },
@@ -519,7 +524,7 @@ export function SettingsModal({
                                   <button
                                     key={option.id}
                                     type="button"
-                                    onClick={() => setPalette(option.id)}
+                                    onClick={() => setDraftPalette(option.id)}
                                     className={`p-2 rounded-lg border text-left transition-all ${isActive ? 'border-black dark:border-white ring-2 ring-offset-1 ring-black/20 dark:ring-white/30' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'}`}
                                   >
                                     <div className="flex items-center justify-between mb-2">
@@ -617,6 +622,25 @@ export function SettingsModal({
                         </div>
                     </div>
                     <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
+                        <div className="flex items-center gap-2 mb-3">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setPalette(draftPalette);
+                                    setMessage({ type: 'success', text: 'Preferences saved and applied.' });
+                                }}
+                                className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border-[var(--accent-border)] hover:opacity-90"
+                            >
+                                Save changes
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setDraftPalette(palette)}
+                                className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                            >
+                                Reset
+                            </button>
+                        </div>
                         <button
                             onClick={() => {
                                 onClose();

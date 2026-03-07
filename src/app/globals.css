@@ -14,6 +14,17 @@
   /* Minimalist accents (black/white or very subtle gray) */
   --primary: #171717;
   --primary-foreground: #ffffff;
+
+  /* Accent palette tokens (overridden by ThemeProvider) */
+  --accent-solid: #171717;
+  --accent-solid-foreground: #ffffff;
+  --accent-soft: #f5f5f5;
+  --accent-soft-foreground: #1f2937;
+  --accent-border: #d4d4d8;
+  --accent-ring: #525252;
+  --accent-link: #111827;
+  --accent-tag-bg: #f5f5f5;
+  --accent-tag-fg: #374151;
 }
 
 @theme inline {
@@ -34,6 +45,15 @@
   --border: #262626;
   --primary: #ffffff;
   --primary-foreground: #000000;
+  --accent-solid: #f3f4f6;
+  --accent-solid-foreground: #111827;
+  --accent-soft: #1f2937;
+  --accent-soft-foreground: #e5e7eb;
+  --accent-border: #374151;
+  --accent-ring: #d1d5db;
+  --accent-link: #e5e7eb;
+  --accent-tag-bg: #1f2937;
+  --accent-tag-fg: #e5e7eb;
 }
 
 body {
@@ -42,6 +62,31 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: var(--accent-link);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
+}
+
+.accent-solid-btn {
+  background: var(--accent-solid);
+  color: var(--accent-solid-foreground);
+  border: 1px solid var(--accent-border);
+}
+
+.accent-solid-btn:hover {
+  filter: brightness(0.96);
+}
+
+.accent-soft-chip {
+  background: var(--accent-soft);
+  color: var(--accent-soft-foreground);
+  border: 1px solid var(--accent-border);
 }
 
 /* Utilities for scrollbar hiding if needed */

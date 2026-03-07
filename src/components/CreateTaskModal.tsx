@@ -249,7 +249,7 @@ export function CreateTaskModal({ isOpen, onClose, onAddTask, userId, defaultDat
               <button
                 type="submit"
                 disabled={!title.trim()}
-                className="px-6 py-2 text-sm font-bold bg-black dark:bg-white text-white dark:text-black rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
+                className="px-6 py-2 text-sm font-bold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl accent-solid-btn"
               >
                 Create Task
               </button>

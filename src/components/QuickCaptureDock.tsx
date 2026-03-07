@@ -339,7 +339,7 @@ export const QuickCaptureDock = ({
               <button
                 type="button"
                 onClick={handleFocus}
-                className="flex-shrink-0 w-10 h-10 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center hover:opacity-90 transition-opacity"
+                className="flex-shrink-0 w-10 h-10 rounded-full accent-solid-btn flex items-center justify-center transition-opacity"
               >
                 <Plus size={18} />
               </button>
@@ -372,7 +372,7 @@ export const QuickCaptureDock = ({
 
               {/* Input with highlighting */}
               <div className="relative flex items-center gap-2">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full accent-solid-btn flex items-center justify-center">
                   <Plus size={16} />
                 </div>
                 <div className="relative flex-1 min-w-0">
@@ -395,7 +395,7 @@ export const QuickCaptureDock = ({
                 {title.trim() && (
                   <button
                     type="submit"
-                    className="px-3 py-1.5 text-xs font-semibold bg-black dark:bg-white text-white dark:text-black rounded-lg hover:opacity-90 transition-opacity"
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg accent-solid-btn transition-opacity"
                   >
                     Add
                   </button>
