@@ -51,6 +51,15 @@ function parseLocalDateTime(dateKey: string, time?: string): Date {
   return new Date(year, (month || 1) - 1, day || 1, hour, minute, 0, 0);
 }
 
+function normalizeDateKey(value?: string): string | null {
+  if (!value) return null;
+  const direct = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (direct) return `${direct[1]}-${direct[2]}-${direct[3]}`;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return formatDateKey(parsed);
+}
+
 function seedEvents(baseDate: Date): GoogleCalendarEvent[] {
   const day = formatDateKey(baseDate);
   const next = formatDateKey(addDays(baseDate, 1));
@@ -111,9 +120,9 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
 
   const scheduledTaskEntries = useMemo<TimelineEntry[]>(() => {
     return tasks
-      .filter((task) => task.status !== 'done' && (task.scheduled_date || task.deadline))
+      .filter((task) => task.status !== 'done' && (normalizeDateKey(task.scheduled_date) || normalizeDateKey(task.deadline)))
       .map((task) => {
-        const dateKey = task.scheduled_date || task.deadline!;
+        const dateKey = normalizeDateKey(task.scheduled_date) || normalizeDateKey(task.deadline)!;
         const start = parseLocalDateTime(dateKey, task.scheduled_time || task.due_time || '09:00:00');
         const minutes = Math.max(task.estimatedMinutes || 60, 30);
         const end = new Date(start.getTime() + minutes * 60 * 1000);
