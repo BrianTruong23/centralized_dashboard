@@ -71,9 +71,7 @@ export function buildWeeklySchedule(
   return days;
 }
 
-function duplicateKeys(title: string): string {
-  return title.trim().toLowerCase().replace(/\s+/g, ' ');
-}
+
 
 function createAction(action: Omit<ProposedAction, 'action_id'>, index: number): ProposedAction {
   return {
@@ -147,39 +145,7 @@ export function createProposal(
     };
   }
 
-  if (intent === 'declutter' || intent === 'cleanup') {
-    const seen = new Map<string, AgentTask>();
-    const duplicates: AgentTask[] = [];
-    cleanTasks.forEach((task) => {
-      if (isDoneOrArchived(task)) return;
-      const key = duplicateKeys(task.title);
-      const first = seen.get(key);
-      if (first) duplicates.push(task);
-      else seen.set(key, task);
-    });
-
-    const seenTargetIds = new Set<string>();
-    duplicates.forEach((task) => {
-      if (seenTargetIds.has(task.id)) return;
-      seenTargetIds.add(task.id);
-      actions.push(
-        createAction(
-          {
-            type: 'delete_task',
-            destructive: true,
-            requires_approval: true,
-            target_task_id: task.id,
-            patch: {
-              task_title: task.title,
-            },
-            reason: `Duplicate task candidate: "${task.title}".`,
-            expected_outcome: `Delete duplicate "${task.title}" while keeping the original task.`,
-          },
-          actions.length
-        )
-      );
-    });
-  }
+  // The 'declutter' and 'cleanup' intents are now handled by LLM in service.ts
 
   if (intent === 'edit_tasks') {
     const lower = input.toLowerCase();

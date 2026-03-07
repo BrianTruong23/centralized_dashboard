@@ -204,6 +204,79 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
         days: parsed.week_plan || [],
       }
     };
+  } else if (intent === 'declutter' || intent === 'cleanup') {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) throw new Error('Missing OPENROUTER_API_KEY for decluttering');
+
+    const prompt = `
+      User Request: "${requestText}"
+      User Tasks (JSON array): ${JSON.stringify(cleanTasks.map(t => ({ id: t.id, title: t.title, created_at: t.created_at })))}
+
+      ROLE: Expert Productivity Assistant.
+      GOAL: Identify "duplicate" tasks or explicitly "stale" tasks that the user wants to declutter.
+      RULES:
+      1. Analyze the semantic meaning of the task titles.
+      2. If multiple tasks have the exact same meaning (e.g., "Select data for hiding" and "Select data for hiding \n 30m"), keep the oldest one (by created_at) and mark the others for deletion.
+      3. If the user explicitly asks to remove stale tasks, identify tasks that seem out of place, but be conservative.
+      4. Return ONLY a JSON array of objects representing the tasks to delete.
+
+      OUTPUT JSON format only (no markdown):
+      {
+        "tasks_to_delete": [
+          {
+            "id": "task-uuid-here",
+            "title": "Exact Task Title",
+            "reason": "Why this is considered a duplicate or stale."
+          }
+        ]
+      }
+    `;
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'http://localhost:3000',
+        'X-Title': 'Centralized Dashboard AI Agent',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash-lite',
+        max_tokens: 4096,
+        messages: [
+          { role: 'system', content: 'You are an expert cleaner. Return valid JSON only.' },
+          { role: 'user', content: prompt }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to generate declutter plan from AI');
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '{}';
+    const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const parsed = JSON.parse(cleanContent);
+    const toDelete = parsed.tasks_to_delete || [];
+
+    rawProposal = {
+      intent,
+      analysis_summary: `AI analyzed ${cleanTasks.length} tasks and found ${toDelete.length} tasks to declutter.`,
+      questions: toDelete.length === 0 ? ['I could not find any clear duplicates or stale tasks. Can you specify what you want to remove?'] : [],
+      proposed_actions: toDelete.map((td: any, i: number) => ({
+        action_id: `action_${i + 1}`,
+        type: 'delete_task',
+        destructive: true,
+        requires_approval: true,
+        reason: td.reason,
+        expected_outcome: `Permanently delete task: "${td.title}"`,
+        target_task_id: td.id,
+        patch: {
+          task_title: td.title
+        }
+      })),
+    };
   } else {
     rawProposal = createProposal(requestText, intent, tasks, preferences);
   }
