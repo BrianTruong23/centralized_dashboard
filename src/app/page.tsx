@@ -511,6 +511,7 @@ export default function Home() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [showInboxViewDropdown, setShowInboxViewDropdown] = useState(false);
   const [activeFilters, setActiveFilters] = useState<{
     status: TaskStatus[];
     priority: TaskPriority[];
@@ -520,6 +521,10 @@ export default function Home() {
     priority: [],
     category: []
   });
+
+  useEffect(() => {
+    if (currentView !== 'inbox') setShowInboxViewDropdown(false);
+  }, [currentView]);
 
   // ... (existing effects)
 
@@ -947,17 +952,53 @@ export default function Home() {
                                             {noPriority > 0 && (
                                                 <span>{noPriority} no priority</span>
                                             )}
-                                            {effectiveIsPro && (
-                                                <button
-                                                    onClick={() => setIsInboxCleanupModalOpen(true)}
-                                                    className="ml-auto text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center gap-1 transition-colors"
-                                                    title="Review inbox for cleanup suggestions"
-                                                >
-                                                    <Sparkles size={12} />
-                                                    Clean-up
-                                                </button>
-               )}
-            </div>
+
+                                            <div className="ml-auto flex items-center gap-2">
+                                                <div className="relative">
+                                                    <button
+                                                        onClick={() => setShowInboxViewDropdown((prev) => !prev)}
+                                                        className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center gap-1 transition-colors px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700"
+                                                    >
+                                                        Views
+                                                        <ChevronDown size={12} />
+                                                    </button>
+                                                    {showInboxViewDropdown && (
+                                                        <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-20 min-w-[140px]">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setCurrentView('kanban');
+                                                                    setShowInboxViewDropdown(false);
+                                                                }}
+                                                                className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                                                            >
+                                                                Kanban
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setCurrentView('calendar');
+                                                                    setShowInboxViewDropdown(false);
+                                                                }}
+                                                                className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                                                            >
+                                                                Calendar
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                {effectiveIsPro && (
+                                                    <button
+                                                        onClick={() => setIsInboxCleanupModalOpen(true)}
+                                                        className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center gap-1 transition-colors"
+                                                        title="Review inbox for cleanup suggestions"
+                                                    >
+                                                        <Sparkles size={12} />
+                                                        Clean-up
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
                                     </section>
                                 );
                             })()}

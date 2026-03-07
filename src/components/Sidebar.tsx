@@ -5,7 +5,6 @@ import {
   CalendarDays, 
   Hash, 
   Plus, 
-  Columns, 
   Layout, 
   ChevronDown,
   Settings,
@@ -13,8 +12,7 @@ import {
   Trash2,
   CheckCircle2,
   Menu,
-  X,
-  CalendarRange
+  X
 } from 'lucide-react';
 import { Task } from '@/types/task';
 import { Project, CreateProjectInput } from '@/types/project';
@@ -183,8 +181,6 @@ export const Sidebar = ({
           <NavItem id="today" icon={Calendar} label="Today" count={todayCount} />
           <NavItem id="inbox" icon={Inbox} label="Inbox" count={inboxCount} />
           <NavItem id="upcoming" icon={CalendarDays} label="Upcoming" />
-          <NavItem id="kanban" icon={Columns} label="Kanban" />
-          <NavItem id="calendar" icon={CalendarRange} label="Calendar" />
           
           {showAllNavItems && (
             <>
@@ -197,7 +193,7 @@ export const Sidebar = ({
              onClick={() => setShowAllNavItems(!showAllNavItems)}
              className="w-full mt-1 text-xs text-center text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 py-1.5 font-medium transition-colors"
           >
-             {showAllNavItems ? 'Show less' : 'Show 3 more'}
+             {showAllNavItems ? 'Show less' : 'Show more'}
           </button>
 
           
