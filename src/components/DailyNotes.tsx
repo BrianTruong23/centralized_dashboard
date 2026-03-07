@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { notesDb } from '@/lib/notes';
 import { Loader2, Sparkles, Save, Plus, CheckCircle, ListPlus, Calendar, Pencil, X } from 'lucide-react';
 import { Task, TaskCategory, TaskEnergyLevel } from '@/types/task';
@@ -47,6 +47,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSummaryVisible, setIsSummaryVisible] = useState(false);
+  const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
 
   // State for missing projects handling
   const [missingProjects, setMissingProjects] = useState<string[]>([]);
@@ -115,17 +116,20 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
         if (selected) {
             setNoteContent(selected.content);
             setSummary(selected.summary || '');
+            setIsSummaryExpanded(false);
             setCurrentNoteId(selected.id);
         } else {
             // Reset if no note selected
             setNoteContent('');
             setSummary('');
+            setIsSummaryExpanded(false);
             setCurrentNoteId(null);
         }
 
       } else {
         setNoteContent('');
         setSummary('');
+        setIsSummaryExpanded(false);
         setCurrentNoteId(null);
       }
     } catch (err) {
@@ -165,6 +169,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
     setActionItems([]);
     setAddedItems(new Set());
     setIsSummaryVisible(false);
+    setIsSummaryExpanded(false);
     setEditingIndex(null);
     setEditForm(null);
   };
@@ -208,6 +213,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
       log(`Action items received: ${data.actionItems?.length || 0}`);
 
       setSummary(data.summary);
+      setIsSummaryExpanded(false);
       setActionItems(data.actionItems || []);
       setAddedItems(new Set()); // Reset added items
 
@@ -369,9 +375,32 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
     setEditForm(null);
   };
 
+  const summaryPoints = useMemo(() => {
+    if (!summary.trim()) return [];
+    const normalized = summary.replace(/\r\n/g, '\n').trim();
+    const lines = normalized
+      .split('\n')
+      .map((line) => line.replace(/^[\-\*\u2022]\s*/, '').trim())
+      .filter(Boolean);
+
+    const rawPoints = lines.length > 1
+      ? lines
+      : normalized
+          .split(/(?<=[.!?])\s+/)
+          .map((part) => part.trim())
+          .filter(Boolean);
+
+    const unique: string[] = [];
+    rawPoints.forEach((point) => {
+      if (!unique.includes(point)) unique.push(point);
+    });
+    return unique;
+  }, [summary]);
   if (!userId) return null;
 
   const wordCount = countWords(noteContent);
+  const previewSummaryPoints = isSummaryExpanded ? summaryPoints : summaryPoints.slice(0, 5);
+  const hasHiddenSummaryPoints = summaryPoints.length > 5 && !isSummaryExpanded;
 
   return (
     <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
@@ -444,46 +473,72 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
         </div>
       )}
 
-      <div className={`grid grid-cols-1 ${isSummaryVisible ? 'md:grid-cols-2' : ''} gap-6`}>
+      <div className="space-y-6">
         <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold uppercase text-gray-400">Your Thoughts</label>
-              <span className={`text-xs ${wordCount >= MAX_NOTE_WORDS ? 'text-red-500' : 'text-gray-400'}`}>
-                {wordCount}/{MAX_NOTE_WORDS} words
-              </span>
-            </div>
-            <textarea
-                value={noteContent}
-                onChange={(e) => setNoteContent(clampToMaxWords(e.target.value, MAX_NOTE_WORDS))}
-                placeholder="Dump your tasks, ideas, and thoughts here..."
-                className="w-full h-64 p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 resize-none focus:ring-2 focus:outline-none transition-all"
-                style={{ ['--tw-ring-color' as any]: 'var(--accent-ring)' }}
-            />
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold uppercase text-gray-400">Your Thoughts</label>
+            <span className={`text-xs ${wordCount >= MAX_NOTE_WORDS ? 'text-red-500' : 'text-gray-400'}`}>
+              {wordCount}/{MAX_NOTE_WORDS} words
+            </span>
+          </div>
+          <textarea
+            value={noteContent}
+            onChange={(e) => setNoteContent(clampToMaxWords(e.target.value, MAX_NOTE_WORDS))}
+            placeholder="Dump your tasks, ideas, and thoughts here..."
+            className="w-full h-64 p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 resize-none focus:ring-2 focus:outline-none transition-all"
+            style={{ ['--tw-ring-color' as any]: 'var(--accent-ring)' }}
+          />
         </div>
 
         {isSummaryVisible && (
-        <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold uppercase text-gray-400">AI Summary & Action Items</label>
               {actionItems.length > 0 && onAddTask && (
                 <button
                   onClick={handleAddAllTasks}
                   disabled={addedItems.size === actionItems.length}
-                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-[var(--accent-soft-foreground)] bg-[var(--accent-soft)] rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
                 >
                   <ListPlus size={12} />
                   Add All ({actionItems.length - addedItems.size})
                 </button>
               )}
             </div>
-            <div className="w-full h-64 p-4 rounded-xl bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/30 overflow-y-auto">
-                {summary || actionItems.length > 0 ? (
-                    <div className="space-y-4">
-                      {summary && (
-                        <p className="text-sm text-gray-600 dark:text-gray-300 pb-3 border-b border-indigo-100 dark:border-indigo-900/30">
-                          {summary}
-                        </p>
-                      )}
+
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-900/60 p-3">
+              {summaryPoints.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    Summary Preview
+                  </p>
+                  <ul className="space-y-1">
+                    {previewSummaryPoints.map((point, idx) => (
+                      <li key={`${point.slice(0, 24)}-${idx}`} className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                        • {point}
+                      </li>
+                    ))}
+                  </ul>
+                  {(hasHiddenSummaryPoints || isSummaryExpanded) && (
+                    <button
+                      type="button"
+                      onClick={() => setIsSummaryExpanded((prev) => !prev)}
+                      className="text-xs font-medium text-[var(--accent-soft-foreground)] hover:opacity-80 transition-opacity"
+                    >
+                      {isSummaryExpanded ? 'Show less' : `Show more (${summaryPoints.length - previewSummaryPoints.length} more)`}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Click &quot;Summarize with AI&quot; to generate a concise plan from your note.
+                </p>
+              )}
+            </div>
+
+            <div className="w-full max-h-[28rem] p-4 rounded-xl bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 overflow-y-auto">
+              {summary || actionItems.length > 0 ? (
+                <div className="space-y-4">
                       {actionItems.length > 0 && (
                         <div className="space-y-2">
                           {actionItems.map((item, index) => (
@@ -647,14 +702,14 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
                           ))}
                         </div>
                       )}
-                    </div>
-                ) : (
-                    <div className="h-full flex items-center justify-center text-gray-400 text-sm italic">
-                        Click "Summarize with AI" to generate a plan from your notes.
-                    </div>
-                )}
+                </div>
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+                  Click &quot;Summarize with AI&quot; to generate action items from your notes.
+                </div>
+              )}
             </div>
-        </div>
+          </div>
         )}
       </div>
 

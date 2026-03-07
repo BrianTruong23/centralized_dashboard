@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { addDays, addWeeks, format, getHours, getMinutes, isSameDay, parseISO, startOfDay, startOfWeek, subWeeks } from 'date-fns';
 import clsx from 'clsx';
-import { CalendarCheck, CalendarSync, ChevronLeft, ChevronRight, Link2, Unlink2 } from 'lucide-react';
+import { CalendarCheck, CalendarSync, ChevronLeft, ChevronRight, Link2, Unlink2, X } from 'lucide-react';
 import { Task } from '@/types/task';
 import { Project } from '@/types/project';
 import { formatDateKey } from '@/lib/dateKey';
@@ -38,6 +38,17 @@ interface TimelineEntry {
   color: string;
 }
 
+interface TaskEditDraft {
+  title: string;
+  priority: 1 | 2 | 3 | 4 | 5;
+  status: 'todo' | 'doing' | 'done';
+  project_id: string;
+  date: string;
+  time: string;
+  duration: number;
+  linkGoogleEvent: boolean;
+}
+
 const CONNECTED_KEY = 'google_calendar_connected';
 const SYNC_KEY = 'google_calendar_sync_enabled';
 const EVENTS_KEY = 'google_calendar_events';
@@ -58,6 +69,34 @@ function normalizeDateKey(value?: string): string | null {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
   return formatDateKey(parsed);
+}
+
+function toDate(value?: string | null): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getTaskTimeRange(task: Task): { start: Date; end: Date; dayKey: string } | null {
+  const startFromTimestamp = toDate(task.start_time);
+  if (startFromTimestamp) {
+    const endFromTimestamp = toDate(task.end_time);
+    const computedEnd =
+      endFromTimestamp && endFromTimestamp.getTime() > startFromTimestamp.getTime()
+        ? endFromTimestamp
+        : new Date(startFromTimestamp.getTime() + Math.max(task.estimatedMinutes || 60, 30) * 60 * 1000);
+    return {
+      start: startFromTimestamp,
+      end: computedEnd,
+      dayKey: formatDateKey(startFromTimestamp),
+    };
+  }
+
+  const dateKey = normalizeDateKey(task.scheduled_date) || normalizeDateKey(task.deadline);
+  if (!dateKey) return null;
+  const fallbackStart = parseLocalDateTime(dateKey, task.scheduled_time || task.due_time || '09:00:00');
+  const fallbackEnd = new Date(fallbackStart.getTime() + Math.max(task.estimatedMinutes || 60, 30) * 60 * 1000);
+  return { start: fallbackStart, end: fallbackEnd, dayKey: formatDateKey(fallbackStart) };
 }
 
 function seedEvents(baseDate: Date): GoogleCalendarEvent[] {
@@ -100,6 +139,9 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
       return [];
     }
   });
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editDraft, setEditDraft] = useState<TaskEditDraft | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -120,20 +162,17 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
 
   const scheduledTaskEntries = useMemo<TimelineEntry[]>(() => {
     return tasks
-      .filter((task) => task.status !== 'done' && (normalizeDateKey(task.scheduled_date) || normalizeDateKey(task.deadline)))
+      .filter((task) => task.status !== 'done' && !!getTaskTimeRange(task))
       .map((task) => {
-        const dateKey = normalizeDateKey(task.scheduled_date) || normalizeDateKey(task.deadline)!;
-        const start = parseLocalDateTime(dateKey, task.scheduled_time || task.due_time || '09:00:00');
-        const minutes = Math.max(task.estimatedMinutes || 60, 30);
-        const end = new Date(start.getTime() + minutes * 60 * 1000);
+        const range = getTaskTimeRange(task)!;
         const linked = !!task.planningMetadata?.googleEventId;
         const projectColor = task.project_id ? projectById.get(task.project_id)?.color : undefined;
         return {
           id: `task-${task.id}`,
           title: task.title,
-          start,
-          end,
-          dayKey: formatDateKey(start),
+          start: range.start,
+          end: range.end,
+          dayKey: range.dayKey,
           source: 'task' as const,
           task,
           syncState: (linked ? 'linked' : 'task_only') as SyncState,
@@ -188,6 +227,8 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
     if (!task) return;
 
     const newTime = `${String(hour).padStart(2, '0')}:00:00`;
+    const startAt = parseLocalDateTime(dayKey, newTime);
+    const endAt = new Date(startAt.getTime() + Math.max(task.estimatedMinutes || 60, 30) * 60 * 1000);
     let nextMetadata = { ...(task.planningMetadata || {}) };
     let nextEvents = [...googleEvents];
 
@@ -200,8 +241,8 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
       );
 
       if (shouldSync) {
-        const start = parseLocalDateTime(dayKey, newTime);
-        const end = new Date(start.getTime() + Math.max(task.estimatedMinutes || 60, 30) * 60 * 1000);
+        const start = startAt;
+        const end = endAt;
         if (linkedId) {
           nextEvents = nextEvents.map((evt) =>
             evt.id === linkedId ? { ...evt, title: task.title, start: start.toISOString(), end: end.toISOString() } : evt
@@ -224,12 +265,111 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
       onUpdateTask({
         ...task,
         deadline: dayKey,
+        start_time: startAt.toISOString(),
+        end_time: endAt.toISOString(),
         scheduled_date: dayKey,
         scheduled_time: newTime,
+        due_time: newTime,
         planningMetadata: nextMetadata,
       })
     );
     setGoogleEvents(nextEvents);
+  };
+
+  const openTaskEditor = (task: Task) => {
+    const range = getTaskTimeRange(task);
+    const date = range ? formatDateKey(range.start) : normalizeDateKey(task.scheduled_date) || normalizeDateKey(task.deadline) || formatDateKey(new Date());
+    const rawTime = range
+      ? `${String(range.start.getHours()).padStart(2, '0')}:${String(range.start.getMinutes()).padStart(2, '0')}`
+      : (task.scheduled_time || task.due_time || '09:00:00').slice(0, 5);
+    const duration = range
+      ? Math.max(Math.round((range.end.getTime() - range.start.getTime()) / 60000), 30)
+      : Math.max(task.estimatedMinutes || 60, 30);
+    setEditingTask(task);
+    setEditDraft({
+      title: task.title,
+      priority: task.priority,
+      status: task.status,
+      project_id: task.project_id || '',
+      date,
+      time: rawTime,
+      duration,
+      linkGoogleEvent: !!task.planningMetadata?.googleEventId,
+    });
+  };
+
+  const closeTaskEditor = () => {
+    setEditingTask(null);
+    setEditDraft(null);
+    setSavingEdit(false);
+  };
+
+  const handleSaveTaskEdit = async () => {
+    if (!editingTask || !editDraft || savingEdit) return;
+    setSavingEdit(true);
+    try {
+      const normalizedTime = editDraft.time.length === 5 ? `${editDraft.time}:00` : editDraft.time;
+      const nextStartAt = parseLocalDateTime(editDraft.date, normalizedTime);
+      const nextEndAt = new Date(nextStartAt.getTime() + Math.max(editDraft.duration, 30) * 60 * 1000);
+      let nextMetadata = { ...(editingTask.planningMetadata || {}) };
+      let nextEvents = [...googleEvents];
+      const linkedId = (editingTask.planningMetadata?.googleEventId as string | undefined) || '';
+      const shouldCreateLink = !linkedId && editDraft.linkGoogleEvent;
+
+      if (googleConnected && syncEnabled && (linkedId || shouldCreateLink)) {
+        const confirmed = window.confirm(
+          linkedId
+            ? 'This task is linked to Google Calendar. Apply these edits to the external event too?'
+            : 'Create a linked Google Calendar event for this task when saving?'
+        );
+
+        if (confirmed) {
+          const start = nextStartAt;
+          const end = nextEndAt;
+          if (linkedId) {
+            nextEvents = nextEvents.map((evt) =>
+              evt.id === linkedId
+                ? { ...evt, title: editDraft.title, start: start.toISOString(), end: end.toISOString() }
+                : evt
+            );
+          } else {
+            const newEvent: GoogleCalendarEvent = {
+              id: `gcal-${generateId()}`,
+              title: editDraft.title,
+              start: start.toISOString(),
+              end: end.toISOString(),
+              linkedTaskId: editingTask.id,
+            };
+            nextEvents.push(newEvent);
+            nextMetadata = { ...nextMetadata, googleEventId: newEvent.id };
+          }
+        }
+      }
+
+      const nextProjectName = editDraft.project_id ? projectById.get(editDraft.project_id)?.name : undefined;
+      await Promise.resolve(
+        onUpdateTask({
+          ...editingTask,
+          title: editDraft.title.trim() || editingTask.title,
+          priority: editDraft.priority,
+          status: editDraft.status,
+          project_id: editDraft.project_id || undefined,
+          category: nextProjectName || editingTask.category,
+          deadline: editDraft.date,
+          start_time: nextStartAt.toISOString(),
+          end_time: nextEndAt.toISOString(),
+          scheduled_date: editDraft.date,
+          due_time: normalizedTime,
+          scheduled_time: normalizedTime,
+          estimatedMinutes: Math.max(editDraft.duration, 30),
+          planningMetadata: nextMetadata,
+        })
+      );
+      setGoogleEvents(nextEvents);
+      closeTaskEditor();
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   const headerLabel =
@@ -256,7 +396,13 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                 Week
               </button>
             </div>
-            <button onClick={() => setAnchorDate(new Date())} className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300">
+            <button
+              onClick={() => {
+                setAnchorDate(new Date());
+                setViewMode('day');
+              }}
+              className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300"
+            >
               Today
             </button>
             <button onClick={() => handleNavigate('prev')} className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300">
@@ -368,8 +514,12 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                           onDragStart={(e) => {
                             if (entry.task) e.dataTransfer.setData('text/plain', entry.task.id);
                           }}
+                          onClick={() => {
+                            if (entry.source === 'task' && entry.task) openTaskEditor(entry.task);
+                          }}
                           className={clsx(
-                            'absolute left-1 right-1 rounded-lg px-2 py-1 text-xs text-white cursor-grab active:cursor-grabbing shadow-sm',
+                            'absolute left-1 right-1 rounded-lg px-2 py-1 text-xs text-white shadow-sm',
+                            entry.source === 'task' ? 'cursor-pointer' : 'cursor-default',
                             entry.syncState === 'linked' && 'ring-1 ring-emerald-200 dark:ring-emerald-700'
                           )}
                           style={{ top, height, backgroundColor: entry.color }}
@@ -425,6 +575,151 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
         </aside>
         )}
       </div>
+
+      {editingTask && editDraft && (
+        <div className="fixed inset-0 z-[260] bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Edit task</h3>
+              <button
+                type="button"
+                onClick={closeTaskEditor}
+                className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              <div>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Title</label>
+                <input
+                  value={editDraft.title}
+                  onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, title: e.target.value } : prev))}
+                  className="mt-1 w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Priority</label>
+                  <select
+                    value={editDraft.priority}
+                    onChange={(e) =>
+                      setEditDraft((prev) =>
+                        prev ? { ...prev, priority: Number(e.target.value) as 1 | 2 | 3 | 4 | 5 } : prev
+                      )
+                    }
+                    className="mt-1 w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  >
+                    {[1, 2, 3, 4, 5].map((p) => (
+                      <option key={p} value={p}>
+                        Priority {p}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Status</label>
+                  <select
+                    value={editDraft.status}
+                    onChange={(e) =>
+                      setEditDraft((prev) =>
+                        prev ? { ...prev, status: e.target.value as 'todo' | 'doing' | 'done' } : prev
+                      )
+                    }
+                    className="mt-1 w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  >
+                    <option value="todo">To do</option>
+                    <option value="doing">In progress</option>
+                    <option value="done">Done</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Project</label>
+                <select
+                  value={editDraft.project_id}
+                  onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, project_id: e.target.value } : prev))}
+                  className="mt-1 w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="">No project</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Date</label>
+                  <input
+                    type="date"
+                    value={editDraft.date}
+                    onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, date: e.target.value } : prev))}
+                    className="mt-1 w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Time</label>
+                  <input
+                    type="time"
+                    value={editDraft.time}
+                    onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, time: e.target.value } : prev))}
+                    className="mt-1 w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Duration (min)</label>
+                  <input
+                    type="number"
+                    min={15}
+                    step={15}
+                    value={editDraft.duration}
+                    onChange={(e) =>
+                      setEditDraft((prev) => (prev ? { ...prev, duration: Number(e.target.value) || 30 } : prev))
+                    }
+                    className="mt-1 w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  />
+                </div>
+              </div>
+
+              {googleConnected && syncEnabled && (
+                <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={editDraft.linkGoogleEvent}
+                    onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, linkGoogleEvent: e.target.checked } : prev))}
+                    className="rounded border-gray-300"
+                  />
+                  {editingTask.planningMetadata?.googleEventId ? 'Keep linked to Google Calendar' : 'Create Google Calendar event on save'}
+                </label>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeTaskEditor}
+                className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveTaskEdit()}
+                disabled={savingEdit}
+                className="px-3 py-1.5 text-sm rounded-lg accent-solid-btn disabled:opacity-50"
+              >
+                {savingEdit ? 'Saving...' : 'Save changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 };

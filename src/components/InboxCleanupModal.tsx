@@ -598,12 +598,21 @@ export function InboxCleanupModal({
           <p className="text-xs text-gray-500 dark:text-gray-400">
             Review suggestions carefully. Actions are safe and can be undone.
           </p>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-          >
-            Done
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleApplySelected}
+              disabled={isApplyingSelected || selectedPendingSuggestions.length === 0}
+              className="px-4 py-2 text-sm font-medium rounded-lg accent-solid-btn disabled:opacity-50 transition-opacity"
+            >
+              {isApplyingSelected ? 'Applying...' : `Apply all (${selectedPendingSuggestions.length})`}
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            >
+              Done
+            </button>
+          </div>
         </div>
       </div>
     </div>
