@@ -1225,18 +1225,6 @@ export default function Home() {
                                 </div>
         </section>
 
-                            {/* Notes - Collapsed */}
-        <section>
-                                <details className="group">
-                                    <summary className="cursor-pointer text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center justify-between py-2 px-1">
-                                        <span>Notes</span>
-                                        <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
-                                    </summary>
-                                    <div className="mt-2">
-                                        <DailyNotes userId={userId} onAddTask={addTask} projects={projects} addProject={addProjectFn} />
-                                    </div>
-                                </details>
-                            </section>
                         </>
                     ) : currentView === 'upcoming' ? (
                         <>
