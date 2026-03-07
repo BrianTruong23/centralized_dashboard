@@ -89,6 +89,13 @@ a {
   border: 1px solid var(--accent-border);
 }
 
+.quick-capture-title-input:focus,
+.quick-capture-title-input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
 /* Utilities for scrollbar hiding if needed */
 .scrollbar-hide::-webkit-scrollbar {
     display: none;
