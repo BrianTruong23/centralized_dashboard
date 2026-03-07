@@ -5,7 +5,6 @@ import {
   CalendarDays, 
   Hash, 
   Plus, 
-  Search, 
   Columns, 
   Layout, 
   ChevronDown,
@@ -14,7 +13,8 @@ import {
   Trash2,
   CheckCircle2,
   Menu,
-  X
+  X,
+  CalendarRange
 } from 'lucide-react';
 import { Task } from '@/types/task';
 import { Project, CreateProjectInput } from '@/types/project';
@@ -178,40 +178,17 @@ export const Sidebar = ({
         {/* ... (Main Nav) ... */}
         <div className="flex-1 overflow-y-auto px-3 space-y-1 scrollbar-hide">
           {/* ... (Actions same as before) ... */}
-          <button 
-            onClick={() => {
-              onAddTask();
-              setIsMobileOpen(false);
-            }}
-            data-tutorial="sidebar-add-task"
-            className="w-full flex items-center gap-2 text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white px-2 py-2 mb-4 hover:bg-white dark:hover:bg-gray-900 rounded-md shadow-sm border border-transparent hover:border-gray-100 dark:hover:border-gray-800 transition-all group"
-          >
-            <div className="bg-gray-900 dark:bg-gray-100 rounded-full p-0.5 text-white dark:text-black">
-              <Plus size={14} />
-            </div>
-            <span className="text-sm font-medium">Add task</span>
-          </button>
-
-          {/* Search (same) */}
-         <div className="relative group mb-6">
-             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-             <input 
-               type="text" 
-               placeholder="Search" 
-               value={searchQuery}
-               onChange={(e) => onSearchChange(e.target.value)}
-               className="w-full bg-transparent border-none outline-none pl-9 py-1.5 text-sm text-gray-600 placeholder:text-gray-400 focus:ring-0"
-             />
-          </div>
+          <div className="mb-3" />
 
           <NavItem id="today" icon={Calendar} label="Today" count={todayCount} />
           <NavItem id="inbox" icon={Inbox} label="Inbox" count={inboxCount} />
           <NavItem id="upcoming" icon={CalendarDays} label="Upcoming" />
+          <NavItem id="kanban" icon={Columns} label="Kanban" />
+          <NavItem id="calendar" icon={CalendarRange} label="Calendar" />
           
           {showAllNavItems && (
             <>
               <NavItem id="daily-notes" icon={NotebookPen} label="Daily Notes" />
-              <NavItem id="kanban" icon={Columns} label="Kanban" />
               <NavItem id="completed" icon={CheckCircle2} label="Completed" />
             </>
           )}

@@ -48,6 +48,7 @@ import Link from 'next/link';
 import { formatDateKey } from '@/lib/dateKey';
 import { usePremium } from '@/hooks/usePremium';
 import { AiAssistant } from '@/components/AiAssistant';
+import { CalendarWorkspace } from '@/components/CalendarWorkspace';
 import { PlanningPreferences, defaultPlanningPreferences } from '@/types/planningPreferences';
 import OnboardingModal from '@/components/OnboardingModal';
 import { OnboardingPreferences } from '@/types/onboarding';
@@ -661,7 +662,7 @@ export default function Home() {
       <main className={`flex-1 overflow-y-auto p-4 md:p-8 ${!user ? 'blur-sm pointer-events-none select-none' : ''}`}>
         <header className={clsx(
           "flex flex-col md:flex-row md:items-start justify-between gap-4 md:gap-0 max-w-4xl mx-auto relative",
-          (currentView === 'today' || currentView === 'inbox' || currentView === 'upcoming') ? "mb-4" : "mb-8"
+          (currentView === 'today' || currentView === 'inbox' || currentView === 'upcoming' || currentView === 'calendar') ? "mb-4" : "mb-8"
         )}>
           <div>
             <h1 className={clsx(
@@ -689,16 +690,23 @@ export default function Home() {
                      {todoTasks.length} {todoTasks.length === 1 ? 'task' : 'tasks'}
                         </span>
                  </div>
+               ) : currentView === 'calendar' ? (
+                 <div className="flex items-center gap-3">
+                   <span>Calendar</span>
+                   <span className="text-sm font-normal text-gray-500 dark:text-gray-400 normal-case">
+                     Plan tasks in time
+                   </span>
+                 </div>
                ) : viewTitle}
             </h1>
-            {currentView !== 'today' && currentView !== 'inbox' && (
+            {currentView !== 'today' && currentView !== 'inbox' && currentView !== 'calendar' && (
               <p className="text-gray-500 dark:text-gray-400 text-sm min-h-[20px]">
                 {currentView === 'kanban' ? 'Visual workflow' : null}
               </p>
                         )}
                      </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto">
+          <div className={clsx("flex items-center gap-2 w-full md:w-auto", currentView === 'calendar' && "hidden")}>
              <div className="relative group flex-1 md:flex-none">
                  <input 
                    type="text" 
@@ -733,8 +741,16 @@ export default function Home() {
                 </div>
         </header>
 
-        <div className="max-w-4xl mx-auto">
-            {currentView === 'kanban' ? (
+        <div className={clsx("mx-auto", currentView === 'calendar' ? "max-w-[1400px]" : "max-w-4xl")}>
+            {currentView === 'calendar' ? (
+                <section>
+                    <CalendarWorkspace
+                        tasks={tasks.filter(t => t.status !== 'done')}
+                        projects={projects}
+                        onUpdateTask={updateTask}
+                    />
+                </section>
+            ) : currentView === 'kanban' ? (
                 <section className="h-[calc(100vh-200px)]">
                     <KanbanBoard
                         tasks={filteredTasks}
@@ -1091,20 +1107,12 @@ export default function Home() {
       />
 
       {tutorialStep === 'input' && (
-        <>
-          <TutorialOverlay
-            targetId="task-input"
-            message="This is where you add tasks"
-            position="bottom"
-            onDismiss={handleDismissTutorial}
-          />
-          <TutorialOverlay
-            targetId="sidebar-add-task"
-            message="Or use this button"
-            position="right"
-            onDismiss={handleDismissTutorial}
-          />
-        </>
+        <TutorialOverlay
+          targetId="task-input"
+          message="This is where you add tasks"
+          position="bottom"
+          onDismiss={handleDismissTutorial}
+        />
       )}
 
       {tutorialStep === 'list' && (
