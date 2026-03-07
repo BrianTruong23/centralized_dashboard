@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { notesDb } from '@/lib/notes';
-import { Loader2, Sparkles, Save, Plus, CheckCircle, ListPlus, Calendar, Pencil } from 'lucide-react';
+import { Loader2, Sparkles, Save, Plus, CheckCircle, ListPlus, Calendar, Pencil, WandSparkles } from 'lucide-react';
 import { Task, TaskCategory, TaskEnergyLevel } from '@/types/task';
 import { Project, CreateProjectInput } from '@/types/project';
 
@@ -49,6 +49,11 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
   const [isSummaryVisible, setIsSummaryVisible] = useState(false);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [selectedRange, setSelectedRange] = useState<{ start: number; end: number; text: string } | null>(null);
+  const [isRefiningSelection, setIsRefiningSelection] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const writingSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const [refineAnchor, setRefineAnchor] = useState<{ x: number; y: number } | null>(null);
 
   // State for missing projects handling
   const [missingProjects, setMissingProjects] = useState<string[]>([]);
@@ -179,6 +184,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
     setEditingIndex(null);
     setEditForm(null);
     setLastSavedAt(null);
+    setSelectedRange(null);
   };
 
   const handleSummarize = async () => {
@@ -252,6 +258,69 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
       setError(message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const updateSelectionRange = (clientX?: number, clientY?: number) => {
+    const element = textareaRef.current;
+    if (!element) return;
+    const start = element.selectionStart ?? 0;
+    const end = element.selectionEnd ?? 0;
+    const text = element.value.slice(start, end).trim();
+    if (end - start >= 3 && text.length >= 3) {
+      setSelectedRange({ start, end, text });
+      const surfaceRect = writingSurfaceRef.current?.getBoundingClientRect();
+      if (surfaceRect && typeof clientX === 'number' && typeof clientY === 'number') {
+        setRefineAnchor({
+          x: Math.max(8, Math.min(clientX - surfaceRect.left + 8, surfaceRect.width - 40)),
+          y: Math.max(8, Math.min(clientY - surfaceRect.top - 36, surfaceRect.height - 40)),
+        });
+      } else if (surfaceRect) {
+        setRefineAnchor({ x: surfaceRect.width - 44, y: 10 });
+      }
+      return;
+    }
+    setSelectedRange(null);
+    setRefineAnchor(null);
+  };
+
+  const handleRefineSelection = async () => {
+    if (!selectedRange || isRefiningSelection) return;
+    setIsRefiningSelection(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/refine-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selectedText: selectedRange.text,
+          fullText: noteContent,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed to refine selection');
+      const refined = String(data?.refinedText || '').trim();
+      if (!refined) throw new Error('No refined text returned');
+
+      setNoteContent((prev) => {
+        const next = `${prev.slice(0, selectedRange.start)}${refined}${prev.slice(selectedRange.end)}`;
+        return clampToMaxWords(next, MAX_NOTE_WORDS);
+      });
+
+      const nextCursor = selectedRange.start + refined.length;
+      setSelectedRange(null);
+      setRefineAnchor(null);
+      requestAnimationFrame(() => {
+        const element = textareaRef.current;
+        if (!element) return;
+        element.focus();
+        element.setSelectionRange(nextCursor, nextCursor);
+      });
+    } catch (err: any) {
+      setError(err?.message || 'Failed to refine selection');
+    } finally {
+      setIsRefiningSelection(false);
     }
   };
 
@@ -503,14 +572,32 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <label className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Writing</label>
-            <span className={`text-xs ${wordCount >= MAX_NOTE_WORDS ? 'text-red-500' : 'text-gray-400'}`}>
-              {wordCount}/{MAX_NOTE_WORDS} words
-            </span>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs ${wordCount >= MAX_NOTE_WORDS ? 'text-red-500' : 'text-gray-400'}`}>
+                {wordCount}/{MAX_NOTE_WORDS} words
+              </span>
+            </div>
           </div>
-          <div className="rounded-2xl bg-gray-50/70 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800 px-5 py-4">
+          <div ref={writingSurfaceRef} className="relative rounded-2xl bg-gray-50/70 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800 px-5 py-4">
+            {selectedRange && refineAnchor && (
+              <button
+                type="button"
+                onClick={handleRefineSelection}
+                disabled={isRefiningSelection}
+                className="absolute z-10 h-7 w-7 inline-flex items-center justify-center rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] shadow-sm hover:opacity-90 disabled:opacity-60 transition-opacity"
+                style={{ left: refineAnchor.x, top: refineAnchor.y }}
+                title="Refine selection"
+              >
+                {isRefiningSelection ? <Loader2 size={13} className="animate-spin" /> : <WandSparkles size={13} />}
+              </button>
+            )}
             <textarea
+              ref={textareaRef}
               value={noteContent}
               onChange={(e) => setNoteContent(clampToMaxWords(e.target.value, MAX_NOTE_WORDS))}
+              onSelect={() => updateSelectionRange()}
+              onMouseUp={(e) => updateSelectionRange(e.clientX, e.clientY)}
+              onKeyUp={() => updateSelectionRange()}
               placeholder="Start writing your notes..."
               className="w-full min-h-[320px] md:min-h-[360px] bg-transparent border-0 outline-none resize-none text-[17px] leading-8 tracking-[0.01em] text-gray-800 dark:text-gray-200 placeholder:text-gray-400/90 dark:placeholder:text-gray-500"
             />
