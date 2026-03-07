@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { User } from '@supabase/supabase-js';
-import { Settings, LogOut, ChevronDown, User as UserIcon, Bell, Layout } from 'lucide-react';
+import { Settings, LogOut, ChevronDown, Layout } from 'lucide-react';
 
 
 interface UserDropdownProps {
@@ -28,12 +28,6 @@ export function UserDropdown({ user, onLogout, onOpenSettings, onOpenActivityLog
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const getInitial = () => {
-    const metaName = user.user_metadata?.full_name || user.user_metadata?.name;
-    if (metaName) return metaName[0].toUpperCase();
-    return user.email?.[0]?.toUpperCase() || 'U';
-  };
-  
   const getName = () => {
     return user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User';
   };
@@ -43,11 +37,8 @@ export function UserDropdown({ user, onLogout, onOpenSettings, onOpenActivityLog
       <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="w-full min-w-0 flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          className="w-full min-w-0 flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
         >
-          <div className="w-5 h-5 rounded bg-orange-500/10 text-orange-600 flex items-center justify-center text-[10px] font-bold">
-            {getInitial()}
-          </div>
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate flex-1 text-left">
             {getName()}
           </span>

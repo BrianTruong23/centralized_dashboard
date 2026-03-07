@@ -49,6 +49,8 @@ export function InboxCleanupModal({
   const [review, setReview] = useState<CleanupReview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [appliedSuggestions, setAppliedSuggestions] = useState<Set<string>>(new Set());
+  const [selectedSuggestions, setSelectedSuggestions] = useState<Set<string>>(new Set());
+  const [isApplyingSelected, setIsApplyingSelected] = useState(false);
 
   useEffect(() => {
     if (isOpen && !review) {
@@ -58,8 +60,23 @@ export function InboxCleanupModal({
       setReview(null);
       setError(null);
       setAppliedSuggestions(new Set());
+      setSelectedSuggestions(new Set());
     }
   }, [isOpen]);
+
+  const getSuggestionKey = (suggestion: CleanupSuggestion) =>
+    `${suggestion.issue_type}-${suggestion.task_ids.join('-')}`;
+
+  useEffect(() => {
+    if (!review) return;
+    const all = [
+      ...review.duplicates,
+      ...review.stale,
+      ...review.vague,
+      ...review.missing_metadata,
+    ];
+    setSelectedSuggestions(new Set(all.map(getSuggestionKey)));
+  }, [review]);
 
   const handleAnalyze = async () => {
     setLoading(true);
@@ -94,7 +111,7 @@ export function InboxCleanupModal({
   };
 
   const handleApplySuggestion = async (suggestion: CleanupSuggestion) => {
-    const suggestionKey = `${suggestion.issue_type}-${suggestion.task_ids.join('-')}`;
+    const suggestionKey = getSuggestionKey(suggestion);
     if (appliedSuggestions.has(suggestionKey)) return;
 
     try {
@@ -156,6 +173,16 @@ export function InboxCleanupModal({
     }
   };
 
+  const toggleSuggestionSelection = (suggestion: CleanupSuggestion) => {
+    const key = getSuggestionKey(suggestion);
+    setSelectedSuggestions((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   const getActionIcon = (action: CleanupSuggestion['recommended_action']) => {
     switch (action) {
       case 'merge':
@@ -213,6 +240,22 @@ export function InboxCleanupModal({
     ...(review?.vague || []),
     ...(review?.missing_metadata || []),
   ];
+  const selectedPendingSuggestions = allSuggestions.filter((s) => {
+    const key = getSuggestionKey(s);
+    return selectedSuggestions.has(key) && !appliedSuggestions.has(key);
+  });
+
+  const handleApplySelected = async () => {
+    if (selectedPendingSuggestions.length === 0) return;
+    setIsApplyingSelected(true);
+    try {
+      for (const suggestion of selectedPendingSuggestions) {
+        await handleApplySuggestion(suggestion);
+      }
+    } finally {
+      setIsApplyingSelected(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -295,15 +338,19 @@ export function InboxCleanupModal({
                                   <span className="text-xs text-gray-500 dark:text-gray-400">
                                     {Math.round(suggestion.confidence * 100)}%
                                   </span>
-                                  {!isApplied && (
-                                    <button
-                                      onClick={() => handleApplySuggestion(suggestion)}
-                                      className="px-2.5 py-1 text-xs font-medium bg-black dark:bg-white text-white dark:text-black rounded hover:opacity-90 transition-opacity flex items-center gap-1"
-                                    >
-                                      {getActionIcon(suggestion.recommended_action)}
-                                      {getActionLabel(suggestion.recommended_action)}
-                                    </button>
-                                  )}
+                                  <button
+                                    onClick={() => toggleSuggestionSelection(suggestion)}
+                                    disabled={isApplied}
+                                    className={clsx(
+                                      "px-2.5 py-1 text-xs font-medium rounded border flex items-center gap-1 transition-colors disabled:opacity-50",
+                                      selectedSuggestions.has(getSuggestionKey(suggestion))
+                                        ? "bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] border-[var(--accent-border)]"
+                                        : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700"
+                                    )}
+                                  >
+                                    <Check size={12} />
+                                    {selectedSuggestions.has(getSuggestionKey(suggestion)) ? 'Selected' : 'Select'}
+                                  </button>
                                   {isApplied && (
                                     <span className="px-2.5 py-1 text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
                                       <Check size={12} />
@@ -356,15 +403,19 @@ export function InboxCleanupModal({
                                   <span className="text-xs text-gray-500 dark:text-gray-400">
                                     {Math.round(suggestion.confidence * 100)}%
                                   </span>
-                                  {!isApplied && (
-                                    <button
-                                      onClick={() => handleApplySuggestion(suggestion)}
-                                      className="px-2.5 py-1 text-xs font-medium bg-black dark:bg-white text-white dark:text-black rounded hover:opacity-90 transition-opacity flex items-center gap-1"
-                                    >
-                                      {getActionIcon(suggestion.recommended_action)}
-                                      {getActionLabel(suggestion.recommended_action)}
-                                    </button>
-                                  )}
+                                  <button
+                                    onClick={() => toggleSuggestionSelection(suggestion)}
+                                    disabled={isApplied}
+                                    className={clsx(
+                                      "px-2.5 py-1 text-xs font-medium rounded border flex items-center gap-1 transition-colors disabled:opacity-50",
+                                      selectedSuggestions.has(getSuggestionKey(suggestion))
+                                        ? "bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] border-[var(--accent-border)]"
+                                        : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700"
+                                    )}
+                                  >
+                                    <Check size={12} />
+                                    {selectedSuggestions.has(getSuggestionKey(suggestion)) ? 'Selected' : 'Select'}
+                                  </button>
                                   {isApplied && (
                                     <span className="px-2.5 py-1 text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
                                       <Check size={12} />
@@ -422,15 +473,19 @@ export function InboxCleanupModal({
                                   <span className="text-xs text-gray-500 dark:text-gray-400">
                                     {Math.round(suggestion.confidence * 100)}%
                                   </span>
-                                  {!isApplied && (
-                                    <button
-                                      onClick={() => handleApplySuggestion(suggestion)}
-                                      className="px-2.5 py-1 text-xs font-medium bg-black dark:bg-white text-white dark:text-black rounded hover:opacity-90 transition-opacity flex items-center gap-1"
-                                    >
-                                      {getActionIcon(suggestion.recommended_action)}
-                                      {getActionLabel(suggestion.recommended_action)}
-                                    </button>
-                                  )}
+                                  <button
+                                    onClick={() => toggleSuggestionSelection(suggestion)}
+                                    disabled={isApplied}
+                                    className={clsx(
+                                      "px-2.5 py-1 text-xs font-medium rounded border flex items-center gap-1 transition-colors disabled:opacity-50",
+                                      selectedSuggestions.has(getSuggestionKey(suggestion))
+                                        ? "bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] border-[var(--accent-border)]"
+                                        : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700"
+                                    )}
+                                  >
+                                    <Check size={12} />
+                                    {selectedSuggestions.has(getSuggestionKey(suggestion)) ? 'Selected' : 'Select'}
+                                  </button>
                                   {isApplied && (
                                     <span className="px-2.5 py-1 text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
                                       <Check size={12} />
@@ -505,15 +560,19 @@ export function InboxCleanupModal({
                                   <span className="text-xs text-gray-500 dark:text-gray-400">
                                     {Math.round(suggestion.confidence * 100)}%
                                   </span>
-                                  {!isApplied && (
-                                    <button
-                                      onClick={() => handleApplySuggestion(suggestion)}
-                                      className="px-2.5 py-1 text-xs font-medium bg-black dark:bg-white text-white dark:text-black rounded hover:opacity-90 transition-opacity flex items-center gap-1"
-                                    >
-                                      {getActionIcon(suggestion.recommended_action)}
-                                      {getActionLabel(suggestion.recommended_action)}
-                                    </button>
-                                  )}
+                                  <button
+                                    onClick={() => toggleSuggestionSelection(suggestion)}
+                                    disabled={isApplied}
+                                    className={clsx(
+                                      "px-2.5 py-1 text-xs font-medium rounded border flex items-center gap-1 transition-colors disabled:opacity-50",
+                                      selectedSuggestions.has(getSuggestionKey(suggestion))
+                                        ? "bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] border-[var(--accent-border)]"
+                                        : "bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700"
+                                    )}
+                                  >
+                                    <Check size={12} />
+                                    {selectedSuggestions.has(getSuggestionKey(suggestion)) ? 'Selected' : 'Select'}
+                                  </button>
                                   {isApplied && (
                                     <span className="px-2.5 py-1 text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
                                       <Check size={12} />

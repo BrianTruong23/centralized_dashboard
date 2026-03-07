@@ -244,7 +244,7 @@ export function Auth() {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="text-xs font-bold bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors"
+        className="text-xs font-bold accent-solid-btn px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors"
       >
         Log In / Sign Up
       </button>
@@ -292,7 +292,7 @@ export function Auth() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full text-sm px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white"
+              className="auth-fixed-focus w-full text-sm px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus-visible:outline-none focus:ring-2 focus-visible:ring-2 focus:ring-black/30 focus-visible:ring-black/30 focus:border-black focus-visible:border-black"
               placeholder="you@example.com"
               required
             />
@@ -303,7 +303,7 @@ export function Auth() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full text-sm px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white"
+              className="auth-fixed-focus w-full text-sm px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus-visible:outline-none focus:ring-2 focus-visible:ring-2 focus:ring-black/30 focus-visible:ring-black/30 focus:border-black focus-visible:border-black"
               placeholder="••••••••"
               required
             />
@@ -318,7 +318,7 @@ export function Auth() {
           <button
             type="submit"
             disabled={isAuthProcessing || isGoogleLoading}
-            className="w-full bg-black dark:bg-white text-white dark:text-black font-bold py-2.5 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
+            className="w-full bg-gray-900 dark:bg-white text-white dark:text-black font-bold py-2.5 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
           >
             {isAuthProcessing ? 'Processing...' : (isSignUp ? 'Sign Up' : 'Log In')}
           </button>

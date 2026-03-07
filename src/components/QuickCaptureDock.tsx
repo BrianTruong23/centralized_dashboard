@@ -5,7 +5,7 @@ import { Task, TaskPriority } from '@/types/task';
 import { Project } from '@/types/project';
 import { generateId } from '@/lib/utils';
 import clsx from 'clsx';
-import { Plus, Calendar, Flag, Tag, X, ChevronDown, ChevronLeft, ChevronRight, Sun, ArrowRight, Ban } from 'lucide-react';
+import { Plus, Calendar, Flag, Tag, X, ChevronDown, ChevronLeft, ChevronRight, Sun, ArrowRight, Ban, Check } from 'lucide-react';
 import { parseDateFromText, parseTagFromText } from '@/lib/smartDate';
 import { formatDateKey, formatDateDisplay } from '@/lib/dateKey';
 import { parseTemporal, ParsedTemporal } from '@/lib/temporalParser';
@@ -39,6 +39,7 @@ export const QuickCaptureDock = ({
   const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showAddedFeedback, setShowAddedFeedback] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
   const dockRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -187,6 +188,8 @@ export const QuickCaptureDock = ({
     };
 
     onAddTask(newTask);
+    setShowAddedFeedback(true);
+    setTimeout(() => setShowAddedFeedback(false), 900);
 
     // Reset form
     setTitle('');
@@ -267,7 +270,7 @@ export const QuickCaptureDock = ({
           return (
             <span
               key={i}
-              className="bg-orange-100 dark:bg-orange-900/30 text-orange-900 dark:text-orange-200 border-b-2 border-dotted border-orange-400 dark:border-orange-500 whitespace-pre"
+              className="bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] border-b-2 border-dotted border-[var(--accent-border)] whitespace-pre"
               style={{ padding: '0 0.5px', margin: '0 -0.5px' }}
             >
               {part.text}
@@ -339,9 +342,12 @@ export const QuickCaptureDock = ({
               <button
                 type="button"
                 onClick={handleFocus}
-                className="flex-shrink-0 w-10 h-10 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center hover:opacity-90 transition-opacity"
+                className={clsx(
+                  "flex-shrink-0 w-10 h-10 rounded-full accent-solid-btn flex items-center justify-center transition-opacity",
+                  showAddedFeedback && "scale-105"
+                )}
               >
-                <Plus size={18} />
+                {showAddedFeedback ? <Check size={18} /> : <Plus size={18} />}
               </button>
               <input
                 ref={inputRef}
@@ -372,8 +378,18 @@ export const QuickCaptureDock = ({
 
               {/* Input with highlighting */}
               <div className="relative flex items-center gap-2">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center">
-                  <Plus size={16} />
+                <div className="flex-shrink-0 flex items-center gap-2">
+                  <div
+                    className={clsx(
+                      "w-8 h-8 rounded-full accent-solid-btn flex items-center justify-center transition-all",
+                      showAddedFeedback && "scale-105"
+                    )}
+                  >
+                    {showAddedFeedback ? <Check size={16} /> : <Plus size={16} />}
+                  </div>
+                  {showAddedFeedback && (
+                    <span className="text-xs font-medium text-[var(--accent-solid)]">Added</span>
+                  )}
                 </div>
                 <div className="relative flex-1 min-w-0">
                   <div className="absolute inset-0 flex items-center text-sm font-normal pointer-events-none z-0 whitespace-pre overflow-hidden" style={{ fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit' }}>
@@ -385,17 +401,27 @@ export const QuickCaptureDock = ({
                     placeholder="Task title…"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="relative w-full bg-transparent border-b border-gray-200 dark:border-gray-700 focus:border-gray-400 dark:focus:border-gray-500 outline-none text-sm text-transparent caret-gray-900 dark:caret-gray-100 pb-1.5 transition-colors z-10"
+                    className="quick-capture-title-input relative w-full bg-transparent border-none outline-none ring-0 focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 text-sm text-transparent caret-gray-900 dark:caret-gray-100 pb-1.5 transition-colors z-10"
                     autoComplete="off"
                     spellCheck={false}
                     autoFocus
-                    style={{ fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit', letterSpacing: 'inherit' }}
+                    style={{
+                      fontFamily: 'inherit',
+                      fontSize: 'inherit',
+                      lineHeight: 'inherit',
+                      letterSpacing: 'inherit',
+                      outline: 'none',
+                      boxShadow: 'none',
+                      border: 'none',
+                      WebkitAppearance: 'none',
+                      appearance: 'none',
+                    }}
                   />
                 </div>
                 {title.trim() && (
                   <button
                     type="submit"
-                    className="px-3 py-1.5 text-xs font-semibold bg-black dark:bg-white text-white dark:text-black rounded-lg hover:opacity-90 transition-opacity"
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg accent-solid-btn transition-opacity"
                   >
                     Add
                   </button>
@@ -549,7 +575,7 @@ export const QuickCaptureDock = ({
                                     'h-8 w-8 rounded-full text-sm transition-colors',
                                     !isSameMonth(date, calendarMonth) && 'text-gray-300 dark:text-gray-600',
                                     isSameMonth(date, calendarMonth) && 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800',
-                                    isSelected && 'bg-black text-white hover:bg-black dark:bg-white dark:text-black dark:hover:bg-white',
+                                    isSelected && 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border-[var(--accent-border)] hover:opacity-95',
                                     !isSelected && isSameDay(date, today) && 'font-semibold text-gray-900 dark:text-gray-100'
                                   )}
                                 >
@@ -727,6 +753,8 @@ export const QuickCaptureDock = ({
             };
 
             onAddTask(newTask);
+            setShowAddedFeedback(true);
+            setTimeout(() => setShowAddedFeedback(false), 900);
             setTitle('');
             setDeadline(defaultDate || '');
             setPriority(3);

@@ -143,7 +143,7 @@ export function AuthModal({ isOpen, onAuthSuccess }: AuthModalProps) {
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                className="w-full text-sm px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
+                className="auth-fixed-focus w-full text-sm px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus-visible:outline-none focus:ring-2 focus-visible:ring-2 focus:ring-black/30 focus-visible:ring-black/30 focus:border-black focus-visible:border-black transition-all"
                 placeholder="John Doe"
                 required
               />
@@ -155,7 +155,7 @@ export function AuthModal({ isOpen, onAuthSuccess }: AuthModalProps) {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full text-sm px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
+              className="auth-fixed-focus w-full text-sm px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus-visible:outline-none focus:ring-2 focus-visible:ring-2 focus:ring-black/30 focus-visible:ring-black/30 focus:border-black focus-visible:border-black transition-all"
               placeholder="name@example.com"
               required
             />
@@ -166,7 +166,7 @@ export function AuthModal({ isOpen, onAuthSuccess }: AuthModalProps) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full text-sm px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
+              className="auth-fixed-focus w-full text-sm px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus-visible:outline-none focus:ring-2 focus-visible:ring-2 focus:ring-black/30 focus-visible:ring-black/30 focus:border-black focus-visible:border-black transition-all"
               placeholder="••••••••"
               required
             />
@@ -181,7 +181,7 @@ export function AuthModal({ isOpen, onAuthSuccess }: AuthModalProps) {
           <button
             type="submit"
             disabled={isLoading || isGoogleLoading}
-            className="w-full bg-black dark:bg-white text-white dark:text-black font-bold py-3 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full bg-gray-900 dark:bg-white text-white dark:text-black font-bold py-3 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {isLoading && <Loader2 size={16} className="animate-spin" />}
             {isSignUp ? 'Create Account' : 'Log In'}

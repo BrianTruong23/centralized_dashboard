@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { notesDb, Note } from '@/lib/notes';
+import { notesDb } from '@/lib/notes';
 import { Loader2, Sparkles, Save, Plus, CheckCircle, ListPlus, Calendar, Pencil, X } from 'lucide-react';
 import { Task, TaskCategory, TaskEnergyLevel } from '@/types/task';
 import { Project, CreateProjectInput } from '@/types/project';
@@ -22,9 +22,20 @@ interface DailyNotesProps {
   showHistory?: boolean;
   projects?: Project[];
   addProject?: (input: CreateProjectInput) => Promise<Project | undefined>;
+  onNoteSaved?: () => void;
 }
 
-export function DailyNotes({ userId, onAddTask, showHistory = false, projects = [], addProject }: DailyNotesProps) {
+type DailyNotesCache = {
+  noteContent: string;
+  summary: string;
+  currentNoteId: string | null;
+  isSummaryVisible: boolean;
+};
+
+const dailyNotesCache = new Map<string, DailyNotesCache>();
+
+export function DailyNotes({ userId, onAddTask, showHistory = false, projects = [], addProject, onNoteSaved }: DailyNotesProps) {
+  const MAX_NOTE_WORDS = 500;
   const [noteContent, setNoteContent] = useState('');
   const [summary, setSummary] = useState('');
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
@@ -35,7 +46,6 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pastNotes, setPastNotes] = useState<Note[]>([]);
   const [isSummaryVisible, setIsSummaryVisible] = useState(false);
 
   // State for missing projects handling
@@ -47,39 +57,76 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
     : ['Work', 'Life'];
   const energyLevels: TaskEnergyLevel[] = ['low', 'medium', 'high'];
 
+  const countWords = (text: string) => {
+    const trimmed = text.trim();
+    return trimmed ? trimmed.split(/\s+/).length : 0;
+  };
+
+  const clampToMaxWords = (text: string, maxWords: number) => {
+    const trimmed = text.trim();
+    if (!trimmed) return '';
+    const words = trimmed.split(/\s+/);
+    if (words.length <= maxWords) return text;
+    return words.slice(0, maxWords).join(' ');
+  };
+
   // Load latest note on mount
   useEffect(() => {
     if (!userId) return;
+    const cached = dailyNotesCache.get(userId);
+    if (cached) {
+      setNoteContent(cached.noteContent);
+      setSummary(cached.summary);
+      setCurrentNoteId(cached.currentNoteId);
+      setIsSummaryVisible(cached.isSummaryVisible);
+      return;
+    }
     loadLatestNote();
   }, [userId]);
 
+  useEffect(() => {
+    if (!userId) return;
+    dailyNotesCache.set(userId, {
+      noteContent,
+      summary,
+      currentNoteId,
+      isSummaryVisible,
+    });
+  }, [userId, noteContent, summary, currentNoteId, isSummaryVisible]);
+
   const loadLatestNote = async () => {
+    if (!userId) return;
     try {
-      const notes = await notesDb.fetchNotes();
+      const notes = await notesDb.fetchNotes(userId);
       if (notes && notes.length > 0) {
-        // Filter for TODAY's note only
+        // Filter for TODAY's notes
         const today = new Date();
-        const todaysNote = notes.find(note => {
+        const todaysNotes = notes.filter(note => {
             const d = new Date(note.createdAt);
             return d.getDate() === today.getDate() && 
                    d.getMonth() === today.getMonth() && 
                    d.getFullYear() === today.getFullYear();
         });
 
-        if (todaysNote) {
-            setNoteContent(todaysNote.content);
-            setSummary(todaysNote.summary || '');
-            setCurrentNoteId(todaysNote.id);
+        // Keep current note if still exists, otherwise default to latest today's note
+        const existingSelected = currentNoteId ? notes.find(n => n.id === currentNoteId) : null;
+        const selected = existingSelected || todaysNotes[0] || null;
+
+        if (selected) {
+            setNoteContent(selected.content);
+            setSummary(selected.summary || '');
+            setCurrentNoteId(selected.id);
         } else {
-            // Reset if no note for today
+            // Reset if no note selected
             setNoteContent('');
             setSummary('');
             setCurrentNoteId(null);
         }
 
-        // Filter out today's note from history
-        const history = notes.filter(n => n.id !== todaysNote?.id).sort((a, b) => b.createdAt - a.createdAt);
-        setPastNotes(history);
+      } else {
+        setNoteContent('');
+        setSummary('');
+        setCurrentNoteId(null);
       }
     } catch (err) {
       console.error('Failed to load notes', err);
@@ -101,12 +148,25 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
         });
         setCurrentNoteId(newNote.id);
       }
+      await loadLatestNote();
+      onNoteSaved?.();
     } catch (err: any) {
       console.error('Failed to save note', err);
       setError('Failed to save note. ' + err.message);
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleCreateNewNote = () => {
+    setCurrentNoteId(null);
+    setNoteContent('');
+    setSummary('');
+    setActionItems([]);
+    setAddedItems(new Set());
+    setIsSummaryVisible(false);
+    setEditingIndex(null);
+    setEditForm(null);
   };
 
   const handleSummarize = async () => {
@@ -120,10 +180,6 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
 
     log('Starting summarization...');
     try {
-      // Save in background - don't block the AI call
-      log('Saving notes in background...');
-      handleSave().catch(err => log(`Background save failed: ${err.message}`));
-
       log('Calling /api/summarize...');
       const fetchStart = Date.now();
 
@@ -155,12 +211,21 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
       setActionItems(data.actionItems || []);
       setAddedItems(new Set()); // Reset added items
 
-      // Save summary in background - don't block the UI
-      if (currentNoteId && userId) {
-        log('Saving summary to database in background...');
-        notesDb.updateNote(currentNoteId, { summary: data.summary })
-          .then(() => log('Summary saved to database'))
-          .catch(err => log(`Failed to save summary: ${err.message}`));
+      // Persist note content + summary together to avoid missing summaries on new notes.
+      if (userId) {
+        if (currentNoteId) {
+          await notesDb.updateNote(currentNoteId, { content: noteContent, summary: data.summary });
+          log('Updated existing note with summary');
+        } else {
+          const created = await notesDb.addNote({
+            user_id: userId,
+            content: noteContent,
+            summary: data.summary,
+          });
+          setCurrentNoteId(created.id);
+          log(`Created note with summary: ${created.id}`);
+        }
+        onNoteSaved?.();
       }
 
       log(`Total time: ${Date.now() - startTime}ms`);
@@ -306,6 +371,8 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
 
   if (!userId) return null;
 
+  const wordCount = countWords(noteContent);
+
   return (
     <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
       
@@ -333,7 +400,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
                     </button>
                     <button 
                         onClick={handleConfirmCreateProjects}
-                        className="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium"
+                        className="px-4 py-2 text-sm rounded-lg font-medium accent-solid-btn"
                     >
                         Create & Add
                     </button>
@@ -346,6 +413,13 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
         <h2 className="text-lg font-bold">Daily Notes & Dump</h2>
         <div className="flex gap-2">
             <button
+                onClick={handleCreateNewNote}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+            >
+                <Plus size={14} />
+                New note
+            </button>
+            <button
                 onClick={handleSave}
                 disabled={isSaving}
                 className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
@@ -356,7 +430,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
             <button
                 onClick={handleSummarize}
                 disabled={isLoading || !noteContent.trim()}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-black dark:bg-white dark:text-black rounded-lg hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 accent-solid-btn"
             >
                 {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                 Summarize with AI
@@ -372,12 +446,18 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
 
       <div className={`grid grid-cols-1 ${isSummaryVisible ? 'md:grid-cols-2' : ''} gap-6`}>
         <div className="flex flex-col gap-2">
-            <label className="text-xs font-semibold uppercase text-gray-400">Your Thoughts</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold uppercase text-gray-400">Your Thoughts</label>
+              <span className={`text-xs ${wordCount >= MAX_NOTE_WORDS ? 'text-red-500' : 'text-gray-400'}`}>
+                {wordCount}/{MAX_NOTE_WORDS} words
+              </span>
+            </div>
             <textarea
                 value={noteContent}
-                onChange={(e) => setNoteContent(e.target.value)}
+                onChange={(e) => setNoteContent(clampToMaxWords(e.target.value, MAX_NOTE_WORDS))}
                 placeholder="Dump your tasks, ideas, and thoughts here..."
-                className="w-full h-64 p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 resize-none focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all"
+                className="w-full h-64 p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 resize-none focus:ring-2 focus:outline-none transition-all"
+                style={{ ['--tw-ring-color' as any]: 'var(--accent-ring)' }}
             />
         </div>
 
