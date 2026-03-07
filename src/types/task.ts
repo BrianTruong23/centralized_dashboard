@@ -13,7 +13,11 @@ export interface Task {
   category: TaskCategory;
   priority: TaskPriority;
   estimatedMinutes: number;
-  deadline?: string; // ISO date string
+  deadline?: string; // ISO date string (YYYY-MM-DD)
+  due_time?: string; // ISO time string (HH:MM:SS)
+  scheduled_date?: string; // ISO date string (YYYY-MM-DD)
+  scheduled_time?: string; // ISO time string (HH:MM:SS)
+  is_all_day?: boolean;
   energyLevel: TaskEnergyLevel;
   status: TaskStatus;
   tags: string[];
