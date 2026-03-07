@@ -389,7 +389,17 @@ export const QuickCaptureDock = ({
                     autoComplete="off"
                     spellCheck={false}
                     autoFocus
-                    style={{ fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit', letterSpacing: 'inherit' }}
+                    style={{
+                      fontFamily: 'inherit',
+                      fontSize: 'inherit',
+                      lineHeight: 'inherit',
+                      letterSpacing: 'inherit',
+                      outline: 'none',
+                      boxShadow: 'none',
+                      border: 'none',
+                      WebkitAppearance: 'none',
+                      appearance: 'none',
+                    }}
                   />
                 </div>
                 {title.trim() && (
