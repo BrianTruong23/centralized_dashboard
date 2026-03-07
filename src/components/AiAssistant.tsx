@@ -270,62 +270,66 @@ export function AiAssistant({ userId }: AiAssistantProps) {
                   </div>
                 )}
 
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    Proposed changes ({approvedCount}/{actions.length} approved)
-                  </p>
-                  <button
-                    type="button"
-                    onClick={approveAllSafeActions}
-                    className="text-xs px-2 py-1 rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-                  >
-                    Select all safe actions
-                  </button>
-                </div>
-
-                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                  {actions.map((action) => {
-                    const approved = approvedActionIds.has(action.action_id);
-                    return (
-                      <div
-                        key={action.action_id}
-                        className="rounded-lg border border-gray-200 bg-white p-2.5"
+                {actions.length > 0 && (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Proposed changes ({approvedCount}/{actions.length} approved)
+                      </p>
+                      <button
+                        type="button"
+                        onClick={approveAllSafeActions}
+                        className="text-xs px-2 py-1 rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-gray-900">{getActionDisplayTitle(action)}</p>
-                            <p className="text-xs text-gray-600 mt-0.5">{action.reason}</p>
-                            <p className="text-xs text-gray-500 mt-0.5">Outcome: {action.expected_outcome}</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => toggleApproveAction(action)}
-                            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs ${
-                              approved
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : 'bg-white text-gray-700 border-gray-200'
-                            }`}
-                          >
-                            <Check size={12} />
-                            {approved ? 'Selected' : 'Select'}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                        Select all safe actions
+                      </button>
+                    </div>
 
-                <div className="flex items-center justify-end">
-                  <button
-                    type="button"
-                    onClick={handleExecute}
-                    disabled={isExecuting || actions.length === 0}
-                    className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-black text-white text-sm font-bold hover:opacity-90 disabled:opacity-50"
-                  >
-                    {isExecuting ? <Loader2 size={16} className="animate-spin" /> : <Send size={14} />}
-                    Run approved actions
-                  </button>
-                </div>
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                      {actions.map((action) => {
+                        const approved = approvedActionIds.has(action.action_id);
+                        return (
+                          <div
+                            key={action.action_id}
+                            className="rounded-lg border border-gray-200 bg-white p-2.5"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-gray-900">{getActionDisplayTitle(action)}</p>
+                                <p className="text-xs text-gray-600 mt-0.5">{action.reason}</p>
+                                <p className="text-xs text-gray-500 mt-0.5">Outcome: {action.expected_outcome}</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => toggleApproveAction(action)}
+                                className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md border text-xs ${
+                                  approved
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : 'bg-white text-gray-700 border-gray-200'
+                                }`}
+                              >
+                                <Check size={12} />
+                                {approved ? 'Selected' : 'Select'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex items-center justify-end">
+                      <button
+                        type="button"
+                        onClick={handleExecute}
+                        disabled={isExecuting || actions.length === 0}
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-black text-white text-sm font-bold hover:opacity-90 disabled:opacity-50"
+                      >
+                        {isExecuting ? <Loader2 size={16} className="animate-spin" /> : <Send size={14} />}
+                        Run approved actions
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
