@@ -68,11 +68,6 @@ a {
   color: var(--accent-link);
 }
 
-:focus-visible {
-  outline: 2px solid var(--accent-ring);
-  outline-offset: 2px;
-}
-
 .accent-solid-btn {
   background: var(--accent-solid);
   color: var(--accent-solid-foreground);
