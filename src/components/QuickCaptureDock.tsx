@@ -442,7 +442,7 @@ export const QuickCaptureDock = ({
 
                   {/* Date Picker Popup */}
                   {showDatePicker && (
-                    <div className="absolute top-full left-0 mt-2 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 z-[100] min-w-[320px] overflow-hidden">
+                    <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 z-[100] min-w-[320px] max-h-[70vh] overflow-y-auto">
                       <div className="space-y-3 p-3">
                         {/* Quick Options */}
                         <div className="space-y-1">
