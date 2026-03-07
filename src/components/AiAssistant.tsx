@@ -270,6 +270,42 @@ export function AiAssistant({ userId }: AiAssistantProps) {
                   </div>
                 )}
 
+                {/* Show Day-by-day Proposed Plan if available */}
+                {run.proposed_plan_json.proposed_plan?.days && (
+                  <div className="space-y-3 mt-4 mb-4 border-t border-gray-200 pt-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Proposed Schedule
+                    </p>
+                    <div className="grid grid-cols-1 gap-3 max-h-64 overflow-y-auto pr-1">
+                      {run.proposed_plan_json.proposed_plan.days.map((day: any, idx: number) => (
+                        <div key={idx} className="bg-white rounded-lg border border-gray-200 overflow-hidden text-sm">
+                          <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                            <span className="font-semibold text-gray-900">{day.day}</span>
+                            <span className="text-xs text-gray-500">{new Date(day.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                          </div>
+                          <div className="p-2 space-y-1.5">
+                            {day.tasks?.length === 0 ? (
+                              <div className="text-xs text-center text-gray-400 py-2 italic">Free day</div>
+                            ) : (
+                              day.tasks.map((task: any, tIdx: number) => (
+                                <div key={tIdx} className="flex flex-col gap-1 p-2 rounded-md border border-gray-100 bg-gray-50">
+                                  <div className="font-medium text-gray-900">{task.title}</div>
+                                  <div className="flex gap-2 items-center text-xs">
+                                    {task.project && (
+                                      <span className="px-1.5 rounded bg-gray-200 text-gray-700">{task.project}</span>
+                                    )}
+                                    <span className="font-bold text-gray-500">P{task.priority || 4}</span>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {actions.length > 0 && (
                   <>
                     <div className="flex items-center justify-between">
