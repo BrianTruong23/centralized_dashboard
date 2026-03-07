@@ -569,10 +569,10 @@ export const QuickCaptureDock = ({
                       setShowDatePicker(false);
                     }}
                     className={clsx(
-                      "flex items-center gap-2 px-3 py-1.5 rounded-2xl text-sm font-medium transition-colors bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 border-2",
+                      "flex items-center gap-2 px-3 py-1.5 rounded-2xl text-sm font-medium transition-colors border-2",
                       showPriorityDropdown
-                        ? "border-gray-900 dark:border-gray-100"
-                        : "border-gray-300 dark:border-gray-600"
+                        ? "border-gray-900 dark:border-gray-100 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100"
+                        : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
                     )}
                   >
                     <Flag size={14} className={clsx(priorityColors[priority as keyof typeof priorityColors])} fill={priority <= 3 ? 'currentColor' : 'none'} />
@@ -592,8 +592,8 @@ export const QuickCaptureDock = ({
                             setShowPriorityDropdown(false);
                           }}
                           className={clsx(
-                            "w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left",
-                            priority === p && "bg-gray-50 dark:bg-gray-800"
+                            "w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left",
+                            priority === p && "bg-gray-100 dark:bg-gray-800"
                           )}
                         >
                           <Flag 
@@ -627,10 +627,10 @@ export const QuickCaptureDock = ({
                       setShowDatePicker(false);
                     }}
                     className={clsx(
-                      "flex items-center gap-2 px-3 py-1.5 rounded-2xl text-sm font-medium transition-colors border",
+                      "flex items-center gap-2 px-3 py-1.5 rounded-2xl text-sm font-medium transition-colors border-2",
                       showProjectDropdown
                         ? "border-gray-900 dark:border-gray-100 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100"
-                        : "border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
                     )}
                   >
                     <Tag size={14} />
@@ -648,8 +648,8 @@ export const QuickCaptureDock = ({
                           setShowProjectDropdown(false);
                         }}
                         className={clsx(
-                          "w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left",
-                          !projectId && "bg-gray-50 dark:bg-gray-800"
+                          "w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left",
+                          !projectId && "bg-gray-100 dark:bg-gray-800"
                         )}
                       >
                         <Tag size={18} className="text-gray-500 dark:text-gray-400" />
@@ -668,8 +668,8 @@ export const QuickCaptureDock = ({
                             setShowProjectDropdown(false);
                           }}
                           className={clsx(
-                            "w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left",
-                            projectId === p.id && "bg-gray-50 dark:bg-gray-800"
+                            "w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left",
+                            projectId === p.id && "bg-gray-100 dark:bg-gray-800"
                           )}
                         >
                           <Tag size={18} style={{ color: p.color }} />
