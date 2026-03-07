@@ -2,10 +2,14 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { X, AlertTriangle, User as UserIcon, Lock, Trash2, Bug, LogOut, Leaf, Crown } from 'lucide-react';
+import { X, AlertTriangle, User as UserIcon, Lock, Trash2, Bug, LogOut, Leaf, Crown, Paintbrush, Download, FileText, FileSpreadsheet, CalendarDays } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import { PlanningPreferences } from '@/types/planningPreferences';
+import { useTheme } from '@/hooks/useTheme';
+import { Task } from '@/types/task';
+import { Project } from '@/types/project';
+import { formatDateKey } from '@/lib/dateKey';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -20,6 +24,10 @@ interface SettingsModalProps {
   planningPreferences: PlanningPreferences;
   onPlanningPreferencesChange: (next: PlanningPreferences) => void;
   onRestartOnboarding: () => void;
+  tasks: Task[];
+  filteredTasks: Task[];
+  projects: Project[];
+  currentView: string;
 }
 
 export function SettingsModal({
@@ -35,12 +43,19 @@ export function SettingsModal({
   planningPreferences,
   onPlanningPreferencesChange,
   onRestartOnboarding,
+  tasks,
+  filteredTasks,
+  projects,
+  currentView,
 }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'billing' | 'security' | 'danger' | 'debug'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'export' | 'billing' | 'security' | 'danger' | 'debug'>('profile');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [diagnostics, setDiagnostics] = useState<string[]>([]);
   const router = useRouter();
+  const { palette, setPalette, paletteOptions } = useTheme();
+  const [exportScope, setExportScope] = useState<'all' | 'filtered' | 'completed' | 'upcoming' | 'project'>('all');
+  const [exportProjectId, setExportProjectId] = useState<string>('');
 
   // Form states
   const [newPassword, setNewPassword] = useState('');
@@ -182,6 +197,179 @@ export function SettingsModal({
       setLoading(false);
   };
 
+  const normalizeDateKey = (value?: string): string | null => {
+    if (!value) return null;
+    const direct = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (direct) return `${direct[1]}-${direct[2]}-${direct[3]}`;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return formatDateKey(parsed);
+  };
+
+  const getExportTasks = (): Task[] => {
+    const today = formatDateKey(new Date());
+    switch (exportScope) {
+      case 'filtered':
+        return filteredTasks;
+      case 'completed':
+        return tasks.filter((t) => t.status === 'done');
+      case 'upcoming':
+        return tasks.filter((t) => {
+          const dateKey = normalizeDateKey(t.deadline);
+          return t.status !== 'done' && !!dateKey && dateKey > today;
+        });
+      case 'project':
+        return exportProjectId ? tasks.filter((t) => t.project_id === exportProjectId) : [];
+      case 'all':
+      default:
+        return tasks;
+    }
+  };
+
+  const getScopeLabel = (): string => {
+    if (exportScope === 'filtered') return `Filtered (${currentView})`;
+    if (exportScope === 'completed') return 'Completed tasks';
+    if (exportScope === 'upcoming') return 'Upcoming tasks';
+    if (exportScope === 'project') {
+      const p = projects.find((x) => x.id === exportProjectId);
+      return p ? `Project: ${p.name}` : 'Selected project';
+    }
+    return 'All tasks';
+  };
+
+  const escapeCsv = (value: string) => {
+    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    return value;
+  };
+
+  const triggerDownload = (filename: string, content: string, mimeType: string) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportCsv = () => {
+    const rows = getExportTasks();
+    const header = ['Title', 'Due Date', 'Scheduled Date', 'Scheduled Time', 'Priority', 'Category', 'Status', 'Notes'];
+    const lines = rows.map((t) =>
+      [
+        t.title || '',
+        normalizeDateKey(t.deadline) || '',
+        normalizeDateKey(t.scheduled_date) || '',
+        t.scheduled_time || t.due_time || '',
+        String(t.priority ?? ''),
+        t.category || '',
+        t.status || '',
+        t.description || '',
+      ]
+        .map((field) => escapeCsv(field))
+        .join(',')
+    );
+    const content = [header.join(','), ...lines].join('\n');
+    triggerDownload(`tasks-${exportScope}.csv`, content, 'text/csv;charset=utf-8;');
+  };
+
+  const exportDocument = () => {
+    const rows = getExportTasks();
+    const generatedAt = new Date().toLocaleString();
+    const lines = [
+      `Task Export`,
+      `Generated: ${generatedAt}`,
+      `Scope: ${getScopeLabel()}`,
+      `Total tasks: ${rows.length}`,
+      '',
+      ...rows.map((t, index) => {
+        const deadline = normalizeDateKey(t.deadline) || 'No due date';
+        const scheduled = normalizeDateKey(t.scheduled_date)
+          ? `${normalizeDateKey(t.scheduled_date)} ${t.scheduled_time || t.due_time || ''}`.trim()
+          : 'Not scheduled';
+        return [
+          `${index + 1}. ${t.title}`,
+          `   Status: ${t.status} | Priority: P${t.priority} | Category: ${t.category}`,
+          `   Due: ${deadline}`,
+          `   Scheduled: ${scheduled}`,
+          `   Notes: ${t.description || '-'}`,
+          '',
+        ].join('\n');
+      }),
+    ].join('\n');
+    triggerDownload(`tasks-${exportScope}.txt`, lines, 'text/plain;charset=utf-8;');
+  };
+
+  const toIcsDate = (date: Date): string => {
+    const yyyy = date.getUTCFullYear();
+    const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(date.getUTCDate()).padStart(2, '0');
+    const hh = String(date.getUTCHours()).padStart(2, '0');
+    const min = String(date.getUTCMinutes()).padStart(2, '0');
+    const ss = String(date.getUTCSeconds()).padStart(2, '0');
+    return `${yyyy}${mm}${dd}T${hh}${min}${ss}Z`;
+  };
+
+  const toIcsAllDay = (dateKey: string): string => dateKey.replace(/-/g, '');
+
+  const exportCalendar = () => {
+    const rows = getExportTasks();
+    const now = toIcsDate(new Date());
+    const events = rows
+      .map((t) => {
+        const dateKey = normalizeDateKey(t.scheduled_date) || normalizeDateKey(t.deadline);
+        if (!dateKey) return null;
+
+        const uid = `task-${t.id}@minismo`;
+        const summary = t.title.replace(/\n/g, ' ').trim();
+        const description = (t.description || '').replace(/\n/g, '\\n');
+        const hasTime = !!(t.scheduled_time || t.due_time);
+
+        if (hasTime) {
+          const start = new Date(`${dateKey}T${t.scheduled_time || t.due_time || '09:00:00'}`);
+          const end = new Date(start.getTime() + Math.max(t.estimatedMinutes || 60, 30) * 60000);
+          return [
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            `DTSTAMP:${now}`,
+            `DTSTART:${toIcsDate(start)}`,
+            `DTEND:${toIcsDate(end)}`,
+            `SUMMARY:${summary}`,
+            `DESCRIPTION:${description}`,
+            'END:VEVENT',
+          ].join('\n');
+        }
+
+        const startDay = toIcsAllDay(dateKey);
+        const endDate = new Date(`${dateKey}T00:00:00`);
+        endDate.setDate(endDate.getDate() + 1);
+        const endDay = toIcsAllDay(formatDateKey(endDate));
+        return [
+          'BEGIN:VEVENT',
+          `UID:${uid}`,
+          `DTSTAMP:${now}`,
+          `DTSTART;VALUE=DATE:${startDay}`,
+          `DTEND;VALUE=DATE:${endDay}`,
+          `SUMMARY:${summary}`,
+          `DESCRIPTION:${description}`,
+          'END:VEVENT',
+        ].join('\n');
+      })
+      .filter(Boolean)
+      .join('\n');
+
+    const content = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Minismo//Task Export//EN',
+      events,
+      'END:VCALENDAR',
+    ].join('\n');
+    triggerDownload(`tasks-${exportScope}.ics`, content, 'text/calendar;charset=utf-8;');
+  };
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-4xl h-[90vh] md:h-[600px] flex flex-col md:flex-row overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -201,6 +389,12 @@ export function SettingsModal({
                   className={`flex-shrink-0 w-auto md:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'preferences' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
                 >
                     <Leaf size={16} /> <span className="whitespace-nowrap">Preferences</span>
+                </button>
+                <button 
+                  onClick={() => setActiveTab('export')}
+                  className={`flex-shrink-0 w-auto md:w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'export' ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-900'}`}
+                >
+                    <Download size={16} /> <span className="whitespace-nowrap">Export</span>
                 </button>
                 <button 
                   onClick={() => setActiveTab('billing')}
@@ -301,6 +495,48 @@ export function SettingsModal({
                         </div>
                     </div>
 
+                    <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50/80 dark:bg-gray-950/60 space-y-3">
+                        <div>
+                            <div className="flex items-center gap-2 text-sm font-medium">
+                                <Paintbrush size={16} className="text-gray-600 dark:text-gray-300" />
+                                Theme Palette
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">
+                                Choose accent colors for buttons, selected states, highlights, links, and focus rings.
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            {paletteOptions.map((option) => {
+                                const isActive = palette === option.id;
+                                const palettePreview: Record<typeof option.id, { solid: string; soft: string; ring: string }> = {
+                                  neutral: { solid: '#171717', soft: '#f5f5f5', ring: '#525252' },
+                                  yellow: { solid: '#b45309', soft: '#fef3c7', ring: '#d97706' },
+                                  blue: { solid: '#1d4ed8', soft: '#dbeafe', ring: '#2563eb' },
+                                  red: { solid: '#b91c1c', soft: '#fee2e2', ring: '#dc2626' },
+                                };
+                                return (
+                                  <button
+                                    key={option.id}
+                                    type="button"
+                                    onClick={() => setPalette(option.id)}
+                                    className={`p-2 rounded-lg border text-left transition-all ${isActive ? 'border-black dark:border-white ring-2 ring-offset-1 ring-black/20 dark:ring-white/30' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'}`}
+                                  >
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-xs font-medium">{option.label}</span>
+                                      {isActive && <span className="text-[10px] text-gray-500">Active</span>}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <span className="h-5 w-5 rounded-md" style={{ backgroundColor: palettePreview[option.id].solid }} />
+                                      <span className="h-5 w-5 rounded-md border border-gray-200 dark:border-gray-700" style={{ backgroundColor: palettePreview[option.id].soft }} />
+                                      <span className="h-5 w-5 rounded-md" style={{ backgroundColor: palettePreview[option.id].ring }} />
+                                    </div>
+                                  </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
                     <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50/80 dark:bg-gray-950/60 space-y-4">
                         <div>
                             <p className="text-sm font-semibold">AI Planning Profile</p>
@@ -386,7 +622,7 @@ export function SettingsModal({
                                 onClose();
                                 onRestartOnboarding();
                             }}
-                            className="w-full py-2 bg-black dark:bg-white text-white dark:text-black font-medium rounded-lg hover:opacity-90 transition-opacity"
+                            className="px-4 py-2 text-sm font-medium rounded-lg border transition-colors bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] border-[var(--accent-border)] hover:bg-[var(--accent-solid)] hover:text-[var(--accent-solid-foreground)]"
                         >
                             Restart Onboarding
                         </button>
@@ -447,6 +683,85 @@ export function SettingsModal({
                         <p className="text-xs mt-2 font-medium text-gray-600 dark:text-gray-300">
                             Mode: {forceProUser ? 'Pro User (Testing)' : 'User'}
                         </p>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'export' && (
+                <div className="space-y-6">
+                    <div>
+                        <h3 className="text-lg font-semibold mb-1">Export</h3>
+                        <p className="text-sm text-gray-500">Export tasks as structured data, readable documents, or calendar files.</p>
+                    </div>
+
+                    <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50/80 dark:bg-gray-950/60 space-y-4">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">What to export</label>
+                            <select
+                              value={exportScope}
+                              onChange={(e) => setExportScope(e.target.value as typeof exportScope)}
+                              className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900"
+                            >
+                              <option value="all">All tasks</option>
+                              <option value="filtered">Filtered tasks (current view)</option>
+                              <option value="completed">Completed tasks</option>
+                              <option value="upcoming">Upcoming tasks</option>
+                              <option value="project">Selected task list (project)</option>
+                            </select>
+                        </div>
+
+                        {exportScope === 'project' && (
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Task list</label>
+                            <select
+                              value={exportProjectId}
+                              onChange={(e) => setExportProjectId(e.target.value)}
+                              className="w-full p-2 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900"
+                            >
+                              <option value="">Select project</option>
+                              {projects.map((p) => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        <p className="text-xs text-gray-500">
+                          Included fields: title, due/scheduled date, priority, category, status, and notes. Scope: <span className="font-medium text-gray-700 dark:text-gray-300">{getScopeLabel()}</span>.
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <button
+                          onClick={exportCsv}
+                          className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-left transition-colors"
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <FileSpreadsheet size={16} />
+                            <span className="font-semibold text-sm">CSV</span>
+                          </div>
+                          <p className="text-xs text-gray-500">Structured rows for spreadsheets and data tools.</p>
+                        </button>
+                        <button
+                          onClick={exportDocument}
+                          className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-left transition-colors"
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <FileText size={16} />
+                            <span className="font-semibold text-sm">Document</span>
+                          </div>
+                          <p className="text-xs text-gray-500">Readable task summary for sharing or printing.</p>
+                        </button>
+                        <button
+                          onClick={exportCalendar}
+                          className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 text-left transition-colors"
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <CalendarDays size={16} />
+                            <span className="font-semibold text-sm">Calendar (.ics)</span>
+                          </div>
+                          <p className="text-xs text-gray-500">Calendar-compatible file for due dates and scheduled tasks.</p>
+                        </button>
                     </div>
                 </div>
             )}
