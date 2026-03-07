@@ -92,9 +92,10 @@ export default function UpgradePage() {
                   className={clsx(
                     'rounded-xl border p-4 text-left transition-all',
                     isActive
-                      ? 'border-black dark:border-white ring-2 ring-black/10 dark:ring-white/20 bg-gray-50 dark:bg-gray-900'
+                      ? 'border-[var(--accent-border)] ring-2 bg-[var(--accent-soft)]'
                       : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 bg-white dark:bg-gray-800'
                   )}
+                  style={isActive ? { boxShadow: '0 0 0 2px var(--accent-border)' } : undefined}
                 >
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div>
@@ -134,7 +135,7 @@ export default function UpgradePage() {
 
             <button
               type="button"
-              className="mt-4 w-full inline-flex items-center justify-center gap-2 py-3 rounded-lg bg-black dark:bg-white text-white dark:text-black font-bold hover:opacity-90 transition-opacity"
+              className="mt-4 w-full inline-flex items-center justify-center gap-2 py-3 rounded-lg font-bold transition-opacity accent-solid-btn"
             >
               <CreditCard size={16} />
               <Sparkles size={16} />

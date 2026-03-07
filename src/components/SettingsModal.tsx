@@ -62,8 +62,21 @@ export function SettingsModal({
   const [newPassword, setNewPassword] = useState('');
 
   useEffect(() => {
-    if (isOpen) setDraftPalette(palette);
+    if (isOpen) {
+      setDraftPalette(palette);
+      setMessage(null);
+    }
   }, [isOpen, palette]);
+
+  useEffect(() => {
+    setMessage(null);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!message || message.type !== 'success') return;
+    const timeout = window.setTimeout(() => setMessage(null), 2600);
+    return () => window.clearTimeout(timeout);
+  }, [message]);
   
   if (!isOpen) return null;
 
@@ -435,7 +448,13 @@ export function SettingsModal({
             </button>
 
             {message && (
-                <div className={`mb-4 text-sm p-3 rounded-lg ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                <div
+                  className={`mb-4 text-sm p-3 rounded-lg border ${
+                    message.type === 'success'
+                      ? 'bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] border-[var(--accent-border)]'
+                      : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900/40'
+                  }`}
+                >
                     {message.text}
                 </div>
             )}
@@ -679,7 +698,7 @@ export function SettingsModal({
                             <button
                                 type="button"
                                 onClick={() => { onClose(); router.push('/upgrade'); }}
-                                className="px-3 py-2 rounded-lg text-xs font-bold bg-black dark:bg-white text-white dark:text-black hover:opacity-90 transition-opacity"
+                                className="px-3 py-2 rounded-lg text-xs font-bold accent-solid-btn hover:opacity-90 transition-opacity"
                             >
                                 {isPro ? 'Manage Plan' : 'Go Pro'}
                             </button>
@@ -812,7 +831,7 @@ export function SettingsModal({
                         <button 
                             type="submit" 
                             disabled={loading || !newPassword}
-                            className="px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
+                            className="px-4 py-2 accent-solid-btn rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
                         >
                             {loading ? 'Updating...' : 'Update Password'}
                         </button>
@@ -855,7 +874,7 @@ export function SettingsModal({
                     <button 
                         onClick={runDiagnostics}
                         disabled={loading}
-                        className="px-4 py-2 bg-black dark:bg-white text-white dark:text-black rounded-lg text-sm font-bold hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                        className="px-4 py-2 accent-solid-btn rounded-lg text-sm font-bold hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-50 transition-colors"
                     >
                         {loading ? 'Running...' : 'Run Diagnostics'}
                     </button>

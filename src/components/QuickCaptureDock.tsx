@@ -575,7 +575,7 @@ export const QuickCaptureDock = ({
                                     'h-8 w-8 rounded-full text-sm transition-colors',
                                     !isSameMonth(date, calendarMonth) && 'text-gray-300 dark:text-gray-600',
                                     isSameMonth(date, calendarMonth) && 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800',
-                                    isSelected && 'bg-black text-white hover:bg-black dark:bg-white dark:text-black dark:hover:bg-white',
+                                    isSelected && 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border-[var(--accent-border)] hover:opacity-95',
                                     !isSelected && isSameDay(date, today) && 'font-semibold text-gray-900 dark:text-gray-100'
                                   )}
                                 >

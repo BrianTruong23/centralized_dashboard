@@ -20,12 +20,16 @@ const mapRowToNote = (row: any): Note => ({
 });
 
 export const notesDb = {
-  async fetchNotes() {
+  async fetchNotes(userId?: string) {
     if (!supabase) throw new Error('Supabase not configured');
-    const { data, error } = await supabase
+    let query = supabase
       .from('notes')
       .select('*')
       .order('created_at', { ascending: false });
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+    const { data, error } = await query;
 
     if (error) {
        // If table doesn't exist yet, return empty array gracefully or throw specific error

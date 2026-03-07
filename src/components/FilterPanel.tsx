@@ -82,7 +82,7 @@ export const FilterPanel = ({
                 <div className={clsx(
                   "w-4 h-4 rounded border flex items-center justify-center transition-colors",
                   activeFilters.status.includes(option.value) 
-                    ? "bg-black dark:bg-white border-black dark:border-white text-white dark:text-black" 
+                    ? "bg-[var(--accent-solid)] border-[var(--accent-border)] text-[var(--accent-solid-foreground)]" 
                     : "border-gray-300 dark:border-gray-600 group-hover:border-gray-400"
                 )}>
                   {activeFilters.status.includes(option.value) && <Check size={10} strokeWidth={3} />}
@@ -110,7 +110,7 @@ export const FilterPanel = ({
                 className={clsx(
                   "px-3 py-1.5 text-xs font-medium rounded-md border transition-all",
                   activeFilters.priority.includes(option.value)
-                    ? "bg-black dark:bg-white text-white dark:text-black border-black dark:border-white"
+                    ? "bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border-[var(--accent-border)]"
                     : "bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-transparent hover:bg-gray-100 dark:hover:bg-gray-800"
                 )}
               >
@@ -135,7 +135,7 @@ export const FilterPanel = ({
                 className={clsx(
                   "px-3 py-1.5 text-xs font-medium rounded-full border transition-all",
                   activeFilters.category.includes(project.name as any)
-                    ? "bg-black dark:bg-white text-white dark:text-black border-black dark:border-white"
+                    ? "bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border-[var(--accent-border)]"
                     : "bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-transparent hover:bg-gray-100 dark:hover:bg-gray-800"
                 )}
               >

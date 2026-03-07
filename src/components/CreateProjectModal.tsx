@@ -67,7 +67,7 @@ export function CreateProjectModal({ isOpen, onClose, onAddProject }: CreateProj
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Work, Personal..."
-              className="w-full text-base bg-gray-50 dark:bg-gray-800 border-none rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all text-gray-900 dark:text-gray-100 placeholder-gray-400"
+              className="w-full text-base bg-gray-50 dark:bg-gray-800 border-none rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-[var(--accent-ring)]/35 transition-all text-gray-900 dark:text-gray-100 placeholder-gray-400"
               autoFocus
               required
             />
@@ -104,7 +104,7 @@ export function CreateProjectModal({ isOpen, onClose, onAddProject }: CreateProj
              <button
                type="submit"
                disabled={!name.trim() || isSubmitting}
-               className="px-6 py-2 text-sm font-bold bg-black dark:bg-white text-white dark:text-black rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+               className="px-6 py-2 text-sm font-bold rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all accent-solid-btn"
              >
                {isSubmitting ? 'Creating...' : 'Create Project'}
              </button>

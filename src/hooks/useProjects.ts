@@ -165,10 +165,28 @@ export const useProjects = () => {
     }
   };
 
+  const updateProject = async (projectId: string, updates: { name?: string; color?: string }) => {
+    const previous = projects.find((p) => p.id === projectId);
+    if (!previous) return;
+
+    const optimistic = { ...previous, ...updates };
+    setProjects((prev) => prev.map((p) => (p.id === projectId ? optimistic : p)));
+
+    try {
+      await db.updateProject(projectId, updates);
+      console.log('[useProjects.updateProject] ✓ Project updated:', projectId);
+    } catch (e) {
+      console.error('[useProjects.updateProject] ✗ Failed to update:', projectId, e);
+      setProjects((prev) => prev.map((p) => (p.id === projectId ? previous : p)));
+      throw e;
+    }
+  };
+
   return {
     projects,
     addProject,
     deleteProject,
+    updateProject,
     isLoading
   };
 };
