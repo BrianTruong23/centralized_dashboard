@@ -3,7 +3,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Sparkles, Send, X, Maximize2, Minimize2, Check, History, Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { AgentRunRecord, ProposedAction } from '@/lib/agent/types';
+import { AgentRunRecord, ProposedAction, ProposedPlanDay } from '@/lib/agent/types';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface AiAssistantProps {
   userId?: string;
@@ -11,6 +28,43 @@ interface AiAssistantProps {
 
 function shortRunId(id: string): string {
   return id.slice(0, 8);
+}
+
+function SortableTask({ task, id }: { task: any; id: string }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    data: { task },
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.3 : 1,
+    cursor: 'grab',
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="flex flex-col gap-1 p-2 rounded-md border border-gray-100 bg-gray-50 shadow-sm hover:shadow-md transition-shadow"
+    >
+      <div className="font-medium text-gray-900 line-clamp-2 leading-tight">{task.title}</div>
+      <div className="flex flex-wrap gap-2 items-center text-[10px] mt-0.5">
+        {task.project && (
+          <span className="px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">{task.project}</span>
+        )}
+        {task.estimated_minutes && (
+          <span className="font-medium text-gray-500 flex items-center gap-1">
+            <Clock size={10} /> {task.estimated_minutes}m
+          </span>
+        )}
+        <span className="font-bold text-gray-500 ml-auto">P{task.priority || 4}</span>
+      </div>
+    </div>
+  );
 }
 
 export function AiAssistant({ userId }: AiAssistantProps) {
@@ -24,6 +78,8 @@ export function AiAssistant({ userId }: AiAssistantProps) {
   const [approvedActionIds, setApprovedActionIds] = useState<Set<string>>(new Set());
   const [history, setHistory] = useState<AgentRunRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const [editableDays, setEditableDays] = useState<any[]>([]);
 
   const quickPrompts = [
     'Prioritize my inbox for today',
@@ -99,6 +155,11 @@ export function AiAssistant({ userId }: AiAssistantProps) {
       if (!res.ok) throw new Error(data?.error || 'Failed to run agent');
       const nextRun = data.run as AgentRunRecord;
       setRun(nextRun);
+      if (nextRun.proposed_plan_json?.proposed_plan?.days) {
+        setEditableDays(nextRun.proposed_plan_json.proposed_plan.days);
+      } else {
+        setEditableDays([]);
+      }
       setApprovedActionIds(
         new Set(
           (nextRun.proposed_plan_json?.proposed_actions || []).map((a) => a.action_id)
@@ -133,6 +194,22 @@ export function AiAssistant({ userId }: AiAssistantProps) {
     setIsExecuting(true);
     try {
       const token = await getAccessToken();
+
+      // If we've made edits to the days, inject them into the action payload
+      const approvedIdsArray = Array.from(approvedActionIds);
+      let payloadAction = null;
+      
+      const planAction = run.proposed_plan_json.proposed_actions.find(a => a.type === 'create_plan');
+      if (planAction && approvedIdsArray.includes(planAction.action_id)) {
+          payloadAction = {
+              action_id: planAction.action_id,
+              patch: {
+                  ...planAction.patch,
+                  days: editableDays
+              }
+          }
+      }
+
       const res = await fetch('/api/agent/execute', {
         method: 'POST',
         headers: {
@@ -141,7 +218,8 @@ export function AiAssistant({ userId }: AiAssistantProps) {
         },
         body: JSON.stringify({
           run_id: run.id,
-          approved_action_ids: Array.from(approvedActionIds),
+          approved_action_ids: approvedIdsArray,
+          modified_actions: payloadAction ? [payloadAction] : []
         }),
       });
       const data = await res.json();
@@ -153,6 +231,59 @@ export function AiAssistant({ userId }: AiAssistantProps) {
     } finally {
       setIsExecuting(false);
     }
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    // active.id is `task_${dayIndex}_${taskIndex}`
+    // over.id is either `task_${dayIndex}_${taskIndex}` or `day_${dayIndex}`
+    const activeStr = String(active.id);
+    const overStr = String(over.id);
+
+    const [ , activeDayStr, activeTaskStr ] = activeStr.split('_');
+    const activeDayIdx = parseInt(activeDayStr, 10);
+    const activeTaskIdx = parseInt(activeTaskStr, 10);
+
+    let overDayIdx = -1;
+    let overTaskIdx = -1;
+
+    if (overStr.startsWith('day_')) {
+      overDayIdx = parseInt(overStr.split('_')[1], 10);
+    } else if (overStr.startsWith('task_')) {
+      const parts = overStr.split('_');
+      overDayIdx = parseInt(parts[1], 10);
+      overTaskIdx = parseInt(parts[2], 10);
+    }
+
+    if (activeDayIdx === -1 || overDayIdx === -1) return;
+
+    setEditableDays((prev) => {
+      const next = JSON.parse(JSON.stringify(prev));
+      const sourceDay = next[activeDayIdx];
+      const targetDay = next[overDayIdx];
+      
+      const [movedTask] = sourceDay.tasks.splice(activeTaskIdx, 1);
+
+      if (activeDayIdx === overDayIdx) {
+        // move within same day
+        const destIdx = overTaskIdx === -1 ? sourceDay.tasks.length : overTaskIdx;
+        sourceDay.tasks.splice(destIdx, 0, movedTask);
+      } else {
+        // move to different day
+        movedTask.day = targetDay.day;
+        movedTask.date = targetDay.date;
+        const destIdx = overTaskIdx === -1 ? targetDay.tasks.length : overTaskIdx;
+        targetDay.tasks.splice(destIdx, 0, movedTask);
+      }
+      return next;
+    });
   };
 
   const onPromptKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -271,45 +402,45 @@ export function AiAssistant({ userId }: AiAssistantProps) {
                 )}
 
                 {/* Show Day-by-day Proposed Plan if available */}
-                {run.proposed_plan_json.proposed_plan?.days && (
+                {editableDays.length > 0 && (
                   <div className="space-y-3 mt-4 mb-4 border-t border-gray-200 pt-4">
                     <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Proposed Schedule
                     </p>
-                    <div className="grid grid-cols-1 gap-3 max-h-64 overflow-y-auto pr-1">
-                      {run.proposed_plan_json.proposed_plan.days.map((day: any, idx: number) => (
-                        <div key={idx} className="bg-white rounded-lg border border-gray-200 overflow-hidden text-sm">
-                          <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
-                            <span className="font-semibold text-gray-900">{day.day}</span>
-                            <span className="text-xs text-gray-500">{new Date(day.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                          </div>
-                          <div className="p-2 space-y-1.5">
-                            {day.tasks?.length === 0 ? (
-                              <div className="text-xs text-center text-gray-400 py-2 italic">Free day</div>
-                            ) : (
-                              day.tasks.map((task: any, tIdx: number) => (
-                                <div key={tIdx} className="flex flex-col gap-1 p-2 rounded-md border border-gray-100 bg-gray-50">
-                                  <div className="font-medium text-gray-900">{task.title}</div>
-                                  <div className="flex flex-wrap gap-2 items-center text-[10px] mt-0.5">
-                                    {task.project && (
-                                      <span className="px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">
-                                        {task.project}
-                                      </span>
-                                    )}
-                                    {task.estimated_minutes && (
-                                      <span className="font-medium text-gray-500 flex items-center gap-1">
-                                        <Clock size={10} /> {task.estimated_minutes}m
-                                      </span>
-                                    )}
-                                    <span className="font-bold text-gray-500 ml-auto">P{task.priority || 4}</span>
-                                  </div>
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                      <div className="grid grid-cols-1 gap-3 max-h-64 overflow-y-auto pr-1">
+                        {editableDays.map((day: any, dayIdx: number) => {
+                          const taskIds = day.tasks.map((_: any, tIdx: number) => `task_${dayIdx}_${tIdx}`);
+                          return (
+                            <div key={dayIdx} className="bg-white rounded-lg border border-gray-200 overflow-hidden text-sm">
+                              <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                                <span className="font-semibold text-gray-900">{day.day}</span>
+                                <span className="text-xs text-gray-500">{new Date(day.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                              </div>
+                              <SortableContext
+                                id={`day_${dayIdx}`}
+                                items={taskIds}
+                                strategy={verticalListSortingStrategy}
+                              >
+                                <div className="p-2 space-y-1.5 min-h-[40px]">
+                                  {day.tasks?.length === 0 ? (
+                                    <div className="text-xs text-center text-gray-400 py-2 italic">Free day</div>
+                                  ) : (
+                                    day.tasks.map((task: any, tIdx: number) => (
+                                      <SortableTask
+                                        key={`task_${dayIdx}_${tIdx}`}
+                                        id={`task_${dayIdx}_${tIdx}`}
+                                        task={task}
+                                      />
+                                    ))
+                                  )}
                                 </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                              </SortableContext>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </DndContext>
                   </div>
                 )}
 
@@ -386,12 +517,21 @@ export function AiAssistant({ userId }: AiAssistantProps) {
                 <p className="text-xs text-gray-500">No runs yet.</p>
               ) : (
                 <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                  {history.map((item) => (
+                  {(showAllHistory ? history : history.slice(0, 3)).map((item) => (
                     <div key={item.id} className="rounded-md border border-gray-200 bg-white p-2 text-xs text-gray-700">
                       <span className="font-semibold">#{shortRunId(item.id)}</span> · {item.intent} ·{' '}
                       {(item.executed_actions_json || []).length} executed
                     </div>
                   ))}
+                  {history.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllHistory(!showAllHistory)}
+                      className="w-full text-xs text-center text-gray-500 hover:text-gray-700 py-1 font-medium transition-colors"
+                    >
+                      {showAllHistory ? 'Show less' : `View ${history.length - 3} more`}
+                    </button>
+                  )}
                 </div>
               )}
             </div>

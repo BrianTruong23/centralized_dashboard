@@ -359,13 +359,26 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
 export async function executeAgentRun(
   userToken: string,
   runId: string,
-  approvedActionIds: string[]
+  approvedActionIds: string[],
+  modifiedActions?: Partial<ProposedAction>[]
 ): Promise<AgentRunRecord> {
   const userId = await getAuthUserId(userToken);
   const run = await getRunById(userToken, runId, userId);
   if (!run) throw new Error('Run not found');
 
-  const approved = mergeApprovals(run.proposed_plan_json.proposed_actions, approvedActionIds);
+  let approved = mergeApprovals(run.proposed_plan_json.proposed_actions, approvedActionIds);
+  
+  // Merge user overrides (like DND reordering the plan) into the approved actions array
+  if (modifiedActions && modifiedActions.length > 0) {
+    approved = approved.map(action => {
+      const override = modifiedActions.find(m => m.action_id === action.action_id);
+      if (override) {
+        return { ...action, ...override } as ProposedAction;
+      }
+      return action;
+    });
+  }
+
   const tools = createSupabaseAgentTools(userToken);
   const alreadyExecuted = new Set((run.executed_actions_json || []).map((a) => a.action_id));
   const executed = await executeApprovedActions(approved, tools, {
