@@ -42,6 +42,7 @@ export function DailyNotesHistory({ userId, refreshToken = 0 }: DailyNotesHistor
   const [editingContent, setEditingContent] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [isContentExpanded, setIsContentExpanded] = useState(false);
+  const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   const [pendingDeleteNoteId, setPendingDeleteNoteId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -93,6 +94,31 @@ export function DailyNotesHistory({ userId, refreshToken = 0 }: DailyNotesHistor
     selectedDayNotes[0] ||
     null;
   const shouldCollapseContent = !!selectedNote && selectedNote.content.length > 500;
+  const summaryPoints = useMemo(() => {
+    const raw = selectedNote?.summary?.trim();
+    if (!raw) return [];
+
+    const normalized = raw.replace(/\r\n/g, '\n');
+    const linePoints = normalized
+      .split('\n')
+      .map((line) => line.replace(/^[\-\*\u2022]\s*/, '').trim())
+      .filter(Boolean);
+
+    const points = linePoints.length > 1
+      ? linePoints
+      : normalized
+          .split(/(?<=[.!?])\s+/)
+          .map((part) => part.trim())
+          .filter(Boolean);
+
+    const unique: string[] = [];
+    points.forEach((point) => {
+      if (!unique.includes(point)) unique.push(point);
+    });
+    return unique;
+  }, [selectedNote?.summary]);
+  const previewSummaryPoints = isSummaryExpanded ? summaryPoints : summaryPoints.slice(0, 5);
+  const hasMoreSummaryPoints = summaryPoints.length > 5;
 
   useEffect(() => {
     if (!selectedDayNotes.length) {
@@ -106,6 +132,7 @@ export function DailyNotesHistory({ userId, refreshToken = 0 }: DailyNotesHistor
 
   useEffect(() => {
     setIsContentExpanded(false);
+    setIsSummaryExpanded(false);
   }, [selectedNoteId]);
 
   if (!userId || (pastNotes.length === 0 && !loading)) return null;
@@ -371,17 +398,34 @@ export function DailyNotesHistory({ userId, refreshToken = 0 }: DailyNotesHistor
                       )}
                     </div>
 
-                    <div className="bg-[var(--accent-soft)]/70 p-4 rounded-xl border border-[var(--accent-border)] h-fit">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-[var(--accent-soft-foreground)]/80 mb-2">
+                    <div className="bg-gray-50 dark:bg-gray-900/60 p-4 rounded-xl border border-gray-200 dark:border-gray-700 h-fit">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
                         AI Summary
                       </p>
-                      {selectedNote.summary ? (
-                        <p className="text-sm text-[var(--accent-soft-foreground)] italic flex gap-2">
-                          <Sparkles size={16} className="shrink-0 mt-0.5" />
-                          <span>{selectedNote.summary}</span>
-                        </p>
+                      {summaryPoints.length > 0 ? (
+                        <div className="space-y-2">
+                          <div className="flex items-start gap-2">
+                            <Sparkles size={15} className="shrink-0 mt-0.5 text-[var(--accent-link)]" />
+                            <ul className="space-y-1 min-w-0">
+                              {previewSummaryPoints.map((point, idx) => (
+                                <li key={`${point.slice(0, 24)}-${idx}`} className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                                  • {point}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                          {hasMoreSummaryPoints && (
+                            <button
+                              type="button"
+                              onClick={() => setIsSummaryExpanded((prev) => !prev)}
+                              className="text-xs font-medium text-[var(--accent-link)] hover:opacity-80 transition-opacity"
+                            >
+                              {isSummaryExpanded ? 'Show less' : `Show more (${summaryPoints.length - previewSummaryPoints.length} more)`}
+                            </button>
+                          )}
+                        </div>
                       ) : (
-                        <p className="text-sm text-[var(--accent-soft-foreground)]/80">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
                           No AI summary for this note yet.
                         </p>
                       )}

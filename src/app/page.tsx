@@ -252,6 +252,7 @@ export default function Home() {
   const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
   const [activeFocusTask, setActiveFocusTask] = useState<Task | null>(null);
   const [isFocusModalOpen, setIsFocusModalOpen] = useState(false);
+  const [focusModalAutoStart, setFocusModalAutoStart] = useState(false);
   
   // Auto Plan State
   const [isAutoPlanModalOpen, setIsAutoPlanModalOpen] = useState(false);
@@ -492,6 +493,7 @@ export default function Home() {
       ? dayPlan.find(t => t.id === focusedTaskId) || dayPlan[0]
       : dayPlan[0];
     setActiveFocusTask(taskToFocus);
+    setFocusModalAutoStart(true);
     setIsFocusModalOpen(true);
   };
 
@@ -544,11 +546,13 @@ export default function Home() {
   const handleFocusTask = (task: Task) => {
     setManualFocusTaskId(task.id);
     setActiveFocusTask(task);
+    setFocusModalAutoStart(false);
     setIsFocusModalOpen(true);
   };
 
   const handleStartFocusSession = (task: Task) => {
     setActiveFocusTask(task);
+    setFocusModalAutoStart(true);
     setIsFocusModalOpen(true);
   };
 
@@ -1339,12 +1343,17 @@ export default function Home() {
       
       <FocusSessionModal 
         isOpen={isFocusModalOpen}
-        onClose={() => setIsFocusModalOpen(false)}
+        onClose={() => {
+          setIsFocusModalOpen(false);
+          setFocusModalAutoStart(false);
+        }}
         task={activeFocusTask}
         showFocusPlant={focusPlantEnabled}
+        autoStart={focusModalAutoStart}
         onComplete={(task) => {
           updateTask({ ...task, status: 'done' });
           setIsFocusModalOpen(false);
+          setFocusModalAutoStart(false);
           setActiveFocusTask(null);
         }}
       />

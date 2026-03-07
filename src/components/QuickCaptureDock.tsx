@@ -575,7 +575,7 @@ export const QuickCaptureDock = ({
                                     'h-8 w-8 rounded-full text-sm transition-colors',
                                     !isSameMonth(date, calendarMonth) && 'text-gray-300 dark:text-gray-600',
                                     isSameMonth(date, calendarMonth) && 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800',
-                                    isSelected && 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border-[var(--accent-border)] hover:opacity-95',
+                                    isSelected && 'bg-[var(--accent-solid)] !text-white border-[var(--accent-border)] hover:opacity-95',
                                     !isSelected && isSameDay(date, today) && 'font-semibold text-gray-900 dark:text-gray-100'
                                   )}
                                 >
@@ -666,30 +666,12 @@ export const QuickCaptureDock = ({
                     )}
                   >
                     <Tag size={14} />
-                    {project ? project.name : 'Inbox'}
+                    {project ? project.name : 'Category'}
                     <ChevronDown size={12} className="text-gray-500" />
                   </button>
 
                   {showProjectDropdown && (
                     <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-900 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-[100] min-w-[240px] max-h-[60vh] overflow-y-auto">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setProjectId('');
-                          setShowProjectDropdown(false);
-                        }}
-                        className={clsx(
-                          "w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left",
-                          !projectId && "bg-gray-100 dark:bg-gray-800"
-                        )}
-                      >
-                        <Tag size={18} className="text-gray-500 dark:text-gray-400" />
-                        <span className="text-gray-700 dark:text-gray-200 font-medium flex-1">Inbox</span>
-                        {!projectId && (
-                          <span className="ml-auto text-sm font-bold text-amber-600 dark:text-amber-400">✓</span>
-                        )}
-                      </button>
                       {projects.map((p) => (
                         <button
                           key={p.id}
