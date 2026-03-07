@@ -34,6 +34,15 @@ export default function UpgradePage() {
     []
   );
 
+  const proFeatures = useMemo(
+    () => [
+      'All AI features (AI assistant, AI planning, AI summaries).',
+      'Calendar mode for time-based planning.',
+      'Future premium productivity features as they ship.',
+    ],
+    []
+  );
+
   const active = plans.find((p) => p.id === selectedPlan)!;
 
   return (
@@ -52,6 +61,18 @@ export default function UpgradePage() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Front-end preview only. No payment is processed yet.
             </p>
+          </div>
+
+          <div className="mb-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-4">
+            <p className="text-sm font-semibold mb-2">Pro includes</p>
+            <div className="space-y-1">
+              {proFeatures.map((item) => (
+                <div key={item} className="text-sm flex items-start gap-2 text-gray-700 dark:text-gray-300">
+                  <CheckCircle2 size={14} className="text-emerald-500 mt-0.5" />
+                  <span>{item}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -119,4 +140,3 @@ export default function UpgradePage() {
     </main>
   );
 }
-
