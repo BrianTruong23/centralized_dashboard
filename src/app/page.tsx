@@ -661,7 +661,8 @@ export default function Home() {
 
       <main className={`flex-1 overflow-y-auto p-4 md:p-8 ${!user ? 'blur-sm pointer-events-none select-none' : ''}`}>
         <header className={clsx(
-          "flex flex-col md:flex-row md:items-start justify-between gap-4 md:gap-0 max-w-4xl mx-auto relative",
+          "flex flex-col md:flex-row md:items-start justify-between gap-4 md:gap-0 mx-auto relative",
+          currentView === 'calendar' ? "max-w-[1400px]" : "max-w-4xl",
           (currentView === 'today' || currentView === 'inbox' || currentView === 'upcoming' || currentView === 'calendar') ? "mb-4" : "mb-8"
         )}>
           <div>
