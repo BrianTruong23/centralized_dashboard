@@ -385,7 +385,7 @@ export const QuickCaptureDock = ({
                     placeholder="Task title…"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="relative w-full bg-transparent border-none outline-none text-sm text-transparent caret-gray-900 dark:caret-gray-100 pb-1.5 transition-colors z-10"
+                    className="relative w-full bg-transparent border-none outline-none focus-visible:outline-none focus-visible:ring-0 text-sm text-transparent caret-gray-900 dark:caret-gray-100 pb-1.5 transition-colors z-10"
                     autoComplete="off"
                     spellCheck={false}
                     autoFocus
