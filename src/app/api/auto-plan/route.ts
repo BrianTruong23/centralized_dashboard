@@ -17,10 +17,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Supabase is not configured' }, { status: 503 });
     }
 
-    const allowOverride = process.env.NODE_ENV !== 'production' || process.env.ALLOW_PRO_OVERRIDE === 'true';
     const wantsOverride = req.headers.get('x-pro-override') === 'true';
 
-    if (!(allowOverride && wantsOverride)) {
+    // If the user hasn't toggled the "Testing Override" in the UI, we check their subscription
+    if (!wantsOverride) {
       const subRes = await fetch(`${supabaseUrl}/rest/v1/user_subscriptions?select=tier,status&limit=1`, {
         method: 'GET',
         headers: {
