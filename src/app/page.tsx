@@ -840,13 +840,13 @@ export default function Home() {
                <div className="relative">
                  <button
                    onClick={() => setShowViewDropdown((prev) => !prev)}
-                   className="px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 flex items-center gap-1"
+                   className="px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 flex items-center gap-1 bg-white dark:bg-gray-900"
                  >
                    {viewSwitcherLabel}
                    <ChevronDown size={12} />
                  </button>
                  {showViewDropdown && (
-                   <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-20 min-w-[120px]">
+                   <div className="absolute left-0 md:left-auto md:right-0 top-full mt-1 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-[120] min-w-[140px]">
                      <button
                        type="button"
                        onClick={() => {

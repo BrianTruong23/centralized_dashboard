@@ -608,7 +608,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
       )}
 
       <div className="mb-5">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
           <div>
             <h2 className="text-[28px] md:text-[32px] leading-tight font-semibold tracking-tight text-gray-900 dark:text-gray-100">
               Daily Notes
@@ -619,7 +619,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
               <span>{saveStatusLabel}</span>
             </div>
           </div>
-          <div className="flex gap-1.5">
+          <div className="flex w-full md:w-auto gap-1.5 flex-wrap md:flex-nowrap md:justify-end">
             <button
                 onClick={handleCreateNewNote}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-transparent border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
