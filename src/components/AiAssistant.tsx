@@ -67,7 +67,15 @@ export function AiAssistant({ userId }: AiAssistantProps) {
     void loadHistory();
   }, [loadHistory]);
 
-  const actions = run?.proposed_plan_json?.proposed_actions ?? [];
+  const executedActionIds = useMemo(
+    () => new Set((run?.executed_actions_json || []).map((a: any) => a.action_id)),
+    [run]
+  );
+  const actions = useMemo(
+    () => (run?.proposed_plan_json?.proposed_actions ?? []).filter((a) => !executedActionIds.has(a.action_id)),
+    [run, executedActionIds]
+  );
+  
   const approvedCount = useMemo(
     () => actions.filter((a) => approvedActionIds.has(a.action_id)).length,
     [actions, approvedActionIds]
