@@ -4,13 +4,31 @@ import { useState, useMemo, useEffect } from 'react';
 import { useTasks } from '@/hooks/useTasks';
 import { useProjects } from '@/hooks/useProjects';
 import { TaskInput } from '@/components/TaskInput';
+import { QuickCaptureDock } from '@/components/QuickCaptureDock';
 import { TaskList } from '@/components/TaskList';
+import { UpcomingTaskList } from '@/components/UpcomingTaskList';
 import { CreateTaskModal } from '@/components/CreateTaskModal';
 import { FocusSessionModal } from '@/components/FocusSessionModal';
 import { pickNextTask, generateDayPlan, filterTasksDueToday } from '@/lib/scheduler';
 import { Task } from '@/types/task';
 import { AuthModal } from '@/components/AuthModal';
-import { Zap, CalendarRange, Loader2, Filter, ChevronUp, ChevronDown, Play, Sparkles, Trash2 } from 'lucide-react';
+import { Zap, CalendarRange, Loader2, Filter, ChevronUp, ChevronDown, Play, Sparkles, Trash2, GripVertical } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { TutorialOverlay } from '@/components/TutorialOverlay';
 import { DailyNotes } from '@/components/DailyNotes';
 import { DailyNotesHistory } from '@/components/DailyNotesHistory';
@@ -19,6 +37,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { FilterPanel } from '@/components/FilterPanel';
 import { AutoPlanModal } from '@/components/AutoPlanModal';
+import { InboxCleanupModal } from '@/components/InboxCleanupModal';
 import { CreateProjectModal } from '@/components/CreateProjectModal';
 import { ActivityLogModal } from '@/components/ActivityLogModal';
 import { SettingsModal } from '@/components/SettingsModal';
@@ -57,6 +76,41 @@ function formatPlanDate(deadline?: string): string | null {
   return `${mm}-${dd}-${yyyy}`;
 }
 
+// Sortable queue item for plan mode
+function SortableQueueItem({ task, index }: { task: Task; index: number }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-2 py-2 px-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors"
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        className="text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 cursor-grab active:cursor-grabbing"
+      >
+        <GripVertical size={14} />
+      </button>
+      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 flex items-center justify-center text-[10px] font-medium">
+        {index + 2}
+      </span>
+      <span className="flex-1 text-sm text-gray-700 dark:text-gray-300 truncate">
+        {task.title}
+      </span>
+    </div>
+  );
+}
+
 function LoadingScreen() {
   const [messageIndex, setMessageIndex] = useState(0);
 
@@ -93,6 +147,19 @@ export default function Home() {
           });
           setTutorialStep('none'); // End tutorial
       }
+      
+      // Auto-promote next task in plan when current focus is completed
+      if (showPlan && dayPlan.length > 0 && task.status === 'done' && focusedTaskId === task.id) {
+        const currentIndex = dayPlan.findIndex(t => t.id === task.id);
+        if (currentIndex >= 0 && currentIndex < dayPlan.length - 1) {
+          // Promote next task to focus
+          setFocusedTaskId(dayPlan[currentIndex + 1].id);
+        } else {
+          // No more tasks in queue
+          setFocusedTaskId(null);
+        }
+      }
+      
       await _updateTask(task);
   };
 
@@ -118,6 +185,7 @@ export default function Home() {
   const effectiveIsPro = isPro || forceProUser;
   const [showPlan, setShowPlan] = useState(false);
   const [dayPlan, setDayPlan] = useState<Task[]>([]);
+  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
   const [user, setUser] = useState<any>(() => {
     // Optimistic load from cache to speed up dashboard display
     if (typeof window !== 'undefined') {
@@ -159,6 +227,7 @@ export default function Home() {
   
   // Auto Plan State
   const [isAutoPlanModalOpen, setIsAutoPlanModalOpen] = useState(false);
+  const [isInboxCleanupModalOpen, setIsInboxCleanupModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isActivityLogOpen, setIsActivityLogOpen] = useState(false);
@@ -358,6 +427,10 @@ export default function Home() {
     const plan = generateDayPlan(dueTodayTasks, { now: new Date(), energyLevel: 'medium', availableTimeMinutes: 480 });
     setDayPlan(plan);
     setShowPlan(true);
+    // Set first task as focused
+    if (plan.length > 0) {
+      setFocusedTaskId(plan[0].id);
+    }
   };
 
   const moveTaskUp = (index: number) => {
@@ -385,9 +458,34 @@ export default function Home() {
 
   const handleFocusNextFromPlan = () => {
     if (dayPlan.length === 0) return;
-    setActiveFocusTask(dayPlan[0]);
+    const taskToFocus = focusedTaskId 
+      ? dayPlan.find(t => t.id === focusedTaskId) || dayPlan[0]
+      : dayPlan[0];
+    setActiveFocusTask(taskToFocus);
     setIsFocusModalOpen(true);
   };
+
+  const handlePlanDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = dayPlan.findIndex(t => t.id === active.id);
+    const newIndex = dayPlan.findIndex(t => t.id === over.id);
+
+    if (oldIndex !== -1 && newIndex !== -1) {
+      setDayPlan(prev => {
+        const newPlan = [...prev];
+        const [moved] = newPlan.splice(oldIndex, 1);
+        newPlan.splice(newIndex, 0, moved);
+        return newPlan;
+      });
+    }
+  };
+
+  const planSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const handleFocusTask = (task: Task) => {
     setManualFocusTaskId(task.id);
@@ -517,7 +615,7 @@ export default function Home() {
   if (!isLoaded) {
     return <LoadingScreen />;
   }
-  
+
   const todoTasks = filteredTasks.filter(t => t.status !== 'done');
   const userId = user?.id;
 
@@ -561,21 +659,44 @@ export default function Home() {
        {/* CreateTaskModal rendered once at the bottom of the component */}
 
       <main className={`flex-1 overflow-y-auto p-4 md:p-8 ${!user ? 'blur-sm pointer-events-none select-none' : ''}`}>
-        <header className="mb-8 flex flex-col md:flex-row md:items-start justify-between gap-4 md:gap-0 max-w-4xl mx-auto relative">
+        <header className={clsx(
+          "flex flex-col md:flex-row md:items-start justify-between gap-4 md:gap-0 max-w-4xl mx-auto relative",
+          (currentView === 'today' || currentView === 'inbox' || currentView === 'upcoming') ? "mb-4" : "mb-8"
+        )}>
           <div>
-            <h1 className="text-3xl font-bold tracking-tighter mb-1 font-mono uppercase">
-               {viewTitle}
-            </h1>
-            <p className="text-gray-500 dark:text-gray-400 text-sm min-h-[20px]">
-                {currentView === 'kanban' ? 'Visual workflow' : 
-                 currentView === 'today' ? (
-                    <>
-                        Design your day, master your time. 
-                        <Link href="https://forms.gle/K8z21uKNX5ieb7Ai9" target="_blank" rel="noopener noreferrer" className="underline hover:text-black dark:hover:text-white ml-2">Features</Link>
-                    </>
-                 ) : null}
-            </p>
+            <h1 className={clsx(
+              "font-bold tracking-tighter mb-1 font-mono uppercase",
+              (currentView === 'today' || currentView === 'inbox') ? "text-xl" : "text-3xl"
+            )}>
+               {currentView === 'today' ? (
+                 <div className="flex items-center gap-3">
+                   <span>Today</span>
+                   <span className="text-sm font-normal text-gray-500 dark:text-gray-400 normal-case">
+                     {todoTasks.length} {todoTasks.length === 1 ? 'task' : 'tasks'}
+                   </span>
           </div>
+               ) : currentView === 'inbox' ? (
+                 <div className="flex items-center gap-3">
+                   <span>Inbox</span>
+                   <span className="text-sm font-normal text-gray-500 dark:text-gray-400 normal-case">
+                     {todoTasks.length} {todoTasks.length === 1 ? 'item' : 'items'}
+                   </span>
+                   </div>
+               ) : currentView === 'upcoming' ? (
+                     <div className="flex items-center gap-3">
+                   <span>Upcoming</span>
+                   <span className="text-sm font-normal text-gray-500 dark:text-gray-400 normal-case">
+                     {todoTasks.length} {todoTasks.length === 1 ? 'task' : 'tasks'}
+                        </span>
+                 </div>
+               ) : viewTitle}
+            </h1>
+            {currentView !== 'today' && currentView !== 'inbox' && (
+              <p className="text-gray-500 dark:text-gray-400 text-sm min-h-[20px]">
+                {currentView === 'kanban' ? 'Visual workflow' : null}
+              </p>
+                        )}
+                     </div>
 
           <div className="flex items-center gap-2 w-full md:w-auto">
              <div className="relative group flex-1 md:flex-none">
@@ -589,7 +710,7 @@ export default function Home() {
              </div>
              
              <div className="relative">
-                 <button 
+                     <button 
                     onClick={() => setShowFilters(!showFilters)}
                     className={clsx(
                         "p-2 rounded-full transition-colors",
@@ -599,7 +720,7 @@ export default function Home() {
                     )}
                  >
                     <Filter size={18} />
-                 </button>
+                     </button>
                  <FilterPanel
                     isOpen={showFilters}
                     onClose={() => setShowFilters(false)}
@@ -608,8 +729,8 @@ export default function Home() {
                     onClearFilters={clearFilters}
                     projects={projects}
                  />
-             </div>
-          </div>
+                   </div>
+                </div>
         </header>
 
         <div className="max-w-4xl mx-auto">
@@ -630,189 +751,309 @@ export default function Home() {
                             Today&apos;s Notes
                         </h2>
                         <DailyNotes userId={userId} onAddTask={addTask} projects={projects} addProject={addProjectFn} />
-                    </section>
-                    <section className="mb-8">
+          </section>
+        <section className="mb-8">
                         <DailyNotesHistory userId={userId} />
-                    </section>
+        </section>
                 </>
             ) : (
                 <>
-                    {suggestedTask && (
-                        <section className="mb-6">
-                            <div className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3">
-                                <div className="min-w-0">
-                                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
-                                        Focus Now
-                                    </p>
-                                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                                        {suggestedTask.title}
-                                    </p>
+                    {currentView === 'today' ? (
+                        <>
+                            {/* Today's Tasks - Primary Content */}
+                            <section className="mb-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                        Today&apos;s Tasks
+                                    </h2>
                                 </div>
-                                <button
-                                    onClick={() => handleStartFocusSession(suggestedTask)}
-                                    className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-black dark:bg-white text-white dark:text-black text-xs font-bold rounded-lg hover:opacity-90 transition-opacity"
-                                >
-                                    <Zap size={14} />
-                                    Focus Now
-                                </button>
-                            </div>
-                        </section>
-                    )}
+                                
+                                {/* Plan Mode: Clean Execution Queue */}
+                                {showPlan && dayPlan.length > 0 && (
+                                    <div className="mb-4 space-y-4">
+                                        {/* Focus Now - Single Task */}
+                                        {(() => {
+                                            const focusTask = dayPlan.find(t => t.id === focusedTaskId) || dayPlan[0];
+                                            const isCompleted = focusTask.status === 'done';
+                                            return (
+                                                <section className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Focus Now</h3>
+                                                        <button 
+                                                            onClick={() => setShowPlan(false)} 
+                                                            className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                                                        >
+                                                            ×
+                                                        </button>
+                                                    </div>
+                                                    <div className="flex items-center justify-between gap-3">
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className={clsx(
+                                                                "text-sm font-medium text-gray-900 dark:text-gray-100",
+                                                                isCompleted && "line-through opacity-60"
+                                                            )}>
+                                                                {focusTask.title}
+                                                            </p>
+                                                            {focusTask.estimatedMinutes && (
+                                                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                                                    {focusTask.estimatedMinutes}m
+                                                                </p>
+                                                            )}
+                                                        </div>
+            <button 
+                                                            onClick={handleFocusNextFromPlan}
+                                                            disabled={isCompleted}
+                                                            className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-black dark:bg-white text-white dark:text-black text-xs font-semibold rounded-md hover:opacity-90 disabled:opacity-50 transition-opacity"
+            >
+                                                            <Play size={12} fill="currentColor" />
+                                                            Start focus
+            </button>
+                                                    </div>
+                                                </section>
+                                            );
+                                        })()}
 
-                    <section className="mb-8">
-                        <TaskInput
-                            onAddTask={addTask}
-                            defaultDate={getDefaultDate()}
-                            projects={projects}
-                            defaultProjectId={currentProject?.id}
-                            isHighlighted={tutorialStep === 'input'}
-                        />
-                    </section>
+                                        {/* Up Next - Reorderable Queue */}
+                                        {(() => {
+                                            const focusTask = dayPlan.find(t => t.id === focusedTaskId) || dayPlan[0];
+                                            const queueTasks = dayPlan.filter(t => t.id !== focusTask.id).slice(0, 5);
+                                            
+                                            if (queueTasks.length === 0) return null;
 
-                    {/* Auto Plan Section for Inbox */}
-                     {currentView === 'inbox' && (
-                        <section className="mb-8">
-                             {effectiveIsPro ? (
-                                <button
-                                  onClick={() => setIsAutoPlanModalOpen(true)}
-                                  className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:border-black dark:hover:border-white hover:text-black dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-all font-medium"
-                                >
-                                  <Sparkles size={18} />
-                                  Auto Plan My Week
-                                </button>
-                             ) : (
-                                <div className="w-full rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/70 dark:bg-amber-900/10 p-4">
-                                  <p className="text-sm font-semibold text-amber-700 dark:text-amber-300 mb-1">Pro Feature</p>
-                                  <p className="text-xs text-amber-700/90 dark:text-amber-300/90 mb-3">
-                                    Auto Plan is available on Pro. Upgrade to unlock AI-assisted weekly planning.
-                                  </p>
-                                  <Link
-                                    href="/upgrade"
-                                    className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-bold rounded-lg bg-black dark:bg-white text-white dark:text-black hover:opacity-90 transition-opacity"
-                                  >
-                                    <Sparkles size={14} />
-                                    {premiumLoading ? 'Checking plan...' : 'Upgrade to Pro'}
-                                  </Link>
-                                </div>
-                             )}
-                        </section>
-                    )}
-
-                    {currentView === 'today' && (
-                        <section className="mb-8">
-                            {!showPlan ? (
-                                <button
-                                onClick={handleGeneratePlan}
-                                className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300 transition-all"
-                                >
-                                <CalendarRange size={18} />
-                                Generate Today&apos;s Plan
-                                </button>
-                            ) : (
-                                <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Today&apos;s Schedule</h2>
-                                    <div className="flex items-center gap-2">
-                                      <button
-                                        onClick={handleFocusNextFromPlan}
-                                        disabled={dayPlan.length === 0}
-                                        className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-black dark:bg-white text-white dark:text-black text-xs font-bold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
-                                      >
-                                        <Play size={10} fill="currentColor" />
-                                        Focus Next
-                                      </button>
-                                      <button onClick={() => setShowPlan(false)} className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">Close</button>
-                                    </div>
-                                </div>
-                                {dayPlan.length > 0 ? (
-                                    <div className="space-y-4">
-                                    {dayPlan.map((task, idx) => (
-                                        <div key={task.id} className="flex gap-3 relative">
-                                        {idx !== dayPlan.length - 1 && <div className="absolute left-3.5 top-8 bottom-[-16px] w-0.5 bg-gray-100" />}
-                                        <div className="flex-shrink-0 w-7 h-[60px] flex flex-col items-center justify-between py-1 bg-blue-50 text-blue-600 rounded-full border border-blue-100 z-10">
-                                            <button 
-                                                onClick={() => moveTaskUp(idx)} 
-                                                disabled={idx === 0}
-                                                className="p-0.5 text-blue-400 hover:text-blue-700 disabled:opacity-30"
-                                            >
-                                                <ChevronUp size={12} />
-                                            </button>
-                                            <span className="text-xs font-bold leading-none">{idx + 1}</span>
-                                            <button 
-                                                onClick={() => moveTaskDown(idx)} 
-                                                disabled={idx === dayPlan.length - 1}
-                                                className="p-0.5 text-blue-400 hover:text-blue-700 disabled:opacity-30"
-                                            >
-                                                <ChevronDown size={12} />
-                                            </button>
-                                        </div>
-                                            <div className="flex-1 pb-1 flex items-start justify-between gap-4 border-b border-gray-100 dark:border-gray-700 py-2">
-                                                <div className="min-w-0">
-                                                  <p className="text-base font-medium text-gray-900 dark:text-gray-100 truncate">{task.title}</p>
-                                                  <div className="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                                                    <span>{task.category}</span>
-                                                    <span>·</span>
-                                                    <span>{task.estimatedMinutes}m</span>
-                                                    <span>·</span>
-                                                    <span>P{task.priority}</span>
-                                                    {task.deadline && (
-                                                      <>
-                                                        <span>·</span>
-                                                        <span>{formatPlanDate(task.deadline) ?? task.deadline}</span>
-                                                      </>
-                                                    )}
-                                                  </div>
-                                                </div>
-                                                <button
-                                                  onClick={() => removeTaskFromPlan(task.id)}
-                                                  className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                                                  title="Remove from today's plan (proposal only)"
-                                                >
-                                                  <Trash2 size={12} />
-                                                  Remove
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    <div className="mt-4 pt-4 border-t text-center text-xs text-gray-400">
-                                        Total Focus: {dayPlan.reduce((acc, t) => acc + t.estimatedMinutes, 0) / 60} hours
-                                    </div>
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-gray-400 text-center py-4">No suitable tasks found for plan.</p>
+                                            return (
+                                                <section className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+                                                    <div className="mb-2">
+                                                        <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Up next</h3>
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                            Ordered by urgency, priority, and effort. Drag to reorder.
+                                                        </p>
+                                                    </div>
+                                                    <DndContext
+                                                        sensors={planSensors}
+                                                        collisionDetection={closestCenter}
+                                                        onDragEnd={handlePlanDragEnd}
+                                                    >
+                                                        <SortableContext
+                                                            items={queueTasks.map(t => t.id)}
+                                                            strategy={verticalListSortingStrategy}
+                                                        >
+                                                            <div className="space-y-0.5">
+                                                                {queueTasks.map((task, idx) => (
+                                                                    <SortableQueueItem key={task.id} task={task} index={idx} />
+                                                                ))}
+               </div>
+                                                        </SortableContext>
+                                                    </DndContext>
+                                                </section>
+                                            );
+                                        })()}
+                       </div>
                                 )}
-                                </div>
-                            )}
-                        </section>
-                    )}
+                                
+                                {/* Full Task List - Always visible */}
+                                <div className="max-h-[calc(100vh-400px)] overflow-y-auto">
+                                    <TaskList
+                                        tasks={filteredTasks}
+                                        onUpdateTask={updateTask}
+                                        onDeleteTask={deleteTask}
+                                        onFocusTask={handleFocusTask}
+                                        projects={projects}
+                                    />
+                       </div>
+                            </section>
 
-                    <section className="mb-8">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                {currentProject ? `${currentProject.name} Tasks (${todoTasks.length})` : 
-                                 currentView === 'inbox' ? `All Tasks (${todoTasks.length})` : 
-                                 `${currentView.replace('-', ' ')} Tasks (${todoTasks.length})`}
-                            </h2>
-                        </div>
-                        <TaskList
-                            tasks={filteredTasks}
-                            onUpdateTask={updateTask}
-                            onDeleteTask={deleteTask}
-                            onFocusTask={handleFocusTask}
-                            projects={projects}
-                        />
-                    </section>
-                    
-                    {(currentView === 'inbox' || currentView === 'today') && (
-                        <section className="mb-8">
-                            <DailyNotes userId={userId} onAddTask={addTask} projects={projects} addProject={addProjectFn} />
-                        </section>
+                            {/* Upcoming Preview - Collapsed */}
+                            {(() => {
+                                const upcomingTasks = tasks.filter(t => {
+                                    if (t.status === 'done') return false;
+                                    if (!t.deadline) return false;
+                                    const todayStr = formatDateKey(new Date());
+                                    return t.deadline > todayStr;
+                                }).slice(0, 3);
+                                
+                                if (upcomingTasks.length === 0) return null;
+                                
+                                return (
+                                    <section className="mb-3">
+                                        <details className="group">
+                                            <summary className="cursor-pointer text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center justify-between py-2 px-1">
+                                                <span>Upcoming ({upcomingTasks.length})</span>
+                                                <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
+                                            </summary>
+                                            <div className="mt-2 space-y-1 pl-2 border-l-2 border-gray-200 dark:border-gray-700">
+                                                {upcomingTasks.map(task => (
+                                                    <div key={task.id} className="text-xs text-gray-600 dark:text-gray-400 py-1">
+                                                        {task.title}
+                     </div>
+                   ))}
+                   </div>
+                                        </details>
+                                    </section>
+                                );
+                            })()}
+
+                            {/* Notes - Collapsed */}
+                            <section>
+                                <details className="group">
+                                    <summary className="cursor-pointer text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center justify-between py-2 px-1">
+                                        <span>Notes</span>
+                                        <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
+                                    </summary>
+                                    <div className="mt-2">
+                                        <DailyNotes userId={userId} onAddTask={addTask} projects={projects} addProject={addProjectFn} />
+                 </div>
+                                </details>
+                            </section>
+                        </>
+                    ) : currentView === 'inbox' ? (
+                        <>
+                            {/* Inbox: Fast Triage View */}
+                            
+                            {/* Compact Summary Row */}
+                            {(() => {
+                                const inboxTasks = tasks.filter(t => t.status !== 'done');
+                                const todayStr = formatDateKey(new Date());
+                                const overdue = inboxTasks.filter(t => t.deadline && t.deadline < todayStr).length;
+                                const noDate = inboxTasks.filter(t => !t.deadline).length;
+                                const noPriority = inboxTasks.filter(t => !t.priority || t.priority >= 5).length;
+                                
+                                return (
+                                    <section className="mb-3">
+                                        <div className="flex items-center gap-4 text-xs text-gray-600 dark:text-gray-400">
+                                            <span className="font-medium">{inboxTasks.length} items</span>
+                                            {overdue > 0 && (
+                                                <span className="text-red-600 dark:text-red-400">{overdue} overdue</span>
+                                            )}
+                                            {noDate > 0 && (
+                                                <span>{noDate} no date</span>
+                                            )}
+                                            {noPriority > 0 && (
+                                                <span>{noPriority} no priority</span>
+                                            )}
+                                            {effectiveIsPro && (
+                                                <button
+                                                    onClick={() => setIsInboxCleanupModalOpen(true)}
+                                                    className="ml-auto text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center gap-1 transition-colors"
+                                                    title="Review inbox for cleanup suggestions"
+                                                >
+                                                    <Sparkles size={12} />
+                                                    Clean-up
+                                                </button>
+               )}
+            </div>
+                                    </section>
+                                );
+                            })()}
+
+                            {/* Inbox Task List - Primary Content */}
+                            <section className="mb-4">
+                                <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
+                                    <TaskList
+                                        tasks={filteredTasks}
+                                        onUpdateTask={updateTask}
+                                        onDeleteTask={deleteTask}
+                                        onFocusTask={handleFocusTask}
+                                        projects={projects}
+                                        isInbox={true}
+                                    />
+                                </div>
+        </section>
+
+                            {/* Notes - Collapsed */}
+        <section>
+                                <details className="group">
+                                    <summary className="cursor-pointer text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center justify-between py-2 px-1">
+                                        <span>Notes</span>
+                                        <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
+                                    </summary>
+                                    <div className="mt-2">
+                                        <DailyNotes userId={userId} onAddTask={addTask} projects={projects} addProject={addProjectFn} />
+                                    </div>
+                                </details>
+                            </section>
+                        </>
+                    ) : currentView === 'upcoming' ? (
+                        <>
+                            {/* Upcoming: Minimal, Calm, Scannable */}
+                            
+                            {/* Compact Summary */}
+                            {(() => {
+                                const upcomingTasks = filteredTasks;
+                                const todayStr = formatDateKey(new Date());
+                                const thisWeek = upcomingTasks.filter(t => {
+                                    if (!t.deadline) return false;
+                                    const taskDate = new Date(t.deadline);
+                                    const weekFromNow = new Date();
+                                    weekFromNow.setDate(weekFromNow.getDate() + 7);
+                                    return taskDate <= weekFromNow;
+                                }).length;
+                                const thisMonth = upcomingTasks.filter(t => {
+                                    if (!t.deadline) return false;
+                                    const taskDate = new Date(t.deadline);
+                                    const monthFromNow = new Date();
+                                    monthFromNow.setMonth(monthFromNow.getMonth() + 1);
+                                    return taskDate <= monthFromNow;
+                                }).length;
+                                
+                                return (
+                                    <section className="mb-3">
+                                        <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                                            {thisWeek > 0 && <span>{thisWeek} this week</span>}
+                                            {thisMonth > thisWeek && <span>{thisMonth - thisWeek} later</span>}
+                                        </div>
+                                    </section>
+                                );
+                            })()}
+
+                            {/* Upcoming Task List - Primary Content */}
+                            <section className="mb-4">
+                                <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
+                                    <UpcomingTaskList
+                                        tasks={filteredTasks}
+                                        onUpdateTask={updateTask}
+                                        onDeleteTask={deleteTask}
+                                        onFocusTask={handleFocusTask}
+                                        projects={projects}
+                                    />
+                                </div>
+                            </section>
+                        </>
+                    ) : (
+                        <>
+                            {/* Other views keep original layout */}
+                            <section className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                        {currentProject ? `${currentProject.name} Tasks (${todoTasks.length})` : 
+                                         `${currentView.replace('-', ' ')} Tasks (${todoTasks.length})`}
+                                    </h2>
+          </div>
+          <TaskList 
+                                    tasks={filteredTasks}
+            onUpdateTask={updateTask} 
+            onDeleteTask={deleteTask} 
+                                    onFocusTask={handleFocusTask}
+                                    projects={projects}
+          />
+        </section>
+                        </>
                     )}
                 </>
-            
             )}
         </div>
       </main>
+
+      {/* Floating Quick Capture Dock */}
+      {user && (
+        <QuickCaptureDock
+          onAddTask={addTask}
+          defaultDate={getDefaultDate()}
+          projects={projects}
+          defaultProjectId={currentProject?.id}
+          topInputSelector="#task-input"
+        />
+      )}
+
       <CreateTaskModal 
         isOpen={isCreateTaskModalOpen}
         onClose={() => setIsCreateTaskModalOpen(false)}
@@ -832,6 +1073,14 @@ export default function Home() {
         addProject={addProjectFn}
         proOverride={forceProUser}
         planningPreferences={planningPreferences}
+      />
+
+      <InboxCleanupModal
+        isOpen={isInboxCleanupModalOpen}
+        onClose={() => setIsInboxCleanupModalOpen(false)}
+        tasks={currentView === 'inbox' ? tasks.filter(t => t.status !== 'done') : filteredTasks}
+        onUpdateTask={updateTask}
+        onDeleteTask={deleteTask}
       />
 
       <OnboardingModal

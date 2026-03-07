@@ -53,7 +53,7 @@ export async function POST(req: Request) {
               currency_code: 'USD',
               value: amount,
             },
-            description: 'Minima Pro Upgrade',
+            description: 'Minismo Pro Upgrade',
           },
         ],
         application_context: {
