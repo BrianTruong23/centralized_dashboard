@@ -527,8 +527,8 @@ export const QuickCaptureDock = ({
                           </div>
 
                           <div className="grid grid-cols-7 text-center text-xs text-gray-400 mb-1">
-                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day) => (
-                              <span key={day} className="py-1">{day}</span>
+                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
+                              <span key={`${day}-${index}`} className="py-1">{day}</span>
                             ))}
                           </div>
                           <div className="grid grid-cols-7 gap-1">
@@ -569,7 +569,10 @@ export const QuickCaptureDock = ({
                       setShowDatePicker(false);
                     }}
                     className={clsx(
-                      "flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                      "flex items-center gap-2 px-3 py-1.5 rounded-2xl text-sm font-medium transition-colors bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 border-2",
+                      showPriorityDropdown
+                        ? "border-gray-900 dark:border-gray-100"
+                        : "border-gray-300 dark:border-gray-600"
                     )}
                   >
                     <Flag size={14} className={clsx(priorityColors[priority as keyof typeof priorityColors])} fill={priority <= 3 ? 'currentColor' : 'none'} />
@@ -623,7 +626,12 @@ export const QuickCaptureDock = ({
                       setShowPriorityDropdown(false);
                       setShowDatePicker(false);
                     }}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    className={clsx(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-2xl text-sm font-medium transition-colors border",
+                      showProjectDropdown
+                        ? "border-gray-900 dark:border-gray-100 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-100"
+                        : "border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    )}
                   >
                     <Tag size={14} />
                     {project ? project.name : 'Inbox'}
@@ -664,10 +672,7 @@ export const QuickCaptureDock = ({
                             projectId === p.id && "bg-gray-50 dark:bg-gray-800"
                           )}
                         >
-                          <span
-                            className="w-3 h-3 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: p.color }}
-                          />
+                          <Tag size={18} style={{ color: p.color }} />
                           <span className="truncate flex-1 font-medium text-gray-700 dark:text-gray-200">{p.name}</span>
                           {projectId === p.id && (
                             <span className="text-sm font-bold text-amber-600 dark:text-amber-400">✓</span>
