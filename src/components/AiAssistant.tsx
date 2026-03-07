@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Sparkles, Send, X, Maximize2, Minimize2, Check, History } from 'lucide-react';
+import { Loader2, Sparkles, Send, X, Maximize2, Minimize2, Check, History, Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { AgentRunRecord, ProposedAction } from '@/lib/agent/types';
 
@@ -290,11 +290,18 @@ export function AiAssistant({ userId }: AiAssistantProps) {
                               day.tasks.map((task: any, tIdx: number) => (
                                 <div key={tIdx} className="flex flex-col gap-1 p-2 rounded-md border border-gray-100 bg-gray-50">
                                   <div className="font-medium text-gray-900">{task.title}</div>
-                                  <div className="flex gap-2 items-center text-xs">
+                                  <div className="flex flex-wrap gap-2 items-center text-[10px] mt-0.5">
                                     {task.project && (
-                                      <span className="px-1.5 rounded bg-gray-200 text-gray-700">{task.project}</span>
+                                      <span className="px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">
+                                        {task.project}
+                                      </span>
                                     )}
-                                    <span className="font-bold text-gray-500">P{task.priority || 4}</span>
+                                    {task.estimated_minutes && (
+                                      <span className="font-medium text-gray-500 flex items-center gap-1">
+                                        <Clock size={10} /> {task.estimated_minutes}m
+                                      </span>
+                                    )}
+                                    <span className="font-bold text-gray-500 ml-auto">P{task.priority || 4}</span>
                                   </div>
                                 </div>
                               ))

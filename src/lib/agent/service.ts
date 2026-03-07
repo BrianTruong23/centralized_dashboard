@@ -112,6 +112,19 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
   const intent = routeIntent(requestText);
   let rawProposal: AgentProposal;
   const cleanTasks = tasks.filter((t) => t.user_id === preferences.user_id && !t.archived && t.status !== 'done');
+  
+  // Fetch projects to map IDs to Names
+  const projectsRes = await fetch(`${env('NEXT_PUBLIC_SUPABASE_URL')}/rest/v1/projects?user_id=eq.${userId}&select=id,name`, {
+    method: 'GET',
+    headers: baseHeaders(userToken)
+  });
+  let projectMap: Record<string, string> = {};
+  if (projectsRes.ok) {
+    const projectsData = await projectsRes.json();
+    projectsData.forEach((p: any) => {
+      projectMap[p.id] = p.name;
+    });
+  }
 
   if (intent === 'schedule') {
     // Make external call to LLM for scheduling
@@ -123,7 +136,7 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
       Current Context:
       - Today is ${todayStr}.
       - User Request: "${requestText}"
-      - User Tasks (JSON array): ${JSON.stringify(cleanTasks.map(t => ({ title: t.title, estimate: t.estimate_minutes, priority: t.priority, due: t.due_at, project: t.project_id })))}
+      - User Tasks (JSON array): ${JSON.stringify(cleanTasks.map(t => ({ title: t.title, estimate: t.estimate_minutes, priority: t.priority, due: t.due_at, project: t.project_id ? projectMap[t.project_id] || t.project_id : null })))}
       - User Planning Preferences:
         - Max tasks per day: ${preferences.max_tasks_per_day || 5}
         - Work hours: ${preferences.work_hours?.start || '09:00'} to ${preferences.work_hours?.end || '17:00'}
