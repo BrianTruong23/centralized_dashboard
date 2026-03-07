@@ -511,7 +511,7 @@ export default function Home() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [showInboxViewDropdown, setShowInboxViewDropdown] = useState(false);
+  const [showViewDropdown, setShowViewDropdown] = useState(false);
   const [activeFilters, setActiveFilters] = useState<{
     status: TaskStatus[];
     priority: TaskPriority[];
@@ -523,7 +523,9 @@ export default function Home() {
   });
 
   useEffect(() => {
-    if (currentView !== 'inbox') setShowInboxViewDropdown(false);
+    if (!['inbox', 'kanban', 'calendar'].includes(currentView)) {
+      setShowViewDropdown(false);
+    }
   }, [currentView]);
 
   // ... (existing effects)
@@ -624,6 +626,9 @@ export default function Home() {
 
   const todoTasks = filteredTasks.filter(t => t.status !== 'done');
   const userId = user?.id;
+  const showViewSwitcher = ['inbox', 'kanban', 'calendar'].includes(currentView);
+  const viewSwitcherLabel =
+    currentView === 'kanban' ? 'Kanban' : currentView === 'calendar' ? 'Calendar' : 'List';
 
   return (
     <div className="flex h-screen bg-[#fafafa] dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans overflow-hidden">
@@ -712,7 +717,54 @@ export default function Home() {
                         )}
                      </div>
 
-          <div className={clsx("flex items-center gap-2 w-full md:w-auto", currentView === 'calendar' && "hidden")}>
+          <div className="flex items-center gap-2 w-full md:w-auto">
+             {showViewSwitcher && (
+               <div className="relative">
+                 <button
+                   onClick={() => setShowViewDropdown((prev) => !prev)}
+                   className="px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 flex items-center gap-1"
+                 >
+                   {viewSwitcherLabel}
+                   <ChevronDown size={12} />
+                 </button>
+                 {showViewDropdown && (
+                   <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-20 min-w-[120px]">
+                     <button
+                       type="button"
+                       onClick={() => {
+                         setCurrentView('inbox');
+                         setShowViewDropdown(false);
+                       }}
+                       className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                     >
+                       List
+                     </button>
+                     <button
+                       type="button"
+                       onClick={() => {
+                         setCurrentView('kanban');
+                         setShowViewDropdown(false);
+                       }}
+                       className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                     >
+                       Kanban
+                     </button>
+                     <button
+                       type="button"
+                       onClick={() => {
+                         setCurrentView('calendar');
+                         setShowViewDropdown(false);
+                       }}
+                       className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                     >
+                       Calendar
+                     </button>
+                   </div>
+                 )}
+               </div>
+             )}
+
+             {currentView !== 'calendar' && (
              <div className="relative group flex-1 md:flex-none">
                  <input 
                    type="text" 
@@ -722,7 +774,9 @@ export default function Home() {
                    className="bg-transparent border-b border-gray-200 dark:border-gray-700 focus:border-black dark:focus:border-white outline-none px-2 py-1 text-sm w-full md:w-32 focus:w-full md:focus:w-48 transition-all"
                  />
              </div>
+             )}
              
+             {currentView !== 'calendar' && (
              <div className="relative">
                      <button 
                     onClick={() => setShowFilters(!showFilters)}
@@ -744,6 +798,7 @@ export default function Home() {
                     projects={projects}
                  />
                    </div>
+             )}
                 </div>
         </header>
 
@@ -954,39 +1009,6 @@ export default function Home() {
                                             )}
 
                                             <div className="ml-auto flex items-center gap-2">
-                                                <div className="relative">
-                                                    <button
-                                                        onClick={() => setShowInboxViewDropdown((prev) => !prev)}
-                                                        className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center gap-1 transition-colors px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700"
-                                                    >
-                                                        Views
-                                                        <ChevronDown size={12} />
-                                                    </button>
-                                                    {showInboxViewDropdown && (
-                                                        <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-20 min-w-[140px]">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setCurrentView('kanban');
-                                                                    setShowInboxViewDropdown(false);
-                                                                }}
-                                                                className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-                                                            >
-                                                                Kanban
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setCurrentView('calendar');
-                                                                    setShowInboxViewDropdown(false);
-                                                                }}
-                                                                className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-                                                            >
-                                                                Calendar
-                                                            </button>
-                                                        </div>
-                                                    )}
-                                                </div>
                                                 {effectiveIsPro && (
                                                     <button
                                                         onClick={() => setIsInboxCleanupModalOpen(true)}
