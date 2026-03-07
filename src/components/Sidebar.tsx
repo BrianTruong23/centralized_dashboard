@@ -5,13 +5,12 @@ import {
   CalendarDays, 
   Hash, 
   Plus, 
-  Search, 
-  Columns, 
   Layout, 
   ChevronDown,
   Settings,
   NotebookPen,
   Trash2,
+  Pencil,
   CheckCircle2,
   Menu,
   X
@@ -38,6 +37,7 @@ interface SidebarProps {
   projects?: Project[];
   onOpenProjectModal: () => void;
   onDeleteProject?: (id: string) => Promise<void> | void;
+  onUpdateProject?: (id: string, updates: { name?: string; color?: string }) => Promise<void> | void;
   onOpenActivityLog: () => void;
   focusPlantEnabled: boolean;
   onToggleFocusPlant: (enabled: boolean) => void;
@@ -62,6 +62,7 @@ export const Sidebar = ({
   projects = [],
   onOpenProjectModal,
   onDeleteProject,
+  onUpdateProject,
   onOpenActivityLog,
   focusPlantEnabled,
   onToggleFocusPlant,
@@ -76,6 +77,12 @@ export const Sidebar = ({
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [showAllProjects, setShowAllProjects] = useState(false);
   const [showAllNavItems, setShowAllNavItems] = useState(false);
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [editProjectName, setEditProjectName] = useState('');
+  const [editProjectColor, setEditProjectColor] = useState('#3b82f6');
+  const [isSavingProjectEdit, setIsSavingProjectEdit] = useState(false);
+
+  const projectColorOptions = ['#22c55e', '#3b82f6', '#06b6d4', '#a855f7', '#f97316', '#e11d48', '#000000'];
 
   // Close mobile menu when view changes
   useEffect(() => {
@@ -89,7 +96,13 @@ export const Sidebar = ({
       if (t.status === 'done') return false;
       if (!t.deadline) return false;
       const today = formatDateKey(new Date());
-      return t.deadline === today;
+      const direct = t.deadline.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (direct) {
+        return `${direct[1]}-${direct[2]}-${direct[3]}` === today;
+      }
+      const parsed = new Date(t.deadline);
+      if (Number.isNaN(parsed.getTime())) return false;
+      return formatDateKey(parsed) === today;
   }).length;
   
   const NavItem = ({ 
@@ -154,7 +167,19 @@ export const Sidebar = ({
       >
         {/* Header with Logo + UserDropdown */}
         <div className="p-4 mb-2 flex items-center gap-3">
-           <img src="/logo.svg" alt="Minismo" width={48} height={48} className="rounded-lg flex-shrink-0" />
+           <svg
+             xmlns="http://www.w3.org/2000/svg"
+             width="48"
+             height="48"
+             viewBox="0 0 558 488"
+             className="rounded-lg flex-shrink-0"
+             aria-label="Minismo logo"
+           >
+             <path d="M 151.00 147.00 L 133.00 172.00 L 126.00 209.00 L 126.00 366.00 L 131.00 396.00 L 145.00 420.00 L 160.00 433.00 L 192.00 444.00 L 377.00 444.00 L 394.00 440.00 L 415.00 429.00 L 436.00 402.00 L 443.00 367.00 L 443.00 208.00 L 438.00 177.00 L 426.00 155.00 L 411.00 141.00 L 397.00 134.00 L 366.00 128.00 L 204.00 128.00 L 172.00 134.00 Z" fill="var(--accent-solid)" />
+             <path d="M 202.00 355.00 L 203.00 362.00 L 210.00 366.00 L 360.00 366.00 L 367.00 359.00 L 366.00 351.00 L 360.00 347.00 L 209.00 347.00 L 203.00 351.00 Z" fill="var(--accent-solid-foreground)" />
+             <path d="M 363.00 210.00 L 355.00 209.00 L 351.00 211.00 L 260.00 303.00 L 258.00 312.00 L 262.00 317.00 L 269.00 319.00 L 276.00 315.00 L 366.00 223.00 L 367.00 216.00 Z" fill="var(--accent-solid-foreground)" />
+             <path d="M 219.00 246.00 L 205.00 255.00 L 201.00 270.00 L 203.00 277.00 L 210.00 286.00 L 218.00 290.00 L 229.00 290.00 L 242.00 281.00 L 246.00 265.00 L 238.00 251.00 L 228.00 246.00 Z" fill="var(--accent-solid-foreground)" />
+           </svg>
            <div className="min-w-0 flex-1">
                {user ? (
                    <div className="min-w-0">
@@ -178,40 +203,15 @@ export const Sidebar = ({
         {/* ... (Main Nav) ... */}
         <div className="flex-1 overflow-y-auto px-3 space-y-1 scrollbar-hide">
           {/* ... (Actions same as before) ... */}
-          <button 
-            onClick={() => {
-              onAddTask();
-              setIsMobileOpen(false);
-            }}
-            data-tutorial="sidebar-add-task"
-            className="w-full flex items-center gap-2 text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white px-2 py-2 mb-4 hover:bg-white dark:hover:bg-gray-900 rounded-md shadow-sm border border-transparent hover:border-gray-100 dark:hover:border-gray-800 transition-all group"
-          >
-            <div className="bg-gray-900 dark:bg-gray-100 rounded-full p-0.5 text-white dark:text-black">
-              <Plus size={14} />
-            </div>
-            <span className="text-sm font-medium">Add task</span>
-          </button>
-
-          {/* Search (same) */}
-         <div className="relative group mb-6">
-             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-             <input 
-               type="text" 
-               placeholder="Search" 
-               value={searchQuery}
-               onChange={(e) => onSearchChange(e.target.value)}
-               className="w-full bg-transparent border-none outline-none pl-9 py-1.5 text-sm text-gray-600 placeholder:text-gray-400 focus:ring-0"
-             />
-          </div>
+          <div className="mb-3" />
 
           <NavItem id="today" icon={Calendar} label="Today" count={todayCount} />
           <NavItem id="inbox" icon={Inbox} label="Inbox" count={inboxCount} />
           <NavItem id="upcoming" icon={CalendarDays} label="Upcoming" />
+          <NavItem id="daily-notes" icon={NotebookPen} label="Daily Notes" />
           
           {showAllNavItems && (
             <>
-              <NavItem id="daily-notes" icon={NotebookPen} label="Daily Notes" />
-              <NavItem id="kanban" icon={Columns} label="Kanban" />
               <NavItem id="completed" icon={CheckCircle2} label="Completed" />
             </>
           )}
@@ -220,7 +220,7 @@ export const Sidebar = ({
              onClick={() => setShowAllNavItems(!showAllNavItems)}
              className="w-full mt-1 text-xs text-center text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 py-1.5 font-medium transition-colors"
           >
-             {showAllNavItems ? 'Show less' : 'Show 3 more'}
+             {showAllNavItems ? 'Show less' : 'Show more'}
           </button>
 
           
@@ -238,37 +238,110 @@ export const Sidebar = ({
           <div className="space-y-0.5">
              {(showAllProjects ? projects : projects.slice(0, 3)).map(project => (
                  <div key={project.id} className="group relative">
-                     <button
-                       onClick={() => onViewChange(`project-${project.id}`)}
-                       className={clsx(
-                         "w-full flex items-center gap-3 px-3 py-2 text-sm font-medium transition-colors rounded-lg",
-                         currentView === `project-${project.id}`
-                           ? "bg-white dark:bg-gray-800 text-black dark:text-white shadow-sm"
-                           : "text-gray-500 dark:text-gray-400 hover:bg-gray-100/50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-200"
-                       )}
-                     >
-                       <span 
-                          className="w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-black" 
-                          style={{ backgroundColor: project.color }}
-                       />
-                       <span className="truncate flex-1 text-left">{project.name}</span>
-                     </button>
-                     
-                     {/* Delete Button - Only visible on hover */}
-                     <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            if (window.confirm(`Are you sure you want to delete project "${project.name}"? This action cannot be undone.`)) {
+                    {editingProjectId === project.id ? (
+                      <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 space-y-2">
+                        <input
+                          value={editProjectName}
+                          onChange={(e) => setEditProjectName(e.target.value)}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)]/35"
+                          placeholder="Project name"
+                        />
+                        <div className="flex items-center gap-1.5">
+                          {projectColorOptions.map((color) => (
+                            <button
+                              key={color}
+                              type="button"
+                              onClick={() => setEditProjectColor(color)}
+                              className={clsx(
+                                "w-5 h-5 rounded-full border-2 transition-colors",
+                                editProjectColor === color ? "border-[var(--accent-solid)]" : "border-transparent"
+                              )}
+                              style={{ backgroundColor: color }}
+                              title={color}
+                            />
+                          ))}
+                        </div>
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingProjectId(null);
+                              setEditProjectName('');
+                            }}
+                            className="px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isSavingProjectEdit || !editProjectName.trim()}
+                            onClick={() => {
+                              setIsSavingProjectEdit(true);
+                              Promise.resolve(onUpdateProject?.(project.id, {
+                                name: editProjectName.trim(),
+                                color: editProjectColor,
+                              }))
+                                .then(() => {
+                                  setEditingProjectId(null);
+                                  setEditProjectName('');
+                                })
+                                .catch((err: any) => alert(err?.message || 'Failed to update project'))
+                                .finally(() => setIsSavingProjectEdit(false));
+                            }}
+                            className="px-2 py-1 text-xs rounded accent-solid-btn disabled:opacity-50"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => onViewChange(`project-${project.id}`)}
+                          className={clsx(
+                            "w-full flex items-center gap-3 px-3 py-2 text-sm font-medium transition-colors rounded-lg pr-14",
+                            currentView === `project-${project.id}`
+                              ? "bg-white dark:bg-gray-800 text-black dark:text-white shadow-sm"
+                              : "text-gray-500 dark:text-gray-400 hover:bg-gray-100/50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-200"
+                          )}
+                        >
+                          <span 
+                            className="w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-black" 
+                            style={{ backgroundColor: project.color }}
+                          />
+                          <span className="truncate flex-1 text-left">{project.name}</span>
+                        </button>
+                        
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingProjectId(project.id);
+                              setEditProjectName(project.name);
+                              setEditProjectColor(project.color || '#3b82f6');
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md"
+                            title="Edit project"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`Are you sure you want to delete project "${project.name}"? This action cannot be undone.`)) {
                                 Promise.resolve(onDeleteProject?.(project.id)).catch((err: any) => {
-                                    alert(err.message || 'Failed to delete project');
+                                  alert(err.message || 'Failed to delete project');
                                 });
-                            }
-                        }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md opacity-0 group-hover:opacity-100 transition-all"
-                        title="Delete project"
-                     >
-                        <Trash2 size={14} />
-                     </button>
+                              }
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
+                            title="Delete project"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </>
+                    )}
                  </div>
              ))}
              {projects.length === 0 && (

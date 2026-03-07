@@ -133,7 +133,7 @@ export function TemporalClarificationModal({
               onConfirm(alternatives[selectedIndex]);
               onClose();
             }}
-            className="px-4 py-2 text-sm font-semibold bg-black dark:bg-white text-white dark:text-black rounded-lg hover:opacity-90 transition-opacity"
+            className="px-4 py-2 text-sm font-semibold accent-solid-btn rounded-lg hover:opacity-90 transition-opacity"
           >
             Confirm
           </button>

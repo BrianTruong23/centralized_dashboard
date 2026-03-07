@@ -81,7 +81,7 @@ export const TutorialOverlay = ({ targetId, message, position = 'bottom', onDism
                <path d="M50 10 L 70 30" />
              </svg>
              
-             <div className="bg-black dark:bg-white text-white dark:text-black px-6 py-4 rounded-2xl shadow-xl text-center relative pointer-events-auto">
+             <div className="accent-solid-btn px-6 py-4 rounded-2xl shadow-xl text-center relative pointer-events-auto">
                 <p className="font-handwriting text-lg font-medium">{message}</p>
                 {onDismiss && (
                   <button 
