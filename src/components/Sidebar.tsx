@@ -75,6 +75,7 @@ export const Sidebar = ({
 }: SidebarProps) => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [showAllProjects, setShowAllProjects] = useState(false);
+  const [showAllNavItems, setShowAllNavItems] = useState(false);
 
   // Close mobile menu when view changes
   useEffect(() => {
@@ -153,7 +154,7 @@ export const Sidebar = ({
       >
         {/* Header with Logo + UserDropdown */}
         <div className="p-4 mb-2 flex items-center gap-3">
-           <img src="/logo.svg" alt="Minima" width={48} height={48} className="rounded-lg flex-shrink-0" />
+           <img src="/logo.svg" alt="Minismo" width={48} height={48} className="rounded-lg flex-shrink-0" />
            <div className="min-w-0 flex-1">
                {user ? (
                    <div className="min-w-0">
@@ -165,7 +166,7 @@ export const Sidebar = ({
                        />
                    </div>
                ) : (
-                   <span className="text-sm font-bold">Minima</span>
+                   <span className="text-sm font-bold">Minismo</span>
                )}
            </div>
            
@@ -206,9 +207,21 @@ export const Sidebar = ({
           <NavItem id="today" icon={Calendar} label="Today" count={todayCount} />
           <NavItem id="inbox" icon={Inbox} label="Inbox" count={inboxCount} />
           <NavItem id="upcoming" icon={CalendarDays} label="Upcoming" />
-          <NavItem id="daily-notes" icon={NotebookPen} label="Daily Notes" />
-          <NavItem id="kanban" icon={Columns} label="Kanban" />
-          <NavItem id="completed" icon={CheckCircle2} label="Completed" />
+          
+          {showAllNavItems && (
+            <>
+              <NavItem id="daily-notes" icon={NotebookPen} label="Daily Notes" />
+              <NavItem id="kanban" icon={Columns} label="Kanban" />
+              <NavItem id="completed" icon={CheckCircle2} label="Completed" />
+            </>
+          )}
+
+          <button
+             onClick={() => setShowAllNavItems(!showAllNavItems)}
+             className="w-full mt-1 text-xs text-center text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 py-1.5 font-medium transition-colors"
+          >
+             {showAllNavItems ? 'Show less' : 'Show 3 more'}
+          </button>
 
           
           {/* Projects section (same) */}

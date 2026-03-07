@@ -19,7 +19,7 @@ function UpgradePageContent() {
   const reasons = useMemo(() => [
     'Unlock Auto Plan for AI-generated weekly scheduling.',
     'Get access to premium productivity features as they ship.',
-    'Support ongoing improvements for Minima.',
+    'Support ongoing improvements for Minismo.',
   ], []);
 
   const startPaypalCheckout = async () => {

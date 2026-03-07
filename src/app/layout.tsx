@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Minima",
+  title: "Minismo",
   description: "Design your day, master your time.",
 };
 

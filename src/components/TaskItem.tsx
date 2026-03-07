@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { Task, TaskPriority, TaskStatus, TaskCategory, TaskEnergyLevel } from '@/types/task';
 import { Project } from '@/types/project';
 import clsx from 'clsx';
-import { CheckCircle2, Circle, Trash2, Zap, Clock, Calendar, Pencil, X, Check } from 'lucide-react';
+import { CheckCircle2, Circle, Trash2, Zap, Clock, Calendar, Pencil, X, Check, Tag, Flag, ArrowRight } from 'lucide-react';
 import { format } from 'date-fns';
-import { parseDateKey, formatDateDisplay } from '@/lib/dateKey';
+import { parseDateKey, formatDateDisplay, formatDateKey } from '@/lib/dateKey';
 
 interface TaskItemProps {
   task: Task;
@@ -12,12 +12,13 @@ interface TaskItemProps {
   onDelete: (id: string) => void;
   onFocus: (task: Task) => void;
   projects?: Project[];
+  isInbox?: boolean;
 }
 
 
 const energyLevels: TaskEnergyLevel[] = ['low', 'medium', 'high'];
 
-export const TaskItem = ({ task, onUpdate, onDelete, onFocus, projects = [] }: TaskItemProps) => {
+export const TaskItem = ({ task, onUpdate, onDelete, onFocus, projects = [], isInbox = false }: TaskItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Task>(task);
 
@@ -46,6 +47,26 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus, projects = [] }: T
     if (p === 4) return 'text-orange-500';
     if (p === 3) return 'text-blue-500';
     return 'text-gray-400';
+  };
+
+  // Quick triage actions for inbox
+  const quickSetDate = (days: number) => {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    onUpdate({ ...task, deadline: formatDateKey(date) });
+  };
+
+  const quickSetPriority = (priority: TaskPriority) => {
+    onUpdate({ ...task, priority });
+  };
+
+  const quickSetProject = (projectId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    onUpdate({ 
+      ...task, 
+      project_id: projectId,
+      category: project ? project.name : task.category
+    });
   };
 
   if (isEditing) {
@@ -180,7 +201,7 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus, projects = [] }: T
             {task.title}
           </span>
         </div>
-
+        
         <div className="flex items-center gap-3 text-[11px] text-gray-400 dark:text-gray-500 font-medium h-4">
            {/* Project indicator */}
            {project && (
@@ -191,7 +212,7 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus, projects = [] }: T
                    style={{ backgroundColor: project.color }}
                  />
                  <span className="text-gray-600 dark:text-gray-400 font-medium">{project.name}</span>
-               </span>
+          </span>
                <span className="w-0.5 h-0.5 rounded-full bg-gray-300" />
              </>
            )}
@@ -199,7 +220,7 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus, projects = [] }: T
            {/* Metadata only shows if relevant */}
            <span className="flex items-center gap-1.5">
               {task.estimatedMinutes}m
-           </span>
+          </span>
            {/* Only show category if it differs from project name (or no project) to avoid duplication */}
            {(!project || task.category !== project.name) && (
               <>
@@ -215,41 +236,92 @@ export const TaskItem = ({ task, onUpdate, onDelete, onFocus, projects = [] }: T
              </>
            )}
 
-           {task.deadline && (
+          {task.deadline && (
              <>
                <span className="w-0.5 h-0.5 rounded-full bg-gray-300" />
-               <span className="flex items-center gap-1 text-red-400">
+            <span className="flex items-center gap-1 text-red-400">
                  {formatDateDisplay(task.deadline)}
-               </span>
+            </span>
              </>
-           )}
+          )}
         </div>
       </div>
 
-      {/* Actions - Visible on group hover */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          onClick={() => onFocus(task)}
-          className="p-1.5 text-gray-300 hover:text-yellow-600 transition-colors"
-          title="Focus"
-        >
-          <Zap size={14} strokeWidth={1.5} />
-        </button>
-        <button
-          onClick={() => setIsEditing(true)}
-          className="p-1.5 text-gray-300 hover:text-blue-600 transition-colors"
-          title="Edit"
-        >
-          <Pencil size={14} strokeWidth={1.5} />
-        </button>
-        <button
-          onClick={() => onDelete(task.id)}
-          className="p-1.5 text-gray-300 hover:text-red-600 transition-colors"
-          title="Delete"
-        >
-          <Trash2 size={14} strokeWidth={1.5} />
-        </button>
-      </div>
+      {/* Actions - Inbox: Quick triage, Others: Standard actions */}
+      {isInbox ? (
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          {/* Quick Date - Today */}
+          <button
+            onClick={() => quickSetDate(0)}
+            className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+            title="Set to today"
+          >
+            <Calendar size={12} />
+          </button>
+          
+          {/* Quick Priority - P2 */}
+          <button
+            onClick={() => quickSetPriority(2)}
+            className="p-1 text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+            title="Set priority P2"
+          >
+            <Flag size={12} />
+          </button>
+
+          {/* Quick Project - First project if available */}
+          {projects.length > 0 && (
+            <button
+              onClick={() => quickSetProject(projects[0].id)}
+              className="p-1 text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+              title={`Move to ${projects[0].name}`}
+            >
+              <Tag size={12} />
+            </button>
+          )}
+
+          {/* Complete */}
+          <button
+            onClick={toggleStatus}
+            className="p-1 text-gray-400 hover:text-green-600 dark:hover:text-green-400 transition-colors"
+            title="Mark complete"
+          >
+            <CheckCircle2 size={12} />
+          </button>
+
+          {/* Full edit */}
+          <button
+            onClick={() => setIsEditing(true)}
+            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            title="Edit"
+          >
+            <Pencil size={12} />
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => onFocus(task)}
+            className="p-1.5 text-gray-300 hover:text-yellow-600 transition-colors"
+            title="Focus"
+          >
+            <Zap size={14} strokeWidth={1.5} />
+          </button>
+          <button
+            onClick={() => setIsEditing(true)}
+            className="p-1.5 text-gray-300 hover:text-blue-600 transition-colors"
+            title="Edit"
+          >
+            <Pencil size={14} strokeWidth={1.5} />
+          </button>
+      <button 
+        onClick={() => onDelete(task.id)}
+            className="p-1.5 text-gray-300 hover:text-red-600 transition-colors"
+            title="Delete"
+      >
+            <Trash2 size={14} strokeWidth={1.5} />
+      </button>
+        </div>
+      )}
     </div>
   );
 };
