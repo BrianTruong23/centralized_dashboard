@@ -315,7 +315,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
         </div>
       </div>
 
-      <div className="p-4 grid grid-cols-1 xl:grid-cols-[1fr_280px] gap-4">
+      <div className={clsx("p-4 grid grid-cols-1 gap-4", unscheduledTasks.length > 0 && "xl:grid-cols-[1fr_280px]")}>
         <div className="overflow-auto rounded-xl border border-gray-200 dark:border-gray-700">
           <div className={clsx('min-w-[640px]', viewMode === 'week' && 'min-w-[1180px]')}>
             <div className="flex border-b border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/50">
@@ -390,6 +390,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
           </div>
         </div>
 
+        {unscheduledTasks.length > 0 && (
         <aside className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-gray-50/60 dark:bg-gray-800/40">
           <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
             Unscheduled tasks
@@ -422,6 +423,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
             )}
           </div>
         </aside>
+        )}
       </div>
     </section>
   );
