@@ -152,7 +152,19 @@ export const Sidebar = ({
       >
         {/* Header with Logo + UserDropdown */}
         <div className="p-4 mb-2 flex items-center gap-3">
-           <img src="/logo.svg" alt="Minismo" width={48} height={48} className="rounded-lg flex-shrink-0" />
+           <svg
+             xmlns="http://www.w3.org/2000/svg"
+             width="48"
+             height="48"
+             viewBox="0 0 558 488"
+             className="rounded-lg flex-shrink-0"
+             aria-label="Minismo logo"
+           >
+             <path d="M 151.00 147.00 L 133.00 172.00 L 126.00 209.00 L 126.00 366.00 L 131.00 396.00 L 145.00 420.00 L 160.00 433.00 L 192.00 444.00 L 377.00 444.00 L 394.00 440.00 L 415.00 429.00 L 436.00 402.00 L 443.00 367.00 L 443.00 208.00 L 438.00 177.00 L 426.00 155.00 L 411.00 141.00 L 397.00 134.00 L 366.00 128.00 L 204.00 128.00 L 172.00 134.00 Z" fill="var(--accent-solid)" />
+             <path d="M 202.00 355.00 L 203.00 362.00 L 210.00 366.00 L 360.00 366.00 L 367.00 359.00 L 366.00 351.00 L 360.00 347.00 L 209.00 347.00 L 203.00 351.00 Z" fill="var(--accent-solid-foreground)" />
+             <path d="M 363.00 210.00 L 355.00 209.00 L 351.00 211.00 L 260.00 303.00 L 258.00 312.00 L 262.00 317.00 L 269.00 319.00 L 276.00 315.00 L 366.00 223.00 L 367.00 216.00 Z" fill="var(--accent-solid-foreground)" />
+             <path d="M 219.00 246.00 L 205.00 255.00 L 201.00 270.00 L 203.00 277.00 L 210.00 286.00 L 218.00 290.00 L 229.00 290.00 L 242.00 281.00 L 246.00 265.00 L 238.00 251.00 L 228.00 246.00 Z" fill="var(--accent-solid-foreground)" />
+           </svg>
            <div className="min-w-0 flex-1">
                {user ? (
                    <div className="min-w-0">
