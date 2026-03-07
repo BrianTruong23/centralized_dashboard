@@ -74,6 +74,7 @@ export const Sidebar = ({
   onOpenSettings,
 }: SidebarProps) => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [showAllProjects, setShowAllProjects] = useState(false);
 
   // Close mobile menu when view changes
   useEffect(() => {
@@ -222,7 +223,7 @@ export const Sidebar = ({
               </button>
           </div>
           <div className="space-y-0.5">
-             {projects.map(project => (
+             {(showAllProjects ? projects : projects.slice(0, 5)).map(project => (
                  <div key={project.id} className="group relative">
                      <button
                        onClick={() => onViewChange(`project-${project.id}`)}
@@ -259,6 +260,14 @@ export const Sidebar = ({
              ))}
              {projects.length === 0 && (
                  <p className="px-3 text-xs text-gray-400 italic">No projects yet</p>
+             )}
+             {projects.length > 5 && (
+                <button
+                   onClick={() => setShowAllProjects(!showAllProjects)}
+                   className="w-full mt-2 text-xs text-center text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 py-1.5 font-medium transition-colors"
+                >
+                   {showAllProjects ? 'Show less' : `Show ${projects.length - 5} more`}
+                </button>
              )}
           </div>
 

@@ -1,4 +1,4 @@
-import { routeIntent } from './router';
+import { AgentIntent } from './types';
 import { createProposal } from './planner';
 import { policyGate } from './policy';
 import { executeApprovedActions } from './executor';
@@ -109,8 +109,6 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
       scheduling_style: 'balanced',
     } satisfies AgentPreference);
   const tasks = await tools.listTasks({ user_id: userId, archived: false });
-  const intent = routeIntent(requestText);
-  let rawProposal: AgentProposal;
   const cleanTasks = tasks.filter((t) => t.user_id === preferences.user_id && !t.archived && t.status !== 'done');
   
   // Fetch projects to map IDs to Names
@@ -126,11 +124,74 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
     });
   }
 
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('Missing OPENROUTER_API_KEY');
+
+  const intentPrompt = `
+    User Request: "${requestText}"
+    User Tasks: ${JSON.stringify(cleanTasks.map(t => ({ title: t.title, project: t.project_id ? projectMap[t.project_id] || t.project_id : null })))}
+
+    ROLE: Friendly AI Productivity Assistant.
+    GOAL: Generate a natural language response and identify if the user wants to trigger a specific capability.
+    
+    CAPABILITIES (Intents):
+    - "schedule": User wants to plan or schedule tasks across days of the week.
+    - "declutter": User wants to remove duplicate or stale tasks, or asks to cleanup inbox.
+    - "prioritize": User wants to rank or know what to do next based on urgency.
+    - "edit_tasks": User wants to explicitly delete, edit, or archive a specific task.
+    - "qna": General conversation, questions, or asking for advice where no action should be proposed.
+
+    RULES:
+    1. Respond naturally to the user in the "response" field.
+    2. Pick the single most relevant intent from the CAPABILITIES list. If none apply or it's just chat, pick "qna".
+    3. Output MUST be valid JSON only.
+
+    OUTPUT FORMAT:
+    {
+      "response": "Your conversational reply here",
+      "intent": "schedule|declutter|prioritize|edit_tasks|qna"
+    }
+  `;
+
+  // Fetch initial routing + response
+  const routeRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'http://localhost:3000',
+      'X-Title': 'Centralized Dashboard AI Agent',
+    },
+    body: JSON.stringify({
+      model: 'google/gemini-2.5-flash-lite',
+      max_tokens: 1024,
+      messages: [
+        { role: 'system', content: 'You are an AI assistant. Return valid JSON only.' },
+        { role: 'user', content: intentPrompt }
+      ]
+    })
+  });
+
+  let intent: AgentIntent = 'qna';
+  let conversationalResponse = 'I am your AI productivity assistant. How can I help you today?';
+  
+  if (routeRes.ok) {
+    const data = await routeRes.json();
+    const content = data.choices?.[0]?.message?.content || '{}';
+    const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    try {
+      const parsed = JSON.parse(cleanContent);
+      if (parsed.intent) intent = parsed.intent;
+      if (parsed.response) conversationalResponse = parsed.response;
+    } catch (e) {
+      console.error('Failed to parse intent JSON:', cleanContent);
+    }
+  }
+
+  let rawProposal: AgentProposal;
   if (intent === 'schedule') {
     // Make external call to LLM for scheduling
     const todayStr = new Date().toISOString().split('T')[0];
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) throw new Error('Missing OPENROUTER_API_KEY for scheduling');
 
     const prompt = `
       Current Context:
@@ -197,7 +258,7 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
 
     rawProposal = {
       intent,
-      analysis_summary: `AI generated weekly schedule for ${cleanTasks.length} tasks.`,
+      analysis_summary: conversationalResponse,
       questions: [],
       proposed_actions: [
         {
@@ -219,8 +280,6 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
       }
     };
   } else if (intent === 'declutter' || intent === 'cleanup') {
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) throw new Error('Missing OPENROUTER_API_KEY for decluttering');
 
     // Layer 1: Exact matching
     const duplicateKeys = (title: string) => title.trim().toLowerCase().replace(/\\s+/g, ' ');

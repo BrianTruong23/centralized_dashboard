@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Sparkles, Send, X, Maximize2, Minimize2, Check, History, Clock } from 'lucide-react';
+import { Loader2, Sparkles, Send, X, Maximize2, Minimize2, Check, History, Clock, ChevronDown } from 'lucide-react';
+import clsx from 'clsx';
 import { supabase } from '@/lib/supabase';
 import { AgentRunRecord, ProposedAction, ProposedPlanDay } from '@/lib/agent/types';
 import {
@@ -78,6 +79,7 @@ export function AiAssistant({ userId }: AiAssistantProps) {
   const [approvedActionIds, setApprovedActionIds] = useState<Set<string>>(new Set());
   const [history, setHistory] = useState<AgentRunRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [editableDays, setEditableDays] = useState<any[]>([]);
 
@@ -507,30 +509,41 @@ export function AiAssistant({ userId }: AiAssistantProps) {
               </div>
             )}
 
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 flex items-center gap-1.5">
-                <History size={13} /> Run history (last 10)
-              </p>
-              {historyLoading ? (
-                <p className="text-xs text-gray-500">Loading history...</p>
-              ) : history.length === 0 ? (
-                <p className="text-xs text-gray-500">No runs yet.</p>
-              ) : (
-                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                  {(showAllHistory ? history : history.slice(0, 3)).map((item) => (
-                    <div key={item.id} className="rounded-md border border-gray-200 bg-white p-2 text-xs text-gray-700">
-                      <span className="font-semibold">#{shortRunId(item.id)}</span> · {item.intent} ·{' '}
-                      {(item.executed_actions_json || []).length} executed
+            <div className="space-y-2 pt-2 border-t border-gray-100">
+              <button 
+                onClick={() => setShowHistory(!showHistory)}
+                className="w-full flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-800 transition-colors"
+              >
+                <div className="flex items-center gap-1.5">
+                  <History size={13} /> Run history
+                </div>
+                <ChevronDown size={14} className={clsx("transition-transform duration-200", showHistory && "rotate-180")} />
+              </button>
+              
+              {showHistory && (
+                <div className="pt-1">
+                  {historyLoading ? (
+                    <p className="text-xs text-gray-500">Loading history...</p>
+                  ) : history.length === 0 ? (
+                    <p className="text-xs text-gray-500">No runs yet.</p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                      {(showAllHistory ? history : history.slice(0, 3)).map((item) => (
+                        <div key={item.id} className="rounded-md border border-gray-200 bg-white p-2 text-xs text-gray-700">
+                          <span className="font-semibold">#{shortRunId(item.id)}</span> · {item.intent} ·{' '}
+                          {(item.executed_actions_json || []).length} executed
+                        </div>
+                      ))}
+                      {history.length > 3 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllHistory(!showAllHistory)}
+                          className="w-full text-xs text-center text-gray-500 hover:text-gray-700 py-1 font-medium transition-colors"
+                        >
+                          {showAllHistory ? 'Show less' : `View ${history.length - 3} more`}
+                        </button>
+                      )}
                     </div>
-                  ))}
-                  {history.length > 3 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllHistory(!showAllHistory)}
-                      className="w-full text-xs text-center text-gray-500 hover:text-gray-700 py-1 font-medium transition-colors"
-                    >
-                      {showAllHistory ? 'Show less' : `View ${history.length - 3} more`}
-                    </button>
                   )}
                 </div>
               )}
