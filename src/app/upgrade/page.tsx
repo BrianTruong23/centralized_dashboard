@@ -9,6 +9,7 @@ type PlanId = 'one_time' | 'monthly';
 
 export default function UpgradePage() {
   const [selectedPlan, setSelectedPlan] = useState<PlanId>('monthly');
+  const currentPlanLabel = 'Free';
 
   const plans = useMemo(
     () => [
@@ -54,10 +55,15 @@ export default function UpgradePage() {
 
         <section className="mt-4 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 shadow-sm">
           <div className="mb-6">
-            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-              <Crown size={20} className="text-amber-500" />
-              Choose your plan
-            </h1>
+            <div className="flex items-center justify-between gap-3">
+              <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+                <Crown size={20} className="text-amber-500" />
+                Choose your plan
+              </h1>
+              <span className="text-xs px-2.5 py-1 rounded-full border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300">
+                Current plan: {currentPlanLabel}
+              </span>
+            </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Front-end preview only. No payment is processed yet.
             </p>
