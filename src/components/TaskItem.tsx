@@ -9,7 +9,9 @@ interface TaskItemProps {
   task: Task;
   onUpdate: (task: Task) => void;
   onDelete: (id: string) => void;
+  onFocus?: (task: Task) => void;
   projects?: Project[];
+  isInbox?: boolean;
 }
 
 
