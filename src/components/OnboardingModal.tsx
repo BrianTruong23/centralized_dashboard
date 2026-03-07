@@ -63,10 +63,10 @@ export default function OnboardingModal({ isOpen, onComplete, onSkip, onStartTut
             {step === 1 && (
               <div className="space-y-6 text-center animate-in slide-in-from-right-4 fade-in duration-300">
                 <div className="w-20 h-20 mx-auto flex items-center justify-center mb-6">
-                  <img src="/logo.svg" alt="Minima Logo" className="w-full h-full object-contain" />
+                  <img src="/logo.svg" alt="Minismo Logo" className="w-full h-full object-contain" />
                 </div>
                 <div>
-                  <h2 className="text-3xl font-bold tracking-tight mb-3">Minima</h2>
+                  <h2 className="text-3xl font-bold tracking-tight mb-3">Minismo</h2>
                   <p className="text-gray-500 dark:text-gray-400 text-lg leading-relaxed">
                     A centralized dashboard for your life and work. <br />
                     Simple, focused, and distraction-free.
@@ -80,7 +80,7 @@ export default function OnboardingModal({ isOpen, onComplete, onSkip, onStartTut
               <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
                 <div className="text-center mb-8">
                   <h2 className="text-2xl font-bold tracking-tight mb-2">Core Principles</h2>
-                  <p className="text-gray-500 dark:text-gray-400">How Minima helps you stay on track</p>
+                  <p className="text-gray-500 dark:text-gray-400">How Minismo helps you stay on track</p>
                 </div>
 
                 <div className="space-y-4">

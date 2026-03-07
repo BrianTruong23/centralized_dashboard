@@ -1,4 +1,4 @@
-import { routeIntent } from './router';
+import { AgentIntent } from './types';
 import { createProposal } from './planner';
 import { policyGate } from './policy';
 import { executeApprovedActions } from './executor';
@@ -109,8 +109,297 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
       scheduling_style: 'balanced',
     } satisfies AgentPreference);
   const tasks = await tools.listTasks({ user_id: userId, archived: false });
-  const intent = routeIntent(requestText);
-  const rawProposal = createProposal(requestText, intent, tasks, preferences);
+  const cleanTasks = tasks.filter((t) => t.user_id === preferences.user_id && !t.archived && t.status !== 'done');
+  
+  // Fetch projects to map IDs to Names
+  const projectsRes = await fetch(`${env('NEXT_PUBLIC_SUPABASE_URL')}/rest/v1/projects?user_id=eq.${userId}&select=id,name`, {
+    method: 'GET',
+    headers: baseHeaders(userToken)
+  });
+  let projectMap: Record<string, string> = {};
+  if (projectsRes.ok) {
+    const projectsData = await projectsRes.json();
+    projectsData.forEach((p: any) => {
+      projectMap[p.id] = p.name;
+    });
+  }
+
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error('Missing OPENROUTER_API_KEY');
+
+  const intentPrompt = `
+    User Request: "${requestText}"
+    User Tasks: ${JSON.stringify(cleanTasks.map(t => ({ title: t.title, project: t.project_id ? projectMap[t.project_id] || t.project_id : null })))}
+
+    ROLE: Friendly AI Productivity Assistant.
+    GOAL: Generate a natural language response and identify if the user wants to trigger a specific capability.
+    
+    CAPABILITIES (Intents):
+    - "schedule": User wants to plan or schedule tasks across days of the week.
+    - "declutter": User wants to remove duplicate or stale tasks, or asks to cleanup inbox.
+    - "prioritize": User wants to rank or know what to do next based on urgency.
+    - "edit_tasks": User wants to explicitly delete, edit, or archive a specific task.
+    - "qna": General conversation, questions, or asking for advice where no action should be proposed.
+
+    RULES:
+    1. Respond naturally to the user in the "response" field.
+    2. Pick the single most relevant intent from the CAPABILITIES list. If none apply or it's just chat, pick "qna".
+    3. Output MUST be valid JSON only.
+
+    OUTPUT FORMAT:
+    {
+      "response": "Your conversational reply here",
+      "intent": "schedule|declutter|prioritize|edit_tasks|qna"
+    }
+  `;
+
+  // Fetch initial routing + response
+  const routeRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'http://localhost:3000',
+      'X-Title': 'Centralized Dashboard AI Agent',
+    },
+    body: JSON.stringify({
+      model: 'google/gemini-2.5-flash-lite',
+      max_tokens: 1024,
+      messages: [
+        { role: 'system', content: 'You are an AI assistant. Return valid JSON only.' },
+        { role: 'user', content: intentPrompt }
+      ]
+    })
+  });
+
+  let intent: AgentIntent = 'qna';
+  let conversationalResponse = 'I am your AI productivity assistant. How can I help you today?';
+  
+  if (routeRes.ok) {
+    const data = await routeRes.json();
+    const content = data.choices?.[0]?.message?.content || '{}';
+    const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    try {
+      const parsed = JSON.parse(cleanContent);
+      if (parsed.intent) intent = parsed.intent;
+      if (parsed.response) conversationalResponse = parsed.response;
+    } catch (e) {
+      console.error('Failed to parse intent JSON:', cleanContent);
+    }
+  }
+
+  let rawProposal: AgentProposal;
+  if (intent === 'schedule') {
+    // Make external call to LLM for scheduling
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const prompt = `
+      Current Context:
+      - Today is ${todayStr}.
+      - User Request: "${requestText}"
+      - User Tasks (JSON array): ${JSON.stringify(cleanTasks.map(t => ({ title: t.title, estimate: t.estimate_minutes, priority: t.priority, due: t.due_at, project: t.project_id ? projectMap[t.project_id] || t.project_id : null })))}
+      - User Planning Preferences:
+        - Max tasks per day: ${preferences.max_tasks_per_day || 5}
+        - Work hours: ${preferences.work_hours?.start || '09:00'} to ${preferences.work_hours?.end || '17:00'}
+
+      ROLE: Expert Project Manager & Scheduler.
+      GOAL: Create a weekly plan (Mon-Sun) from the provided tasks to satisfy the user's request, focusing especially on taking tasks from the Inbox that don't have due dates and assigning them to days this week to keep the user productive.
+      RULES:
+      1. Schedule tasks by deadline & urgency first.
+      2. If a task has no due date or project (Inbox task), assign it a day this week so the user can make progress.
+      3. Spread out high-effort tasks evenly.
+      4. Only use the tasks provided in the JSON array. Match their titles EXACTLY.
+
+      OUTPUT JSON format only (no markdown):
+      {
+        "week_plan": [
+          {
+            "day": "Monday",
+            "date": "YYYY-MM-DD",
+            "tasks": [
+              {
+                "title": "Exact Task Title",
+                "reason": "Why scheduled here",
+                "estimated_minutes": 30,
+                "project": "Project Name or null"
+              }
+            ]
+          }
+        ]
+      }
+    `;
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'http://localhost:3000',
+        'X-Title': 'Centralized Dashboard AutoPlan Tool',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash-lite',
+        max_tokens: 4096,
+        messages: [
+          { role: 'system', content: 'You are an expert scheduler. Return valid JSON only.' },
+          { role: 'user', content: prompt }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to generate schedule from AI');
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '{}';
+    const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const parsed = JSON.parse(cleanContent);
+
+    rawProposal = {
+      intent,
+      analysis_summary: conversationalResponse,
+      questions: [],
+      proposed_actions: [
+        {
+          action_id: 'action_1',
+          type: 'create_plan',
+          destructive: false,
+          requires_approval: false,
+          reason: 'AI analyzed your tasks and generated this weekly schedule.',
+          expected_outcome: 'A balanced week plan mapping your tasks to specific days.',
+          patch: {
+            week_range: `${todayStr}..${new Date(Date.now() + 6 * 86400000).toISOString().split('T')[0]}`,
+            days: parsed.week_plan || [],
+          },
+        }
+      ],
+      proposed_plan: {
+        week_range: `${todayStr}..${new Date(Date.now() + 6 * 86400000).toISOString().split('T')[0]}`,
+        days: parsed.week_plan || [],
+      }
+    };
+  } else if (intent === 'declutter' || intent === 'cleanup') {
+
+    // Layer 1: Exact matching
+    const duplicateKeys = (title: string) => title.trim().toLowerCase().replace(/\\s+/g, ' ');
+    const seen = new Map<string, typeof cleanTasks[0]>();
+    const exactDuplicates: typeof cleanTasks[0][] = [];
+    const uniqueTasks: typeof cleanTasks[0][] = [];
+
+    cleanTasks.forEach((task) => {
+      const key = duplicateKeys(task.title);
+      const first = seen.get(key);
+      if (first) {
+        exactDuplicates.push(task);
+      } else {
+        seen.set(key, task);
+        uniqueTasks.push(task);
+      }
+    });
+
+    // Layer 2: Semantic matching for remaining tasks via Gemini
+    const prompt = `
+      User Request: "${requestText}"
+      User Tasks (JSON array): ${JSON.stringify(uniqueTasks.map(t => ({ id: t.id, title: t.title, created_at: t.created_at }))) }
+
+      ROLE: Expert Productivity Assistant.
+      GOAL: Identify "duplicate" tasks or explicitly "stale" tasks that the user wants to declutter.
+      RULES:
+      1. Analyze the semantic meaning of the task titles.
+      2. If multiple tasks have the exact same meaning (e.g., "Select data for hiding" and "Select data for hiding \\n 30m"), keep the oldest one (by created_at) and mark the others for deletion.
+      3. If the user explicitly asks to remove stale tasks, identify tasks that seem out of place, but be conservative.
+      4. Return ONLY a JSON array of objects representing the tasks to delete.
+      5. DO NOT include the task title in the output JSON. Only return the ID and Reason to avoid JSON formatting errors.
+
+      OUTPUT JSON format only (no markdown):
+      {
+        "tasks_to_delete": [
+          {
+            "id": "task-uuid-here",
+            "reason": "Why this is considered a duplicate or stale."
+          }
+        ]
+      }
+    `;
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'http://localhost:3000',
+        'X-Title': 'Centralized Dashboard AI Agent',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash-lite',
+        max_tokens: 4096,
+        messages: [
+          { role: 'system', content: 'You are an expert cleaner. Return valid JSON only.' },
+          { role: 'user', content: prompt }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to generate declutter plan from AI');
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '{}';
+    const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    let parsed: any = {};
+    try {
+      parsed = JSON.parse(cleanContent);
+    } catch (e) {
+      console.error('Failed to parse AI JSON for declutter:', cleanContent);
+    }
+    
+    const aiToDelete = parsed.tasks_to_delete || [];
+    
+    // Merge Layer 1 and Layer 2
+    let actionIndex = 1;
+    const actions: any[] = [];
+
+    // Add exact duplicates
+    for (const task of exactDuplicates) {
+      actions.push({
+        action_id: `action_${actionIndex++}`,
+        type: 'delete_task',
+        destructive: true,
+        requires_approval: true,
+        reason: 'Identified as an exact duplicate text match.',
+        expected_outcome: `Permanently delete task: "${task.title}"`,
+        target_task_id: task.id,
+        patch: { task_title: task.title }
+      });
+    }
+
+    // Add AI duplicates
+    for (const td of aiToDelete) {
+      const task = uniqueTasks.find(t => t.id === td.id);
+      if (!task) continue;
+      actions.push({
+        action_id: `action_${actionIndex++}`,
+        type: 'delete_task',
+        destructive: true,
+        requires_approval: true,
+        reason: td.reason || 'Identified as semantic duplicate or stale by AI.',
+        expected_outcome: `Permanently delete task: "${task.title}"`,
+        target_task_id: task.id,
+        patch: { task_title: task.title }
+      });
+    }
+
+    rawProposal = {
+      intent,
+      analysis_summary: `Analyzed ${cleanTasks.length} tasks. Found ${exactDuplicates.length} exact duplicates and ${aiToDelete.length} AI-identified duplicates.`,
+      questions: actions.length === 0 ? ['I could not find any clear duplicates or stale tasks. Can you specify what you want to remove?'] : [],
+      proposed_actions: actions,
+    };
+  } else {
+    rawProposal = createProposal(requestText, intent, tasks, preferences);
+  }
   const gatedProposal: AgentProposal = {
     ...rawProposal,
     proposed_actions: policyGate(rawProposal.proposed_actions),
@@ -129,13 +418,26 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
 export async function executeAgentRun(
   userToken: string,
   runId: string,
-  approvedActionIds: string[]
+  approvedActionIds: string[],
+  modifiedActions?: Partial<ProposedAction>[]
 ): Promise<AgentRunRecord> {
   const userId = await getAuthUserId(userToken);
   const run = await getRunById(userToken, runId, userId);
   if (!run) throw new Error('Run not found');
 
-  const approved = mergeApprovals(run.proposed_plan_json.proposed_actions, approvedActionIds);
+  let approved = mergeApprovals(run.proposed_plan_json.proposed_actions, approvedActionIds);
+  
+  // Merge user overrides (like DND reordering the plan) into the approved actions array
+  if (modifiedActions && modifiedActions.length > 0) {
+    approved = approved.map(action => {
+      const override = modifiedActions.find(m => m.action_id === action.action_id);
+      if (override) {
+        return { ...action, ...override } as ProposedAction;
+      }
+      return action;
+    });
+  }
+
   const tools = createSupabaseAgentTools(userToken);
   const alreadyExecuted = new Set((run.executed_actions_json || []).map((a) => a.action_id));
   const executed = await executeApprovedActions(approved, tools, {
