@@ -581,7 +581,7 @@ export const QuickCaptureDock = ({
                   </button>
 
                   {showPriorityDropdown && (
-                    <div className="absolute top-full left-0 mt-2 bg-white dark:bg-gray-900 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-[100] min-w-[240px]">
+                    <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-900 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-[100] min-w-[240px] max-h-[60vh] overflow-y-auto">
                       {([1, 2, 3, 4, 5] as TaskPriority[]).map((p) => (
                         <button
                           key={p}
@@ -639,7 +639,7 @@ export const QuickCaptureDock = ({
                   </button>
 
                   {showProjectDropdown && (
-                    <div className="absolute top-full left-0 mt-2 bg-white dark:bg-gray-900 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-[100] min-w-[240px] max-h-60 overflow-y-auto">
+                    <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-900 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-[100] min-w-[240px] max-h-[60vh] overflow-y-auto">
                       <button
                         type="button"
                         onClick={(e) => {
