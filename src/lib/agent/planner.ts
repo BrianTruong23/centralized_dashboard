@@ -97,7 +97,7 @@ export function createProposal(
       actions.push(
         createAction(
           {
-            type: 'answer',
+            type: 'update_task',
             destructive: false,
             requires_approval: false,
             reason: `Rank #${index + 1} by due date, urgency, and priority.`,
@@ -105,6 +105,7 @@ export function createProposal(
             target_task_id: task.id,
             patch: {
               task_title: task.title,
+              status: 'doing',
               rank: index + 1,
             },
           },
@@ -164,7 +165,7 @@ export function createProposal(
       actions.push(
         createAction(
           {
-            type: 'archive_task',
+            type: 'delete_task',
             destructive: true,
             requires_approval: true,
             target_task_id: task.id,
@@ -172,7 +173,7 @@ export function createProposal(
               task_title: task.title,
             },
             reason: `Duplicate task candidate: "${task.title}".`,
-            expected_outcome: `Archive duplicate "${task.title}" while keeping the original task.`,
+            expected_outcome: `Delete duplicate "${task.title}" while keeping the original task.`,
           },
           actions.length
         )
