@@ -452,7 +452,7 @@ export const QuickCaptureDock = ({
                             className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md transition-colors flex items-center justify-between"
                           >
                             <span className="flex items-center gap-2">
-                              <Calendar size={14} className="text-green-600 dark:text-green-400" />
+                              <Calendar size={14} className="text-cyan-600 dark:text-cyan-400" />
                               Today
                             </span>
                             <span className="text-xs text-gray-500">{format(today, 'EEE')}</span>
@@ -463,7 +463,7 @@ export const QuickCaptureDock = ({
                             className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md transition-colors flex items-center justify-between"
                           >
                             <span className="flex items-center gap-2">
-                              <Sun size={14} className="text-amber-600 dark:text-amber-400" />
+                              <Sun size={14} className="text-rose-500 dark:text-rose-400" />
                               Tomorrow
                             </span>
                             <span className="text-xs text-gray-500">{format(tomorrow, 'EEE')}</span>
@@ -474,7 +474,7 @@ export const QuickCaptureDock = ({
                             className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md transition-colors flex items-center justify-between"
                           >
                             <span className="flex items-center gap-2">
-                              <ArrowRight size={14} className="text-violet-600 dark:text-violet-400" />
+                              <ArrowRight size={14} className="text-indigo-600 dark:text-indigo-400" />
                               Next week
                             </span>
                             <span className="text-xs text-gray-500">{format(nextWeekDate, 'EEE MMM d')}</span>
@@ -485,7 +485,7 @@ export const QuickCaptureDock = ({
                             className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md transition-colors flex items-center justify-between"
                           >
                             <span className="flex items-center gap-2">
-                              <Calendar size={14} className="text-blue-600 dark:text-blue-400" />
+                              <Calendar size={14} className="text-teal-600 dark:text-teal-400" />
                               Next weekend
                             </span>
                             <span className="text-xs text-gray-500">{format(nextWeekendDate, 'EEE MMM d')}</span>
@@ -543,8 +543,8 @@ export const QuickCaptureDock = ({
                                     'h-8 w-8 rounded-full text-sm transition-colors',
                                     !isSameMonth(date, calendarMonth) && 'text-gray-300 dark:text-gray-600',
                                     isSameMonth(date, calendarMonth) && 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800',
-                                    isSelected && 'bg-amber-500 text-white hover:bg-amber-500',
-                                    !isSelected && isSameDay(date, today) && 'font-semibold text-amber-700 dark:text-amber-400'
+                                    isSelected && 'bg-black text-white hover:bg-black dark:bg-white dark:text-black dark:hover:bg-white',
+                                    !isSelected && isSameDay(date, today) && 'font-semibold text-gray-900 dark:text-gray-100'
                                   )}
                                 >
                                   {format(date, 'd')}
