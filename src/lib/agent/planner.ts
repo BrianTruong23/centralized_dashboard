@@ -146,6 +146,46 @@ export function createProposal(
   }
 
   // The 'declutter' and 'cleanup' intents are now handled by LLM in service.ts
+  // However, we keep a basic implementation here for testing purposes
+  if (intent === 'declutter' || intent === 'cleanup') {
+    // Simple duplicate detection for testing
+    const titleMap = new Map<string, AgentTask[]>();
+    cleanTasks.forEach(task => {
+      const normalizedTitle = task.title.toLowerCase().trim();
+      if (!titleMap.has(normalizedTitle)) {
+        titleMap.set(normalizedTitle, []);
+      }
+      titleMap.get(normalizedTitle)!.push(task);
+    });
+
+    // Find duplicates (same title, keep the first one)
+    titleMap.forEach((tasksWithSameTitle, title) => {
+      if (tasksWithSameTitle.length > 1) {
+        // Keep the first task (by ID for stable ordering), mark others for deletion
+        const sorted = tasksWithSameTitle.sort((a, b) => a.id.localeCompare(b.id));
+        
+        // Delete all except the first one
+        for (let i = 1; i < sorted.length; i++) {
+          actions.push(
+            createAction(
+              {
+                type: 'delete_task',
+                destructive: true,
+                requires_approval: true,
+                reason: `Duplicate of "${sorted[0].title}"`,
+                expected_outcome: `Remove duplicate task: "${sorted[i].title}"`,
+                target_task_id: sorted[i].id,
+                patch: {
+                  task_title: sorted[i].title,
+                },
+              },
+              actions.length
+            )
+          );
+        }
+      }
+    });
+  }
 
   if (intent === 'edit_tasks') {
     const lower = input.toLowerCase();
