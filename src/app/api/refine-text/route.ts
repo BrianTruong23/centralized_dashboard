@@ -5,6 +5,7 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const selectedText = String(body?.selectedText || '').trim();
     const fullText = String(body?.fullText || '').trim();
+    const mode = body?.mode === 'summarize' ? 'summarize' : 'refine';
 
     if (!selectedText) {
       return NextResponse.json({ error: 'selectedText is required' }, { status: 400 });
@@ -15,7 +16,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'OpenRouter API key is missing' }, { status: 500 });
     }
 
-    const prompt = `Rewrite the selected text to be clearer, more concise, and polished while preserving intent and tone.
+    const prompt = mode === 'summarize'
+      ? `Summarize the selected text into concise bullet points for quick scanning in a notes app.
+
+Rules:
+- Return only JSON.
+- Keep key facts and intent.
+- Use 3 to 5 bullets.
+- Keep each bullet short and clear.
+- Do not add new facts.
+
+Output format:
+{"refinedText":"- ...\\n- ..."}
+
+Selected text:
+${selectedText}
+
+Context (for tone only):
+${fullText.slice(0, 2000)}`
+      : `Rewrite the selected text to be clearer, more concise, and polished while preserving intent and tone.
 
 Rules:
 - Return only JSON.
@@ -71,9 +90,9 @@ ${fullText.slice(0, 2000)}`;
     }
 
     const refinedText = String(parsed.refinedText || '').trim() || selectedText;
-    return NextResponse.json({ refinedText });
-  } catch (error: any) {
-    return NextResponse.json({ error: error?.message || 'Failed to refine text' }, { status: 500 });
+    return NextResponse.json({ refinedText, mode });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to refine text';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

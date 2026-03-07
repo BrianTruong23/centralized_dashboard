@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { notesDb } from '@/lib/notes';
-import { Loader2, Sparkles, Save, Plus, CheckCircle, ListPlus, Calendar, Pencil, WandSparkles } from 'lucide-react';
+import { Loader2, Sparkles, Save, Plus, CheckCircle, ListPlus, Calendar, Pencil, WandSparkles, List } from 'lucide-react';
 import { Task, TaskCategory, TaskEnergyLevel } from '@/types/task';
 import { Project, CreateProjectInput } from '@/types/project';
 
@@ -102,10 +102,13 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [selectedRange, setSelectedRange] = useState<{ start: number; end: number; text: string } | null>(null);
-  const [isRefiningSelection, setIsRefiningSelection] = useState(false);
+  const [selectionActionLoading, setSelectionActionLoading] = useState<'refine' | 'summarize' | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const writingSurfaceRef = useRef<HTMLDivElement | null>(null);
   const [refineAnchor, setRefineAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [isSelectionMenuOpen, setIsSelectionMenuOpen] = useState(false);
+  const selectionMenuRef = useRef<HTMLDivElement | null>(null);
+  const selectionTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   // State for missing projects handling
   const [missingProjects, setMissingProjects] = useState<string[]>([]);
@@ -152,6 +155,23 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
       isSummaryVisible,
     });
   }, [userId, noteContent, summary, currentNoteId, isSummaryVisible]);
+
+  useEffect(() => {
+    const closeOnOutside = (event: MouseEvent) => {
+      if (!isSelectionMenuOpen) return;
+      const target = event.target as Node;
+      if (
+        selectionMenuRef.current?.contains(target) ||
+        selectionTriggerRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setIsSelectionMenuOpen(false);
+    };
+
+    document.addEventListener('mousedown', closeOnOutside);
+    return () => document.removeEventListener('mousedown', closeOnOutside);
+  }, [isSelectionMenuOpen]);
 
   const loadLatestNote = async () => {
     if (!userId) return;
@@ -325,13 +345,14 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
       setRefineAnchor(getSelectionAnchorFromTextarea(element, container, end));
       return;
     }
+    setIsSelectionMenuOpen(false);
     setSelectedRange(null);
     setRefineAnchor(null);
   };
 
-  const handleRefineSelection = async () => {
-    if (!selectedRange || isRefiningSelection) return;
-    setIsRefiningSelection(true);
+  const handleSelectionAction = async (mode: 'refine' | 'summarize') => {
+    if (!selectedRange || selectionActionLoading) return;
+    setSelectionActionLoading(mode);
     setError(null);
     try {
       const res = await fetch('/api/refine-text', {
@@ -340,6 +361,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
         body: JSON.stringify({
           selectedText: selectedRange.text,
           fullText: noteContent,
+          mode,
         }),
       });
 
@@ -359,6 +381,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
       const nextCursor = selectedRange.start + refined.length;
       setSelectedRange(null);
       setRefineAnchor(null);
+      setIsSelectionMenuOpen(false);
       requestAnimationFrame(() => {
         const element = textareaRef.current;
         if (!element) return;
@@ -368,7 +391,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
     } catch (err: any) {
       setError(err?.message || 'Failed to refine selection');
     } finally {
-      setIsRefiningSelection(false);
+      setSelectionActionLoading(null);
     }
   };
 
@@ -628,16 +651,45 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
           </div>
           <div ref={writingSurfaceRef} className="relative rounded-2xl bg-gray-50/70 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800 px-5 py-4">
             {selectedRange && refineAnchor && (
-              <button
-                type="button"
-                onClick={handleRefineSelection}
-                disabled={isRefiningSelection}
-                className="absolute z-10 h-7 w-7 inline-flex items-center justify-center rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] shadow-sm hover:opacity-90 disabled:opacity-60 transition-opacity"
-                style={{ left: refineAnchor.x, top: refineAnchor.y }}
-                title="Refine selection"
-              >
-                {isRefiningSelection ? <Loader2 size={13} className="animate-spin" /> : <WandSparkles size={13} />}
-              </button>
+              <>
+                <button
+                  ref={selectionTriggerRef}
+                  type="button"
+                  onClick={() => setIsSelectionMenuOpen((prev) => !prev)}
+                  disabled={!!selectionActionLoading}
+                  className="absolute z-10 h-9 w-9 inline-flex items-center justify-center rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] shadow-sm hover:opacity-90 disabled:opacity-60 transition-opacity"
+                  style={{ left: refineAnchor.x, top: refineAnchor.y }}
+                  title="Text actions"
+                >
+                  {selectionActionLoading ? <Loader2 size={14} className="animate-spin" /> : <WandSparkles size={14} />}
+                </button>
+                {isSelectionMenuOpen && (
+                  <div
+                    ref={selectionMenuRef}
+                    className="absolute z-20 min-w-[170px] rounded-xl border border-gray-200 bg-white p-1.5 shadow-lg dark:border-gray-700 dark:bg-gray-800"
+                    style={{ left: refineAnchor.x, top: refineAnchor.y + 40 }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleSelectionAction('refine')}
+                      disabled={!!selectionActionLoading}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-60 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      <WandSparkles size={14} />
+                      Refine
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectionAction('summarize')}
+                      disabled={!!selectionActionLoading}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-60 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      <List size={14} />
+                      Summarize
+                    </button>
+                  </div>
+                )}
+              </>
             )}
             <textarea
               ref={textareaRef}
