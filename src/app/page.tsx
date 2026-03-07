@@ -1215,6 +1215,10 @@ export default function Home() {
          planningPreferences={planningPreferences}
          onPlanningPreferencesChange={setPlanningPreferences}
          onRestartOnboarding={() => setIsOnboardingOpen(true)}
+         tasks={tasks}
+         filteredTasks={filteredTasks}
+         projects={projects}
+         currentView={currentView}
       />
 
       <CreateProjectModal 

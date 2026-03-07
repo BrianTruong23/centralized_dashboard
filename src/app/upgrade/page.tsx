@@ -1,185 +1,122 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
-import { usePremium } from '@/hooks/usePremium';
-import { CheckCircle2, Crown, Loader2, Sparkles, XCircle } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
+import { useMemo, useState } from 'react';
+import { CheckCircle2, CreditCard, Crown, Sparkles } from 'lucide-react';
+import clsx from 'clsx';
 
-function UpgradePageContent() {
-  const searchParams = useSearchParams();
-  const { isPro, loading: isPremiumLoading, refresh } = usePremium();
-  const [status, setStatus] = useState<'idle' | 'creating' | 'redirecting' | 'capturing' | 'success' | 'cancel' | 'error'>('idle');
-  const [message, setMessage] = useState<string>('');
+type PlanId = 'one_time' | 'monthly';
 
-  const paypalState = searchParams.get('paypal');
-  const orderId = searchParams.get('token');
+export default function UpgradePage() {
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>('monthly');
 
-  const reasons = useMemo(() => [
-    'Unlock Auto Plan for AI-generated weekly scheduling.',
-    'Get access to premium productivity features as they ship.',
-    'Support ongoing improvements for Minismo.',
-  ], []);
+  const plans = useMemo(
+    () => [
+      {
+        id: 'one_time' as const,
+        name: 'Lifetime',
+        price: '$399',
+        cadence: 'one-time',
+        description: 'Pay once and keep Pro access forever.',
+        badge: 'Best long-term value',
+        highlights: ['Single payment', 'No recurring charges', 'All current Pro features'],
+      },
+      {
+        id: 'monthly' as const,
+        name: 'Monthly',
+        price: '$10',
+        cadence: 'per month',
+        description: 'Lower upfront cost with monthly billing.',
+        badge: 'Most flexible',
+        highlights: ['Cancel anytime', 'Low monthly commitment', 'All current Pro features'],
+      },
+    ],
+    []
+  );
 
-  const startPaypalCheckout = async () => {
-    try {
-      setStatus('creating');
-      setMessage('Creating secure checkout...');
-
-      const res = await fetch('/api/paypal/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planType: 'one_time' }),
-      });
-
-      const json = await res.json();
-      if (!res.ok || !json.approveUrl) {
-        throw new Error(json?.error || 'Failed to start PayPal checkout');
-      }
-
-      setStatus('redirecting');
-      window.location.href = json.approveUrl;
-    } catch (err: any) {
-      setStatus('error');
-      setMessage(err?.message || 'Payment start failed');
-    }
-  };
-
-  useEffect(() => {
-    if (paypalState === 'cancel') {
-      setStatus('cancel');
-      setMessage('Payment canceled. No changes were made.');
-      return;
-    }
-
-    if (paypalState !== 'success' || !orderId) return;
-
-    let canceled = false;
-
-    const capture = async () => {
-      try {
-        setStatus('capturing');
-        setMessage('Finalizing your upgrade...');
-
-        if (!supabase) throw new Error('Supabase is not configured');
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.access_token) throw new Error('Please sign in before upgrading');
-
-        const res = await fetch('/api/paypal/capture-order', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ orderId }),
-        });
-
-        const json = await res.json();
-        if (!res.ok || !json.ok) {
-          throw new Error(json?.error || 'Could not confirm payment');
-        }
-
-        await refresh();
-        if (!canceled) {
-          setStatus('success');
-          setMessage('You are now on Pro. Premium features are unlocked.');
-        }
-      } catch (err: any) {
-        if (!canceled) {
-          setStatus('error');
-          setMessage(err?.message || 'Payment capture failed');
-        }
-      }
-    };
-
-    capture();
-
-    return () => {
-      canceled = true;
-    };
-  }, [orderId, paypalState, refresh]);
+  const active = plans.find((p) => p.id === selectedPlan)!;
 
   return (
     <main className="min-h-screen bg-[#fafafa] dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-4 py-10">
-      <div className="max-w-2xl mx-auto">
-        <Link href="/" className="text-xs text-gray-500 hover:text-black dark:hover:text-white">Back to dashboard</Link>
+      <div className="max-w-4xl mx-auto">
+        <Link href="/" className="text-xs text-gray-500 hover:text-black dark:hover:text-white">
+          Back to dashboard
+        </Link>
 
-        <div className="mt-4 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4 mb-6">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-                <Crown size={20} className="text-amber-500" />
-                Go Pro
-              </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                Upgrade your workflow with premium planning features.
-              </p>
-            </div>
-            {isPro && (
-              <span className="text-xs px-2 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 font-semibold">
-                Pro Active
-              </span>
-            )}
+        <section className="mt-4 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 shadow-sm">
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+              <Crown size={20} className="text-amber-500" />
+              Choose your plan
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Front-end preview only. No payment is processed yet.
+            </p>
           </div>
 
-          <div className="space-y-2 mb-6">
-            {reasons.map((item) => (
-              <div key={item} className="text-sm flex items-start gap-2 text-gray-700 dark:text-gray-300">
-                <CheckCircle2 size={16} className="text-emerald-500 mt-0.5" />
-                <span>{item}</span>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            {plans.map((plan) => {
+              const isActive = selectedPlan === plan.id;
+              return (
+                <button
+                  key={plan.id}
+                  type="button"
+                  onClick={() => setSelectedPlan(plan.id)}
+                  className={clsx(
+                    'rounded-xl border p-4 text-left transition-all',
+                    isActive
+                      ? 'border-black dark:border-white ring-2 ring-black/10 dark:ring-white/20 bg-gray-50 dark:bg-gray-900'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 bg-white dark:bg-gray-800'
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div>
+                      <p className="text-lg font-semibold">{plan.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{plan.badge}</p>
+                    </div>
+                    <span className="text-xs px-2 py-1 rounded-full border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300">
+                      {plan.cadence}
+                    </span>
+                  </div>
+                  <div className="mb-2">
+                    <span className="text-3xl font-bold">{plan.price}</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">{plan.cadence === 'one-time' ? '' : '/month'}</span>
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">{plan.description}</p>
+                  <div className="space-y-1">
+                    {plan.highlights.map((item) => (
+                      <div key={item} className="text-sm flex items-center gap-2 text-gray-600 dark:text-gray-300">
+                        <CheckCircle2 size={14} className="text-emerald-500" />
+                        <span>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                </button>
+              );
+            })}
           </div>
 
-          <div className="mb-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 px-4 py-3">
-            <p className="text-sm font-semibold">Pro (one-time): $9.99</p>
-            <p className="text-xs text-gray-500 mt-1">Secure checkout by PayPal (card supported in PayPal checkout flow).</p>
+          <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-4">
+            <p className="text-sm font-semibold mb-1">Selected plan</p>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              <span className="font-medium">{active.name}</span> · {active.price} {active.cadence === 'one-time' ? 'one-time' : '/ month'}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              This is a UI-only checkout preview. Payment integration will be added later.
+            </p>
+
+            <button
+              type="button"
+              className="mt-4 w-full inline-flex items-center justify-center gap-2 py-3 rounded-lg bg-black dark:bg-white text-white dark:text-black font-bold hover:opacity-90 transition-opacity"
+            >
+              <CreditCard size={16} />
+              <Sparkles size={16} />
+              Continue (Preview)
+            </button>
           </div>
-
-          {(status === 'cancel' || status === 'error' || status === 'success') && (
-            <div className={`mb-4 p-3 rounded-lg border text-sm flex items-start gap-2 ${
-              status === 'success'
-                ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
-                : status === 'cancel'
-                ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300'
-                : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
-            }`}>
-              {status === 'success' ? <CheckCircle2 size={16} className="mt-0.5" /> : <XCircle size={16} className="mt-0.5" />}
-              <span>{message}</span>
-            </div>
-          )}
-
-          <button
-            onClick={startPaypalCheckout}
-            disabled={isPro || isPremiumLoading || ['creating', 'redirecting', 'capturing'].includes(status)}
-            className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-lg bg-black dark:bg-white text-white dark:text-black font-bold hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            {['creating', 'redirecting', 'capturing'].includes(status) && <Loader2 size={16} className="animate-spin" />}
-            <Sparkles size={16} />
-            {isPro ? 'You are already Pro' : 'Upgrade with PayPal'}
-          </button>
-        </div>
+        </section>
       </div>
     </main>
   );
 }
 
-export default function UpgradePage() {
-  return (
-    <Suspense
-      fallback={
-        <main className="min-h-screen bg-[#fafafa] dark:bg-gray-900 text-gray-900 dark:text-gray-100 px-4 py-10">
-          <div className="max-w-2xl mx-auto rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 shadow-sm">
-            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-              <Loader2 size={16} className="animate-spin" />
-              Loading upgrade page...
-            </div>
-          </div>
-        </main>
-      }
-    >
-      <UpgradePageContent />
-    </Suspense>
-  );
-}
