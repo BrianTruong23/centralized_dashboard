@@ -68,18 +68,21 @@ function getSelectionAnchorFromTextarea(
   mirror.appendChild(marker);
   document.body.appendChild(mirror);
 
-  const markerRect = marker.getBoundingClientRect();
   const textareaRect = textarea.getBoundingClientRect();
   const containerRect = container.getBoundingClientRect();
+  const markerLeft = marker.offsetLeft;
+  const markerTop = marker.offsetTop;
 
   document.body.removeChild(mirror);
 
-  const left = markerRect.left - textareaRect.left + 12;
-  const top = markerRect.top - textareaRect.top - textarea.scrollTop - 30;
+  const localTextareaX = textareaRect.left - containerRect.left;
+  const localTextareaY = textareaRect.top - containerRect.top;
+  const left = localTextareaX + markerLeft + 10;
+  const top = localTextareaY + markerTop - textarea.scrollTop - 30;
 
   return {
-    x: Math.max(10, Math.min(left + (textareaRect.left - containerRect.left), containerRect.width - 42)),
-    y: Math.max(8, Math.min(top + (textareaRect.top - containerRect.top), containerRect.height - 38)),
+    x: Math.max(8, Math.min(left, containerRect.width - 40)),
+    y: Math.max(8, Math.min(top, containerRect.height - 36)),
   };
 }
 
