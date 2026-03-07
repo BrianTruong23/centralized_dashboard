@@ -34,6 +34,55 @@ type DailyNotesCache = {
 
 const dailyNotesCache = new Map<string, DailyNotesCache>();
 
+function getSelectionAnchorFromTextarea(
+  textarea: HTMLTextAreaElement,
+  container: HTMLElement,
+  selectionEnd: number
+): { x: number; y: number } {
+  const style = window.getComputedStyle(textarea);
+  const mirror = document.createElement('div');
+  const marker = document.createElement('span');
+
+  const mirrorStyles = [
+    'position:absolute',
+    'visibility:hidden',
+    'white-space:pre-wrap',
+    'word-wrap:break-word',
+    'overflow-wrap:break-word',
+    'top:0',
+    'left:-9999px',
+    `width:${textarea.clientWidth}px`,
+    `font-family:${style.fontFamily}`,
+    `font-size:${style.fontSize}`,
+    `font-weight:${style.fontWeight}`,
+    `line-height:${style.lineHeight}`,
+    `letter-spacing:${style.letterSpacing}`,
+    `padding:${style.paddingTop} ${style.paddingRight} ${style.paddingBottom} ${style.paddingLeft}`,
+    `border:${style.border}`,
+    'box-sizing:border-box',
+  ].join(';');
+
+  mirror.setAttribute('style', mirrorStyles);
+  mirror.textContent = textarea.value.slice(0, selectionEnd);
+  marker.textContent = '\u200b';
+  mirror.appendChild(marker);
+  document.body.appendChild(mirror);
+
+  const markerRect = marker.getBoundingClientRect();
+  const textareaRect = textarea.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+
+  document.body.removeChild(mirror);
+
+  const left = markerRect.left - textareaRect.left + 12;
+  const top = markerRect.top - textareaRect.top - textarea.scrollTop - 30;
+
+  return {
+    x: Math.max(10, Math.min(left + (textareaRect.left - containerRect.left), containerRect.width - 42)),
+    y: Math.max(8, Math.min(top + (textareaRect.top - containerRect.top), containerRect.height - 38)),
+  };
+}
+
 export function DailyNotes({ userId, onAddTask, showHistory = false, projects = [], addProject, onNoteSaved }: DailyNotesProps) {
   const MAX_NOTE_WORDS = 500;
   const [noteContent, setNoteContent] = useState('');
@@ -261,23 +310,16 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
     }
   };
 
-  const updateSelectionRange = (clientX?: number, clientY?: number) => {
+  const updateSelectionRange = () => {
     const element = textareaRef.current;
-    if (!element) return;
+    const container = writingSurfaceRef.current;
+    if (!element || !container) return;
     const start = element.selectionStart ?? 0;
     const end = element.selectionEnd ?? 0;
     const text = element.value.slice(start, end).trim();
     if (end - start >= 3 && text.length >= 3) {
       setSelectedRange({ start, end, text });
-      const surfaceRect = writingSurfaceRef.current?.getBoundingClientRect();
-      if (surfaceRect && typeof clientX === 'number' && typeof clientY === 'number') {
-        setRefineAnchor({
-          x: Math.max(8, Math.min(clientX - surfaceRect.left + 8, surfaceRect.width - 40)),
-          y: Math.max(8, Math.min(clientY - surfaceRect.top - 36, surfaceRect.height - 40)),
-        });
-      } else if (surfaceRect) {
-        setRefineAnchor({ x: surfaceRect.width - 44, y: 10 });
-      }
+      setRefineAnchor(getSelectionAnchorFromTextarea(element, container, end));
       return;
     }
     setSelectedRange(null);
@@ -298,7 +340,10 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
         }),
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get('content-type') || '';
+      const data = contentType.includes('application/json')
+        ? await res.json()
+        : { error: await res.text() };
       if (!res.ok) throw new Error(data?.error || 'Failed to refine selection');
       const refined = String(data?.refinedText || '').trim();
       if (!refined) throw new Error('No refined text returned');
@@ -595,9 +640,9 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
               ref={textareaRef}
               value={noteContent}
               onChange={(e) => setNoteContent(clampToMaxWords(e.target.value, MAX_NOTE_WORDS))}
-              onSelect={() => updateSelectionRange()}
-              onMouseUp={(e) => updateSelectionRange(e.clientX, e.clientY)}
-              onKeyUp={() => updateSelectionRange()}
+              onSelect={updateSelectionRange}
+              onMouseUp={updateSelectionRange}
+              onKeyUp={updateSelectionRange}
               placeholder="Start writing your notes..."
               className="w-full min-h-[320px] md:min-h-[360px] bg-transparent border-0 outline-none resize-none text-[17px] leading-8 tracking-[0.01em] text-gray-800 dark:text-gray-200 placeholder:text-gray-400/90 dark:placeholder:text-gray-500"
             />
