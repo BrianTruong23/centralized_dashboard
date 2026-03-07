@@ -110,7 +110,103 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
     } satisfies AgentPreference);
   const tasks = await tools.listTasks({ user_id: userId, archived: false });
   const intent = routeIntent(requestText);
-  const rawProposal = createProposal(requestText, intent, tasks, preferences);
+  let rawProposal: AgentProposal;
+  const cleanTasks = tasks.filter((t) => t.user_id === preferences.user_id && !t.archived && t.status !== 'done');
+
+  if (intent === 'schedule') {
+    // Make external call to LLM for scheduling
+    const todayStr = new Date().toISOString().split('T')[0];
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) throw new Error('Missing OPENROUTER_API_KEY for scheduling');
+
+    const prompt = `
+      Current Context:
+      - Today is ${todayStr}.
+      - User Request: "${requestText}"
+      - User Tasks (JSON array): ${JSON.stringify(cleanTasks.map(t => ({ title: t.title, estimate: t.estimate_minutes, priority: t.priority, due: t.due_at, project: t.project_id })))}
+      - User Planning Preferences:
+        - Max tasks per day: ${preferences.max_tasks_per_day || 5}
+        - Work hours: ${preferences.work_hours?.start || '09:00'} to ${preferences.work_hours?.end || '17:00'}
+
+      ROLE: Expert Project Manager & Scheduler.
+      GOAL: Create a weekly plan (Mon-Sun) from the provided tasks to satisfy the user's request.
+      RULES:
+      1. Schedule tasks by deadline & urgency.
+      2. Spread out high-effort tasks.
+      3. Only use the tasks provided in the JSON array. Match their titles EXACTLY.
+
+      OUTPUT JSON format only (no markdown):
+      {
+        "week_plan": [
+          {
+            "day": "Monday",
+            "date": "YYYY-MM-DD",
+            "tasks": [
+              {
+                "title": "Exact Task Title",
+                "reason": "Why scheduled here",
+                "estimated_minutes": 30,
+                "project": "Project Name or null"
+              }
+            ]
+          }
+        ]
+      }
+    `;
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'http://localhost:3000',
+        'X-Title': 'Centralized Dashboard AutoPlan Tool',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash-lite',
+        max_tokens: 4096,
+        messages: [
+          { role: 'system', content: 'You are an expert scheduler. Return valid JSON only.' },
+          { role: 'user', content: prompt }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to generate schedule from AI');
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '{}';
+    const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const parsed = JSON.parse(cleanContent);
+
+    rawProposal = {
+      intent,
+      analysis_summary: `AI generated weekly schedule for ${cleanTasks.length} tasks.`,
+      questions: [],
+      proposed_actions: [
+        {
+          action_id: 'action_1',
+          type: 'create_plan',
+          destructive: false,
+          requires_approval: false,
+          reason: 'AI analyzed your tasks and generated this weekly schedule.',
+          expected_outcome: 'A balanced week plan mapping your tasks to specific days.',
+          patch: {
+            week_range: `${todayStr}..${new Date(Date.now() + 6 * 86400000).toISOString().split('T')[0]}`,
+            days: parsed.week_plan || [],
+          },
+        }
+      ],
+      proposed_plan: {
+        week_range: `${todayStr}..${new Date(Date.now() + 6 * 86400000).toISOString().split('T')[0]}`,
+        days: parsed.week_plan || [],
+      }
+    };
+  } else {
+    rawProposal = createProposal(requestText, intent, tasks, preferences);
+  }
   const gatedProposal: AgentProposal = {
     ...rawProposal,
     proposed_actions: policyGate(rawProposal.proposed_actions),
