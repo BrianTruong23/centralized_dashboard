@@ -42,7 +42,9 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
   const [missingProjects, setMissingProjects] = useState<string[]>([]);
   const [pendingTasksToAdd, setPendingTasksToAdd] = useState<number[] | 'all' | null>(null);
 
-  const categories: TaskCategory[] = ['Research', 'Coding', 'Admin', 'Health', 'Life', 'Finance', 'Social', 'Content', 'UX'];
+  const categories: TaskCategory[] = projects.length > 0
+    ? projects.map(p => p.name)
+    : ['Work', 'Life'];
   const energyLevels: TaskEnergyLevel[] = ['low', 'medium', 'high'];
 
   // Load latest note on mount
@@ -131,7 +133,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
       const res = await fetch('/api/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ noteContent }),
+        body: JSON.stringify({ noteContent, projects: projects.map(p => p.name) }),
         signal: controller.signal,
       });
 
