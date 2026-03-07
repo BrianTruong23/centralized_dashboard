@@ -5,7 +5,9 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const selectedText = String(body?.selectedText || '').trim();
     const fullText = String(body?.fullText || '').trim();
-    const mode = body?.mode === 'summarize' ? 'summarize' : 'refine';
+    const instruction = String(body?.instruction || '').trim();
+    const allowedModes = new Set(['rephrase', 'shorten', 'elaborate', 'more_formal', 'custom']);
+    const mode = allowedModes.has(body?.mode) ? body.mode : 'rephrase';
 
     if (!selectedText) {
       return NextResponse.json({ error: 'selectedText is required' }, { status: 400 });
@@ -16,32 +18,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'OpenRouter API key is missing' }, { status: 500 });
     }
 
-    const prompt = mode === 'summarize'
-      ? `Summarize the selected text into concise bullet points for quick scanning in a notes app.
+    const modeInstructionMap: Record<string, string> = {
+      rephrase: 'Rephrase the selected text to be clearer and smoother while preserving meaning.',
+      shorten: 'Shorten the selected text while keeping the key intent and facts.',
+      elaborate: 'Elaborate the selected text with a bit more clarity and detail, without adding new facts.',
+      more_formal: 'Rewrite the selected text in a more formal professional tone.',
+      custom: `Follow this user instruction exactly: "${instruction || 'Improve this text.'}"`,
+    };
+
+    const prompt = `${modeInstructionMap[mode]}
 
 Rules:
 - Return only JSON.
-- Keep key facts and intent.
-- Use 3 to 5 bullets.
-- Keep each bullet short and clear.
-- Do not add new facts.
-
-Output format:
-{"refinedText":"- ...\\n- ..."}
-
-Selected text:
-${selectedText}
-
-Context (for tone only):
-${fullText.slice(0, 2000)}`
-      : `Rewrite the selected text to be clearer, more concise, and polished while preserving intent and tone.
-
-Rules:
-- Return only JSON.
-- Keep roughly the same meaning.
-- Keep tense and person unless clearly broken.
+- Keep the original intent.
 - Avoid adding new facts.
-- Keep it short and natural for a notes app.
+- Keep wording natural for a notes app.
 
 Output format:
 {"refinedText":"..."}
