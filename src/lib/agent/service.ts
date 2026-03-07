@@ -208,24 +208,42 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) throw new Error('Missing OPENROUTER_API_KEY for decluttering');
 
+    // Layer 1: Exact matching
+    const duplicateKeys = (title: string) => title.trim().toLowerCase().replace(/\\s+/g, ' ');
+    const seen = new Map<string, typeof cleanTasks[0]>();
+    const exactDuplicates: typeof cleanTasks[0][] = [];
+    const uniqueTasks: typeof cleanTasks[0][] = [];
+
+    cleanTasks.forEach((task) => {
+      const key = duplicateKeys(task.title);
+      const first = seen.get(key);
+      if (first) {
+        exactDuplicates.push(task);
+      } else {
+        seen.set(key, task);
+        uniqueTasks.push(task);
+      }
+    });
+
+    // Layer 2: Semantic matching for remaining tasks via Gemini
     const prompt = `
       User Request: "${requestText}"
-      User Tasks (JSON array): ${JSON.stringify(cleanTasks.map(t => ({ id: t.id, title: t.title, created_at: t.created_at })))}
+      User Tasks (JSON array): ${JSON.stringify(uniqueTasks.map(t => ({ id: t.id, title: t.title, created_at: t.created_at }))) }
 
       ROLE: Expert Productivity Assistant.
       GOAL: Identify "duplicate" tasks or explicitly "stale" tasks that the user wants to declutter.
       RULES:
       1. Analyze the semantic meaning of the task titles.
-      2. If multiple tasks have the exact same meaning (e.g., "Select data for hiding" and "Select data for hiding \n 30m"), keep the oldest one (by created_at) and mark the others for deletion.
+      2. If multiple tasks have the exact same meaning (e.g., "Select data for hiding" and "Select data for hiding \\n 30m"), keep the oldest one (by created_at) and mark the others for deletion.
       3. If the user explicitly asks to remove stale tasks, identify tasks that seem out of place, but be conservative.
       4. Return ONLY a JSON array of objects representing the tasks to delete.
+      5. DO NOT include the task title in the output JSON. Only return the ID and Reason to avoid JSON formatting errors.
 
       OUTPUT JSON format only (no markdown):
       {
         "tasks_to_delete": [
           {
             "id": "task-uuid-here",
-            "title": "Exact Task Title",
             "reason": "Why this is considered a duplicate or stale."
           }
         ]
@@ -257,25 +275,54 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || '{}';
     const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const parsed = JSON.parse(cleanContent);
-    const toDelete = parsed.tasks_to_delete || [];
+    let parsed: any = {};
+    try {
+      parsed = JSON.parse(cleanContent);
+    } catch (e) {
+      console.error('Failed to parse AI JSON for declutter:', cleanContent);
+    }
+    
+    const aiToDelete = parsed.tasks_to_delete || [];
+    
+    // Merge Layer 1 and Layer 2
+    let actionIndex = 1;
+    const actions: any[] = [];
 
-    rawProposal = {
-      intent,
-      analysis_summary: `AI analyzed ${cleanTasks.length} tasks and found ${toDelete.length} tasks to declutter.`,
-      questions: toDelete.length === 0 ? ['I could not find any clear duplicates or stale tasks. Can you specify what you want to remove?'] : [],
-      proposed_actions: toDelete.map((td: any, i: number) => ({
-        action_id: `action_${i + 1}`,
+    // Add exact duplicates
+    for (const task of exactDuplicates) {
+      actions.push({
+        action_id: `action_${actionIndex++}`,
         type: 'delete_task',
         destructive: true,
         requires_approval: true,
-        reason: td.reason,
-        expected_outcome: `Permanently delete task: "${td.title}"`,
-        target_task_id: td.id,
-        patch: {
-          task_title: td.title
-        }
-      })),
+        reason: 'Identified as an exact duplicate text match.',
+        expected_outcome: `Permanently delete task: "${task.title}"`,
+        target_task_id: task.id,
+        patch: { task_title: task.title }
+      });
+    }
+
+    // Add AI duplicates
+    for (const td of aiToDelete) {
+      const task = uniqueTasks.find(t => t.id === td.id);
+      if (!task) continue;
+      actions.push({
+        action_id: `action_${actionIndex++}`,
+        type: 'delete_task',
+        destructive: true,
+        requires_approval: true,
+        reason: td.reason || 'Identified as semantic duplicate or stale by AI.',
+        expected_outcome: `Permanently delete task: "${task.title}"`,
+        target_task_id: task.id,
+        patch: { task_title: task.title }
+      });
+    }
+
+    rawProposal = {
+      intent,
+      analysis_summary: `Analyzed ${cleanTasks.length} tasks. Found ${exactDuplicates.length} exact duplicates and ${aiToDelete.length} AI-identified duplicates.`,
+      questions: actions.length === 0 ? ['I could not find any clear duplicates or stale tasks. Can you specify what you want to remove?'] : [],
+      proposed_actions: actions,
     };
   } else {
     rawProposal = createProposal(requestText, intent, tasks, preferences);
