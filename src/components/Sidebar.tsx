@@ -158,7 +158,7 @@ export const Sidebar = ({
              style={{ backgroundColor: 'var(--accent-solid)', color: 'var(--accent-solid-foreground)' }}
              aria-label="Minismo"
            >
-             <ListTodo size={18} />
+             <ListTodo size={16} />
            </div>
            <div className="min-w-0 flex-1">
                {user ? (
