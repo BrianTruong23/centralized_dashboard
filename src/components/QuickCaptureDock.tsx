@@ -8,6 +8,8 @@ import clsx from 'clsx';
 import { Plus, Calendar, Flag, Tag, X } from 'lucide-react';
 import { parseDateFromText, dayRegex, parseTagFromText, tagRegex } from '@/lib/smartDate';
 import { formatDateKey } from '@/lib/dateKey';
+import { parseTemporal, ParsedTemporal } from '@/lib/temporalParser';
+import { TemporalClarificationModal } from './TemporalClarificationModal';
 
 interface QuickCaptureDockProps {
   onAddTask: (task: Task) => void;
@@ -30,6 +32,9 @@ export const QuickCaptureDock = ({
   const [priority, setPriority] = useState<TaskPriority>(3);
   const [deadline, setDeadline] = useState(defaultDate || '');
   const [projectId, setProjectId] = useState('');
+  const [temporalParsed, setTemporalParsed] = useState<ParsedTemporal | null>(null);
+  const [showClarification, setShowClarification] = useState(false);
+  const [ambiguousAlternatives, setAmbiguousAlternatives] = useState<ParsedTemporal[]>([]);
   const dockRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -82,11 +87,31 @@ export const QuickCaptureDock = ({
     };
   }, [topInputSelector]);
 
-  // Parse date and tags from title
+  // Parse temporal information and tags from title
   useEffect(() => {
-    const dateMatch = parseDateFromText(title);
-    if (dateMatch) {
-      setDeadline(dateMatch.date);
+    if (!title.trim()) {
+      setTemporalParsed(null);
+      return;
+    }
+
+    const parsed = parseTemporal(title);
+    
+    // Handle ambiguous cases
+    if (parsed.confidence === 'ambiguous' && parsed.ambiguous && parsed.ambiguous.length > 0) {
+      setTemporalParsed(parsed);
+      setAmbiguousAlternatives([parsed]);
+    } else if (parsed.confidence === 'high' || parsed.confidence === 'medium') {
+      setTemporalParsed(parsed);
+      if (parsed.due_date || parsed.scheduled_date) {
+        setDeadline(parsed.due_date || parsed.scheduled_date || '');
+      }
+    } else {
+      // Fall back to old parser
+      const dateMatch = parseDateFromText(title);
+      if (dateMatch) {
+        setDeadline(dateMatch.date);
+      }
+      setTemporalParsed(null);
     }
 
     const tagMatch = parseTagFromText(title);
@@ -100,14 +125,23 @@ export const QuickCaptureDock = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    
+    // Check for ambiguous temporal parsing
+    if (temporalParsed?.confidence === 'ambiguous' && ambiguousAlternatives.length > 0) {
+      setShowClarification(true);
+      return;
+    }
+    
+    const finalTitle = temporalParsed?.cleanedText || title.trim();
+    if (!finalTitle) return;
 
     const project = projects.find(p => p.id === projectId);
     const categoryName = project ? project.name : 'Inbox';
+    const finalDeadline = temporalParsed?.due_date || temporalParsed?.scheduled_date || deadline || undefined;
 
     const newTask: Task = {
       id: generateId(),
-      title: title.trim(),
+      title: finalTitle,
       description: '',
       category: categoryName,
       priority,
@@ -116,7 +150,11 @@ export const QuickCaptureDock = ({
       status: 'todo',
       tags: [],
       createdAt: Date.now(),
-      deadline: deadline || undefined,
+      deadline: finalDeadline,
+      due_time: temporalParsed?.due_time,
+      scheduled_date: temporalParsed?.scheduled_date,
+      scheduled_time: temporalParsed?.scheduled_time,
+      is_all_day: temporalParsed?.is_all_day,
       project_id: projectId || undefined,
     };
 
@@ -127,6 +165,7 @@ export const QuickCaptureDock = ({
     setDeadline(defaultDate || '');
     setPriority(3);
     setProjectId(defaultProjectId || projects[0]?.id || '');
+    setTemporalParsed(null);
     setIsExpanded(false);
     inputRef.current?.blur();
   };
@@ -313,6 +352,55 @@ export const QuickCaptureDock = ({
           )}
         </form>
       </div>
+
+      {/* Temporal Clarification Modal */}
+      <TemporalClarificationModal
+        isOpen={showClarification}
+        onClose={() => setShowClarification(false)}
+        onConfirm={(selected) => {
+          setTemporalParsed(selected);
+          setShowClarification(false);
+          // Re-submit with selected interpretation
+          const finalTitle = selected.cleanedText || title.trim();
+          if (finalTitle) {
+            const project = projects.find(p => p.id === projectId);
+            const categoryName = project ? project.name : 'Inbox';
+            const finalDeadline = selected.due_date || selected.scheduled_date || deadline || undefined;
+
+            const newTask: Task = {
+              id: generateId(),
+              title: finalTitle,
+              description: '',
+              category: categoryName,
+              priority,
+              estimatedMinutes: 60,
+              energyLevel: 'medium',
+              status: 'todo',
+              tags: [],
+              createdAt: Date.now(),
+              deadline: finalDeadline,
+              due_time: selected.due_time,
+              scheduled_date: selected.scheduled_date,
+              scheduled_time: selected.scheduled_time,
+              is_all_day: selected.is_all_day,
+              project_id: projectId || undefined,
+            };
+
+            onAddTask(newTask);
+            // Reset form
+            setTitle('');
+            setDeadline(defaultDate || '');
+            setPriority(3);
+            setProjectId(defaultProjectId || projects[0]?.id || '');
+            setTemporalParsed(null);
+            setIsExpanded(false);
+            inputRef.current?.blur();
+          }
+        }}
+        ambiguous={temporalParsed?.ambiguous || []}
+        originalText={title}
+        alternatives={ambiguousAlternatives}
+      />
     </div>
   );
 };
