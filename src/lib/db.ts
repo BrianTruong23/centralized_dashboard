@@ -291,6 +291,15 @@ export const db = {
     }
   },
 
+  async updateProject(projectId: string, updates: { name?: string; color?: string }): Promise<void> {
+    const token = requireToken();
+    const payload: Record<string, any> = {};
+    if (typeof updates.name === 'string') payload.name = updates.name;
+    if (typeof updates.color === 'string') payload.color = updates.color;
+    if (Object.keys(payload).length === 0) return;
+    await rawUpdate('projects', payload, { 'id': `eq.${projectId}` }, token);
+  },
+
   async ensureDefaultProjects(userId: string): Promise<any[]> {
     const token = requireToken();
 

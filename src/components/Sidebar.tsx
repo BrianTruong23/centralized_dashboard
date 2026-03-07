@@ -10,6 +10,7 @@ import {
   Settings,
   NotebookPen,
   Trash2,
+  Pencil,
   CheckCircle2,
   Menu,
   X
@@ -36,6 +37,7 @@ interface SidebarProps {
   projects?: Project[];
   onOpenProjectModal: () => void;
   onDeleteProject?: (id: string) => Promise<void> | void;
+  onUpdateProject?: (id: string, updates: { name?: string; color?: string }) => Promise<void> | void;
   onOpenActivityLog: () => void;
   focusPlantEnabled: boolean;
   onToggleFocusPlant: (enabled: boolean) => void;
@@ -60,6 +62,7 @@ export const Sidebar = ({
   projects = [],
   onOpenProjectModal,
   onDeleteProject,
+  onUpdateProject,
   onOpenActivityLog,
   focusPlantEnabled,
   onToggleFocusPlant,
@@ -74,6 +77,12 @@ export const Sidebar = ({
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [showAllProjects, setShowAllProjects] = useState(false);
   const [showAllNavItems, setShowAllNavItems] = useState(false);
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [editProjectName, setEditProjectName] = useState('');
+  const [editProjectColor, setEditProjectColor] = useState('#3b82f6');
+  const [isSavingProjectEdit, setIsSavingProjectEdit] = useState(false);
+
+  const projectColorOptions = ['#22c55e', '#3b82f6', '#06b6d4', '#a855f7', '#f97316', '#e11d48', '#000000'];
 
   // Close mobile menu when view changes
   useEffect(() => {
@@ -87,7 +96,13 @@ export const Sidebar = ({
       if (t.status === 'done') return false;
       if (!t.deadline) return false;
       const today = formatDateKey(new Date());
-      return t.deadline === today;
+      const direct = t.deadline.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (direct) {
+        return `${direct[1]}-${direct[2]}-${direct[3]}` === today;
+      }
+      const parsed = new Date(t.deadline);
+      if (Number.isNaN(parsed.getTime())) return false;
+      return formatDateKey(parsed) === today;
   }).length;
   
   const NavItem = ({ 
@@ -193,10 +208,10 @@ export const Sidebar = ({
           <NavItem id="today" icon={Calendar} label="Today" count={todayCount} />
           <NavItem id="inbox" icon={Inbox} label="Inbox" count={inboxCount} />
           <NavItem id="upcoming" icon={CalendarDays} label="Upcoming" />
+          <NavItem id="daily-notes" icon={NotebookPen} label="Daily Notes" />
           
           {showAllNavItems && (
             <>
-              <NavItem id="daily-notes" icon={NotebookPen} label="Daily Notes" />
               <NavItem id="completed" icon={CheckCircle2} label="Completed" />
             </>
           )}
@@ -223,37 +238,110 @@ export const Sidebar = ({
           <div className="space-y-0.5">
              {(showAllProjects ? projects : projects.slice(0, 3)).map(project => (
                  <div key={project.id} className="group relative">
-                     <button
-                       onClick={() => onViewChange(`project-${project.id}`)}
-                       className={clsx(
-                         "w-full flex items-center gap-3 px-3 py-2 text-sm font-medium transition-colors rounded-lg",
-                         currentView === `project-${project.id}`
-                           ? "bg-white dark:bg-gray-800 text-black dark:text-white shadow-sm"
-                           : "text-gray-500 dark:text-gray-400 hover:bg-gray-100/50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-200"
-                       )}
-                     >
-                       <span 
-                          className="w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-black" 
-                          style={{ backgroundColor: project.color }}
-                       />
-                       <span className="truncate flex-1 text-left">{project.name}</span>
-                     </button>
-                     
-                     {/* Delete Button - Only visible on hover */}
-                     <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            if (window.confirm(`Are you sure you want to delete project "${project.name}"? This action cannot be undone.`)) {
+                    {editingProjectId === project.id ? (
+                      <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 space-y-2">
+                        <input
+                          value={editProjectName}
+                          onChange={(e) => setEditProjectName(e.target.value)}
+                          className="w-full px-2 py-1.5 text-sm border border-gray-200 dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)]/35"
+                          placeholder="Project name"
+                        />
+                        <div className="flex items-center gap-1.5">
+                          {projectColorOptions.map((color) => (
+                            <button
+                              key={color}
+                              type="button"
+                              onClick={() => setEditProjectColor(color)}
+                              className={clsx(
+                                "w-5 h-5 rounded-full border-2 transition-colors",
+                                editProjectColor === color ? "border-[var(--accent-solid)]" : "border-transparent"
+                              )}
+                              style={{ backgroundColor: color }}
+                              title={color}
+                            />
+                          ))}
+                        </div>
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingProjectId(null);
+                              setEditProjectName('');
+                            }}
+                            className="px-2 py-1 text-xs rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isSavingProjectEdit || !editProjectName.trim()}
+                            onClick={() => {
+                              setIsSavingProjectEdit(true);
+                              Promise.resolve(onUpdateProject?.(project.id, {
+                                name: editProjectName.trim(),
+                                color: editProjectColor,
+                              }))
+                                .then(() => {
+                                  setEditingProjectId(null);
+                                  setEditProjectName('');
+                                })
+                                .catch((err: any) => alert(err?.message || 'Failed to update project'))
+                                .finally(() => setIsSavingProjectEdit(false));
+                            }}
+                            className="px-2 py-1 text-xs rounded accent-solid-btn disabled:opacity-50"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => onViewChange(`project-${project.id}`)}
+                          className={clsx(
+                            "w-full flex items-center gap-3 px-3 py-2 text-sm font-medium transition-colors rounded-lg pr-14",
+                            currentView === `project-${project.id}`
+                              ? "bg-white dark:bg-gray-800 text-black dark:text-white shadow-sm"
+                              : "text-gray-500 dark:text-gray-400 hover:bg-gray-100/50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-200"
+                          )}
+                        >
+                          <span 
+                            className="w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-black" 
+                            style={{ backgroundColor: project.color }}
+                          />
+                          <span className="truncate flex-1 text-left">{project.name}</span>
+                        </button>
+                        
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingProjectId(project.id);
+                              setEditProjectName(project.name);
+                              setEditProjectColor(project.color || '#3b82f6');
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md"
+                            title="Edit project"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`Are you sure you want to delete project "${project.name}"? This action cannot be undone.`)) {
                                 Promise.resolve(onDeleteProject?.(project.id)).catch((err: any) => {
-                                    alert(err.message || 'Failed to delete project');
+                                  alert(err.message || 'Failed to delete project');
                                 });
-                            }
-                        }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md opacity-0 group-hover:opacity-100 transition-all"
-                        title="Delete project"
-                     >
-                        <Trash2 size={14} />
-                     </button>
+                              }
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
+                            title="Delete project"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </>
+                    )}
                  </div>
              ))}
              {projects.length === 0 && (

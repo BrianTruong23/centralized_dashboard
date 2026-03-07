@@ -230,7 +230,7 @@ export function AmbientSound() {
               step="0.01"
               value={volume}
               onChange={(e) => setVolume(parseFloat(e.target.value))}
-              className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-black dark:accent-white"
+              className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-[var(--accent-solid)]"
             />
             <Volume2 size={16} className="text-gray-400" />
           </div>
@@ -241,7 +241,7 @@ export function AmbientSound() {
             className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-medium transition-all ${
               isPlaying
                 ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200 dark:border-gray-600'
-                : 'bg-black dark:bg-white text-white dark:text-black hover:opacity-90'
+                : 'accent-solid-btn hover:opacity-90'
             }`}
           >
             {isPlaying ? (
@@ -264,7 +264,7 @@ export function AmbientSound() {
           onClick={() => setIsExpanded(true)}
           className={`p-3 rounded-full shadow-lg transition-all ${
             isPlaying
-              ? 'bg-black dark:bg-white text-white dark:text-black'
+              ? 'accent-solid-btn'
               : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
           }`}
           title="Ambient sounds"

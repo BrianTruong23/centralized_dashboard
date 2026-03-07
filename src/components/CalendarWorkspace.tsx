@@ -245,13 +245,13 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
             <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5">
               <button
                 onClick={() => setViewMode('day')}
-                className={clsx('px-3 py-1.5 text-sm rounded-md', viewMode === 'day' ? 'bg-black text-white dark:bg-white dark:text-black' : 'text-gray-600 dark:text-gray-300')}
+                className={clsx('px-3 py-1.5 text-sm rounded-md', viewMode === 'day' ? 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border border-[var(--accent-border)]' : 'text-gray-600 dark:text-gray-300')}
               >
                 Day
               </button>
               <button
                 onClick={() => setViewMode('week')}
-                className={clsx('px-3 py-1.5 text-sm rounded-md', viewMode === 'week' ? 'bg-black text-white dark:bg-white dark:text-black' : 'text-gray-600 dark:text-gray-300')}
+                className={clsx('px-3 py-1.5 text-sm rounded-md', viewMode === 'week' ? 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border border-[var(--accent-border)]' : 'text-gray-600 dark:text-gray-300')}
               >
                 Week
               </button>

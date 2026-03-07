@@ -77,8 +77,25 @@ function formatPlanDate(deadline?: string): string | null {
   return `${mm}-${dd}-${yyyy}`;
 }
 
+function toDateKey(value?: string): string | null {
+  if (!value) return null;
+  const direct = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (direct) return `${direct[1]}-${direct[2]}-${direct[3]}`;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return formatDateKey(parsed);
+}
+
 // Sortable queue item for plan mode
-function SortableQueueItem({ task, index }: { task: Task; index: number }) {
+function SortableQueueItem({
+  task,
+  index,
+  onMakeNow,
+}: {
+  task: Task;
+  index: number;
+  onMakeNow?: (taskId: string) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
   });
@@ -93,7 +110,7 @@ function SortableQueueItem({ task, index }: { task: Task; index: number }) {
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-2 py-2 px-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors"
+      className="flex items-center gap-2 py-2 px-2 rounded-md border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors"
     >
       <button
         {...attributes}
@@ -108,6 +125,15 @@ function SortableQueueItem({ task, index }: { task: Task; index: number }) {
       <span className="flex-1 text-sm text-gray-700 dark:text-gray-300 truncate">
         {task.title}
       </span>
+      {onMakeNow && (
+        <button
+          type="button"
+          onClick={() => onMakeNow(task.id)}
+          className="text-xs px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+        >
+          Now
+        </button>
+      )}
     </div>
   );
 }
@@ -132,7 +158,7 @@ function LoadingScreen() {
 
 export default function Home() {
   const { tasks, addTask: _addTask, addTasksBatch, updateTask: _updateTask, deleteTask, isLoaded } = useTasks();
-  const { projects, addProject: addProjectFn, deleteProject } = useProjects();
+  const { projects, addProject: addProjectFn, deleteProject, updateProject } = useProjects();
   
   const [tutorialStep, setTutorialStep] = useState<'none' | 'input' | 'list'>('none');
 
@@ -203,6 +229,7 @@ export default function Home() {
 
   const [currentView, setCurrentView] = useState('today');
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [notesRefreshToken, setNotesRefreshToken] = useState(0);
 
   const handleStartTutorial = () => {
     setTutorialStep('input');
@@ -424,13 +451,15 @@ export default function Home() {
   }, [tasks, isLoaded, manualFocusTaskId]);
 
   const handleGeneratePlan = () => {
-    const dueTodayTasks = filterTasksDueToday(tasks, new Date());
+    const dueTodayTasks = filteredTasks.filter((t) => t.status !== 'done');
     const plan = generateDayPlan(dueTodayTasks, { now: new Date(), energyLevel: 'medium', availableTimeMinutes: 480 });
     setDayPlan(plan);
     setShowPlan(true);
     // Set first task as focused
     if (plan.length > 0) {
       setFocusedTaskId(plan[0].id);
+    } else {
+      setFocusedTaskId(null);
     }
   };
 
@@ -464,6 +493,30 @@ export default function Home() {
       : dayPlan[0];
     setActiveFocusTask(taskToFocus);
     setIsFocusModalOpen(true);
+  };
+
+  const handleSetFocusNow = (taskId: string) => {
+    setFocusedTaskId(taskId);
+  };
+
+  const handleSkipFocusTask = () => {
+    if (!focusedTaskId || dayPlan.length <= 1) return;
+    setDayPlan((prev) => {
+      const idx = prev.findIndex((t) => t.id === focusedTaskId);
+      if (idx === -1) return prev;
+      const next = [...prev];
+      const [focus] = next.splice(idx, 1);
+      next.push(focus);
+      setFocusedTaskId(next[0]?.id ?? null);
+      return next;
+    });
+  };
+
+  const handleCompleteFocusTask = async () => {
+    const focusTask = dayPlan.find((t) => t.id === focusedTaskId) || dayPlan[0];
+    if (!focusTask) return;
+    await updateTask({ ...focusTask, status: 'done' });
+    setDayPlan((prev) => prev.filter((t) => t.id !== focusTask.id));
   };
 
   const handlePlanDragEnd = (event: DragEndEvent) => {
@@ -528,6 +581,30 @@ export default function Home() {
     }
   }, [currentView]);
 
+  useEffect(() => {
+    if (currentView !== 'today' || !showPlan) return;
+    const todayKey = formatDateKey(new Date());
+    const candidates = tasks.filter((t) => t.status !== 'done' && toDateKey(t.deadline) === todayKey);
+    setDayPlan((prev) => {
+      const prevIds = new Set(prev.map((t) => t.id));
+      const ordered = prev
+        .map((existing) => candidates.find((c) => c.id === existing.id))
+        .filter(Boolean) as Task[];
+      const additions = candidates.filter((c) => !prevIds.has(c.id));
+      return [...ordered, ...additions];
+    });
+  }, [currentView, tasks, showPlan]);
+
+  useEffect(() => {
+    if (dayPlan.length === 0) {
+      setFocusedTaskId(null);
+      return;
+    }
+    if (!focusedTaskId || !dayPlan.some((t) => t.id === focusedTaskId)) {
+      setFocusedTaskId(dayPlan[0].id);
+    }
+  }, [dayPlan, focusedTaskId]);
+
   // ... (existing effects)
 
   const filteredTasks = useMemo(() => {
@@ -580,13 +657,14 @@ export default function Home() {
 
     if (currentView === 'today') {
         const todayStr = formatDateKey(new Date());
-        return result.filter(t => t.deadline === todayStr);
+        return result.filter(t => toDateKey(t.deadline) === todayStr);
     }
     if (currentView === 'upcoming') {
         const todayStr = formatDateKey(new Date());
         return result.filter(t => {
-             if (!t.deadline) return false;
-             return t.deadline > todayStr;
+             const key = toDateKey(t.deadline);
+             if (!key) return false;
+             return key > todayStr;
         });
     }
     if (currentView.startsWith('project-')) {
@@ -653,6 +731,7 @@ export default function Home() {
           onSearchChange={setSearchQuery}
           projects={projects}
           onDeleteProject={deleteProject}
+          onUpdateProject={updateProject}
 
           focusPlantEnabled={focusPlantEnabled}
           onToggleFocusPlant={setFocusPlantEnabled}
@@ -677,7 +756,7 @@ export default function Home() {
         )}>
           <div>
             <h1 className={clsx(
-              "font-bold tracking-tighter mb-1 font-mono uppercase",
+              "font-bold tracking-tighter mb-1 font-mono uppercase text-[var(--accent-solid)]",
               (currentView === 'today' || currentView === 'inbox') ? "text-xl" : "text-3xl"
             )}>
                {currentView === 'today' ? (
@@ -770,17 +849,17 @@ export default function Home() {
                    placeholder="Search..." 
                    value={searchQuery}
                    onChange={(e) => setSearchQuery(e.target.value)}
-                   className="bg-transparent border-b border-gray-200 dark:border-gray-700 focus:border-black dark:focus:border-white outline-none px-2 py-1 text-sm w-full md:w-32 focus:w-full md:focus:w-48 transition-all"
+                   className="bg-transparent border-b border-gray-200 dark:border-gray-700 focus:border-[var(--accent-border)] outline-none px-2 py-1 text-sm w-full md:w-32 focus:w-full md:focus:w-48 transition-all"
                  />
              </div>
              
              <div className="relative">
-                     <button 
+                    <button 
                     onClick={() => setShowFilters(!showFilters)}
                     className={clsx(
                         "p-2 rounded-full transition-colors",
                         showFilters || Object.values(activeFilters).flat().length > 0 
-                            ? "bg-black text-white dark:bg-white dark:text-black" 
+                            ? "bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border border-[var(--accent-border)]" 
                             : "bg-gray-100 text-gray-400 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700"
                     )}
                  >
@@ -823,10 +902,16 @@ export default function Home() {
                         <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">
                             Today&apos;s Notes
                         </h2>
-                        <DailyNotes userId={userId} onAddTask={addTask} projects={projects} addProject={addProjectFn} />
+                        <DailyNotes
+                          userId={userId}
+                          onAddTask={addTask}
+                          projects={projects}
+                          addProject={addProjectFn}
+                          onNoteSaved={() => setNotesRefreshToken((prev) => prev + 1)}
+                        />
           </section>
         <section className="mb-8">
-                        <DailyNotesHistory userId={userId} />
+                        <DailyNotesHistory userId={userId} refreshToken={notesRefreshToken} />
         </section>
                 </>
             ) : (
@@ -839,48 +924,89 @@ export default function Home() {
                                     <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                         Today&apos;s Tasks
                                     </h2>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (!showPlan) handleGeneratePlan();
+                                        else setShowPlan(false);
+                                      }}
+                                      className={clsx(
+                                        "text-xs font-semibold px-2.5 py-1.5 rounded-md border transition-colors",
+                                        showPlan
+                                          ? "bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] border-[var(--accent-border)]"
+                                          : "accent-solid-btn"
+                                      )}
+                                    >
+                                      {showPlan ? 'Hide focus' : 'Focus now'}
+                                    </button>
                                 </div>
                                 
                                 {/* Plan Mode: Clean Execution Queue */}
-                                {showPlan && dayPlan.length > 0 && (
+                                {showPlan && (
                                     <div className="mb-4 space-y-4">
+                                      {dayPlan.length === 0 ? (
+                                        <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+                                          <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Now</h3>
+                                          <p className="text-sm text-gray-600 dark:text-gray-300">
+                                            No focus task is ready yet. Add a due date for today, then tap <span className="font-semibold">Focus now</span>.
+                                          </p>
+                                        </section>
+                                      ) : (
+                                        <>
                                         {/* Focus Now - Single Task */}
                                         {(() => {
                                             const focusTask = dayPlan.find(t => t.id === focusedTaskId) || dayPlan[0];
                                             const isCompleted = focusTask.status === 'done';
                                             return (
-                                                <section className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Focus Now</h3>
-                                                        <button 
-                                                            onClick={() => setShowPlan(false)} 
-                                                            className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                                                <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Now</h3>
+                                                        <button
+                                                          onClick={() => setShowPlan(false)}
+                                                          className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                                                         >
-                                                            ×
+                                                          ×
                                                         </button>
                                                     </div>
-                                                    <div className="flex items-center justify-between gap-3">
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className={clsx(
-                                                                "text-sm font-medium text-gray-900 dark:text-gray-100",
-                                                                isCompleted && "line-through opacity-60"
-                                                            )}>
-                                                                {focusTask.title}
-                                                            </p>
-                                                            {focusTask.estimatedMinutes && (
-                                                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                                                    {focusTask.estimatedMinutes}m
-                                                                </p>
-                                                            )}
-                                                        </div>
-            <button 
-                                                            onClick={handleFocusNextFromPlan}
-                                                            disabled={isCompleted}
-                                                            className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-black dark:bg-white text-white dark:text-black text-xs font-semibold rounded-md hover:opacity-90 disabled:opacity-50 transition-opacity"
-            >
-                                                            <Play size={12} fill="currentColor" />
-                                                            Start focus
-            </button>
+                                                    <div className="rounded-lg border border-[var(--accent-border)] bg-[var(--accent-soft)]/70 p-4">
+                                                      <p className={clsx(
+                                                        "text-lg font-semibold text-gray-900 dark:text-gray-100 leading-snug",
+                                                        isCompleted && "line-through opacity-60"
+                                                      )}>
+                                                        {focusTask.title}
+                                                      </p>
+                                                      <div className="mt-2 flex items-center gap-2">
+                                                        {focusTask.estimatedMinutes && (
+                                                          <span className="text-xs px-2 py-1 rounded-full border border-[var(--accent-border)] text-[var(--accent-soft-foreground)]">
+                                                            {focusTask.estimatedMinutes}m
+                                                          </span>
+                                                        )}
+                                                        <span className="text-xs px-2 py-1 rounded-full border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
+                                                          P{focusTask.priority || 4}
+                                                        </span>
+                                                      </div>
+                                                      <div className="mt-4 flex flex-wrap gap-2">
+                                                        <button
+                                                          onClick={handleFocusNextFromPlan}
+                                                          disabled={isCompleted}
+                                                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md disabled:opacity-50 transition-opacity accent-solid-btn"
+                                                        >
+                                                          <Play size={12} fill="currentColor" />
+                                                          Start
+                                                        </button>
+                                                        <button
+                                                          onClick={handleCompleteFocusTask}
+                                                          className="px-3 py-1.5 text-xs font-semibold rounded-md border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                                        >
+                                                          Mark complete
+                                                        </button>
+                                                        <button
+                                                          onClick={handleSkipFocusTask}
+                                                          className="px-3 py-1.5 text-xs font-semibold rounded-md border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                                        >
+                                                          Skip
+                                                        </button>
+                                                      </div>
                                                     </div>
                                                 </section>
                                             );
@@ -894,11 +1020,11 @@ export default function Home() {
                                             if (queueTasks.length === 0) return null;
 
                                             return (
-                                                <section className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
+                                                <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
                                                     <div className="mb-2">
                                                         <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Up next</h3>
                                                         <p className="text-xs text-gray-500 dark:text-gray-400">
-                                                            Ordered by urgency, priority, and effort. Drag to reorder.
+                                                            Drag to reorder. Pick any task to make it `Now`.
                                                         </p>
                                                     </div>
                                                     <DndContext
@@ -912,7 +1038,12 @@ export default function Home() {
                                                         >
                                                             <div className="space-y-0.5">
                                                                 {queueTasks.map((task, idx) => (
-                                                                    <SortableQueueItem key={task.id} task={task} index={idx} />
+                                                                    <SortableQueueItem
+                                                                      key={task.id}
+                                                                      task={task}
+                                                                      index={idx}
+                                                                      onMakeNow={handleSetFocusNow}
+                                                                    />
                                                                 ))}
                </div>
                                                         </SortableContext>
@@ -920,19 +1051,39 @@ export default function Home() {
                                                 </section>
                                             );
                                         })()}
+                                        </>
+                                      )}
                        </div>
                                 )}
                                 
-                                {/* Full Task List - Always visible */}
-                                <div className="max-h-[calc(100vh-400px)] overflow-y-auto">
-                                    <TaskList
+                                {/* Task list stays accessible but de-emphasized while focusing */}
+                                {showPlan ? (
+                                  <details className="group">
+                                    <summary className="cursor-pointer text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center justify-between py-2 px-1">
+                                      <span>All today tasks ({filteredTasks.length})</span>
+                                      <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
+                                    </summary>
+                                    <div className="mt-2 max-h-[360px] overflow-y-auto">
+                                      <TaskList
                                         tasks={filteredTasks}
                                         onUpdateTask={updateTask}
                                         onDeleteTask={deleteTask}
                                         onFocusTask={handleFocusTask}
                                         projects={projects}
+                                      />
+                                    </div>
+                                  </details>
+                                ) : (
+                                  <div className="max-h-[calc(100vh-400px)] overflow-y-auto">
+                                    <TaskList
+                                      tasks={filteredTasks}
+                                      onUpdateTask={updateTask}
+                                      onDeleteTask={deleteTask}
+                                      onFocusTask={handleFocusTask}
+                                      projects={projects}
                                     />
-                       </div>
+                                  </div>
+                                )}
                             </section>
 
                             {/* Upcoming Preview - Collapsed */}
