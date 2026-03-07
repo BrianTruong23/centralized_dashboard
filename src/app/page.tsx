@@ -802,7 +802,7 @@ export default function Home() {
             {currentView === 'calendar' ? (
                 <section>
                     <CalendarWorkspace
-                        tasks={tasks.filter(t => t.status !== 'done')}
+                        tasks={filteredTasks}
                         projects={projects}
                         onUpdateTask={updateTask}
                     />
