@@ -134,9 +134,9 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
           start,
           end,
           dayKey: formatDateKey(start),
-          source: 'task',
+          source: 'task' as const,
           task,
-          syncState: linked ? 'linked' : 'task_only',
+          syncState: (linked ? 'linked' : 'task_only') as SyncState,
           color: linked ? '#047857' : projectColor || '#111827',
         };
       })
@@ -156,8 +156,8 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
           start,
           end,
           dayKey: formatDateKey(start),
-          source: 'calendar',
-          syncState: 'calendar_only',
+          source: 'calendar' as const,
+          syncState: 'calendar_only' as SyncState,
           color: '#1d4ed8',
         };
       })
