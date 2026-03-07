@@ -129,11 +129,12 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
         - Work hours: ${preferences.work_hours?.start || '09:00'} to ${preferences.work_hours?.end || '17:00'}
 
       ROLE: Expert Project Manager & Scheduler.
-      GOAL: Create a weekly plan (Mon-Sun) from the provided tasks to satisfy the user's request.
+      GOAL: Create a weekly plan (Mon-Sun) from the provided tasks to satisfy the user's request, focusing especially on taking tasks from the Inbox that don't have due dates and assigning them to days this week to keep the user productive.
       RULES:
-      1. Schedule tasks by deadline & urgency.
-      2. Spread out high-effort tasks.
-      3. Only use the tasks provided in the JSON array. Match their titles EXACTLY.
+      1. Schedule tasks by deadline & urgency first.
+      2. If a task has no due date or project (Inbox task), assign it a day this week so the user can make progress.
+      3. Spread out high-effort tasks evenly.
+      4. Only use the tasks provided in the JSON array. Match their titles EXACTLY.
 
       OUTPUT JSON format only (no markdown):
       {
