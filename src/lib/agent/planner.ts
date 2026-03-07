@@ -71,9 +71,7 @@ export function buildWeeklySchedule(
   return days;
 }
 
-function duplicateKeys(title: string): string {
-  return title.trim().toLowerCase().replace(/\s+/g, ' ');
-}
+
 
 function createAction(action: Omit<ProposedAction, 'action_id'>, index: number): ProposedAction {
   return {
@@ -97,7 +95,7 @@ export function createProposal(
       actions.push(
         createAction(
           {
-            type: 'answer',
+            type: 'update_task',
             destructive: false,
             requires_approval: false,
             reason: `Rank #${index + 1} by due date, urgency, and priority.`,
@@ -105,6 +103,7 @@ export function createProposal(
             target_task_id: task.id,
             patch: {
               task_title: task.title,
+              status: 'doing',
               rank: index + 1,
             },
           },
@@ -146,37 +145,45 @@ export function createProposal(
     };
   }
 
+  // The 'declutter' and 'cleanup' intents are now handled by LLM in service.ts
+  // However, we keep a basic implementation here for testing purposes
   if (intent === 'declutter' || intent === 'cleanup') {
-    const seen = new Map<string, AgentTask>();
-    const duplicates: AgentTask[] = [];
-    cleanTasks.forEach((task) => {
-      if (isDoneOrArchived(task)) return;
-      const key = duplicateKeys(task.title);
-      const first = seen.get(key);
-      if (first) duplicates.push(task);
-      else seen.set(key, task);
+    // Simple duplicate detection for testing
+    const titleMap = new Map<string, AgentTask[]>();
+    cleanTasks.forEach(task => {
+      const normalizedTitle = task.title.toLowerCase().trim();
+      if (!titleMap.has(normalizedTitle)) {
+        titleMap.set(normalizedTitle, []);
+      }
+      titleMap.get(normalizedTitle)!.push(task);
     });
 
-    const seenTargetIds = new Set<string>();
-    duplicates.forEach((task) => {
-      if (seenTargetIds.has(task.id)) return;
-      seenTargetIds.add(task.id);
-      actions.push(
-        createAction(
-          {
-            type: 'archive_task',
-            destructive: true,
-            requires_approval: true,
-            target_task_id: task.id,
-            patch: {
-              task_title: task.title,
-            },
-            reason: `Duplicate task candidate: "${task.title}".`,
-            expected_outcome: `Archive duplicate "${task.title}" while keeping the original task.`,
-          },
-          actions.length
-        )
-      );
+    // Find duplicates (same title, keep the first one)
+    titleMap.forEach((tasksWithSameTitle, title) => {
+      if (tasksWithSameTitle.length > 1) {
+        // Keep the first task (by ID for stable ordering), mark others for deletion
+        const sorted = tasksWithSameTitle.sort((a, b) => a.id.localeCompare(b.id));
+        
+        // Delete all except the first one
+        for (let i = 1; i < sorted.length; i++) {
+          actions.push(
+            createAction(
+              {
+                type: 'delete_task',
+                destructive: true,
+                requires_approval: true,
+                reason: `Duplicate of "${sorted[0].title}"`,
+                expected_outcome: `Remove duplicate task: "${sorted[i].title}"`,
+                target_task_id: sorted[i].id,
+                patch: {
+                  task_title: sorted[i].title,
+                },
+              },
+              actions.length
+            )
+          );
+        }
+      }
     });
   }
 

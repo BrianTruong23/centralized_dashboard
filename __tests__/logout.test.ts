@@ -168,9 +168,14 @@ describe('handleLogout', () => {
 
     // Use fake timers to instantly trigger the timeout
     jest.useFakeTimers();
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    
     const logoutPromise = logoutWithTimeout();
+    await Promise.resolve(); // flush microtasks to ensure setTimeout is registered
     jest.advanceTimersByTime(3000);
     await logoutPromise;
+    
+    consoleSpy.mockRestore();
     jest.useRealTimers();
 
     expect(localStorage.getItem(SESSION_KEY)).toBeNull();

@@ -110,7 +110,7 @@ export function AuthModal({ isOpen, onAuthSuccess }: AuthModalProps) {
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 md:p-8 relative animate-in fade-in zoom-in-95 duration-200">
         <div className="text-center mb-8">
-            <h2 className="text-2xl font-bold mb-2">Welcome to Minima</h2>
+            <h2 className="text-2xl font-bold mb-2">Welcome to Minismo</h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">
                 {isSignUp ? 'Create an account to start syncing.' : 'Log in to continue.'}
             </p>

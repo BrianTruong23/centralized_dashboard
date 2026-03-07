@@ -8,9 +8,10 @@ interface TaskListProps {
   onDeleteTask: (id: string) => void;
   onFocusTask: (task: Task) => void;
   projects?: Project[];
+  isInbox?: boolean;
 }
 
-export const TaskList = ({ tasks, onUpdateTask, onDeleteTask, onFocusTask, projects = [] }: TaskListProps) => {
+export const TaskList = ({ tasks, onUpdateTask, onDeleteTask, onFocusTask, projects = [], isInbox = false }: TaskListProps) => {
   if (tasks.length === 0) {
     return (
       <div className="text-center py-12 text-gray-400">
@@ -37,6 +38,7 @@ export const TaskList = ({ tasks, onUpdateTask, onDeleteTask, onFocusTask, proje
             onDelete={onDeleteTask}
             onFocus={onFocusTask}
             projects={projects}
+            isInbox={isInbox}
           />
         </div>
       ))}
