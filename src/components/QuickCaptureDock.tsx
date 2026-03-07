@@ -267,7 +267,7 @@ export const QuickCaptureDock = ({
           return (
             <span
               key={i}
-              className="bg-orange-100 dark:bg-orange-900/30 text-orange-900 dark:text-orange-200 border-b-2 border-dotted border-orange-400 dark:border-orange-500 whitespace-pre"
+              className="bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] border-b-2 border-dotted border-[var(--accent-border)] whitespace-pre"
               style={{ padding: '0 0.5px', margin: '0 -0.5px' }}
             >
               {part.text}
