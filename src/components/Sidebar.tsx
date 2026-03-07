@@ -12,8 +12,7 @@ import {
   Trash2,
   CheckCircle2,
   Menu,
-  X,
-  ListTodo
+  X
 } from 'lucide-react';
 import { Task } from '@/types/task';
 import { Project, CreateProjectInput } from '@/types/project';
@@ -153,13 +152,7 @@ export const Sidebar = ({
       >
         {/* Header with Logo + UserDropdown */}
         <div className="p-4 mb-2 flex items-center gap-3">
-           <div
-             className="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center"
-             style={{ backgroundColor: 'var(--accent-solid)', color: 'var(--accent-solid-foreground)' }}
-             aria-label="Minismo"
-           >
-             <ListTodo size={16} />
-           </div>
+           <img src="/logo.svg" alt="Minismo" width={48} height={48} className="rounded-lg flex-shrink-0" />
            <div className="min-w-0 flex-1">
                {user ? (
                    <div className="min-w-0">
