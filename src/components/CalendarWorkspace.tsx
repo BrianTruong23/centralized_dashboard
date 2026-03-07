@@ -111,9 +111,10 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
 
   const scheduledTaskEntries = useMemo<TimelineEntry[]>(() => {
     return tasks
-      .filter((task) => task.status !== 'done' && task.scheduled_date)
+      .filter((task) => task.status !== 'done' && (task.scheduled_date || task.deadline))
       .map((task) => {
-        const start = parseLocalDateTime(task.scheduled_date!, task.scheduled_time);
+        const dateKey = task.scheduled_date || task.deadline!;
+        const start = parseLocalDateTime(dateKey, task.scheduled_time || task.due_time || '09:00:00');
         const minutes = Math.max(task.estimatedMinutes || 60, 30);
         const end = new Date(start.getTime() + minutes * 60 * 1000);
         const linked = !!task.planningMetadata?.googleEventId;
@@ -157,7 +158,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
   const timelineEntries = useMemo(() => [...scheduledTaskEntries, ...calendarOnlyEntries], [scheduledTaskEntries, calendarOnlyEntries]);
 
   const unscheduledTasks = useMemo(
-    () => tasks.filter((task) => task.status !== 'done' && !task.scheduled_date),
+    () => tasks.filter((task) => task.status !== 'done' && !task.scheduled_date && !task.deadline),
     [tasks]
   );
 
