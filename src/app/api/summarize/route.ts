@@ -6,13 +6,17 @@ export async function POST(req: Request) {
 
   try {
     log('Request received, parsing body...');
-    const { noteContent } = await req.json();
+    const { noteContent, projects } = await req.json();
     log(`Body parsed. Content length: ${noteContent?.length || 0} chars`);
 
     if (!noteContent) {
       log('ERROR: No note content provided');
       return NextResponse.json({ error: 'Note content is required' }, { status: 400 });
     }
+
+    const availableProjects = (projects && Array.isArray(projects) && projects.length > 0)
+      ? projects.join('|')
+      : 'Work|Life';
 
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
@@ -49,9 +53,10 @@ export async function POST(req: Request) {
               content: `Extract tasks from notes. Today: ${new Date().toISOString().split('T')[0]}
 
 Return JSON only:
-{"summary":"1-2 sentences","actionItems":[{"title":"verb + task","description":"brief","category":"Research|Coding|Admin|Health|Life|Finance|Social|Content|UX","priority":1-5,"estimatedMinutes":15-120,"energyLevel":"low|medium|high","deadline":"YYYY-MM-DD or null"}]}
+{"summary":"1-2 sentences","actionItems":[{"title":"verb + task","description":"brief","category":"${availableProjects}","priority":1-5,"estimatedMinutes":15-120,"energyLevel":"low|medium|high","deadline":"YYYY-MM-DD or null"}]}
 
-Priority: 1=urgent, 2=high, 3=normal, 4=low. Deadline: extract dates from notes, convert to YYYY-MM-DD. Max 5 tasks.`
+Priority: 1=urgent, 2=high, 3=normal, 4=low. Deadline: extract dates from notes, convert to YYYY-MM-DD. Max 5 tasks.
+STRICT CATEGORY RULE: You MUST ONLY use the categories provided in the JSON template above (${availableProjects}). DO NOT create new categories.`
             },
             {
               role: 'user',
