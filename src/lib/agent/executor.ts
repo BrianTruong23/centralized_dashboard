@@ -47,11 +47,11 @@ export async function executeApprovedActions(
     } else if (action.type === 'delete_task' && taskId) {
       await tools.deleteTask(taskId);
       await tools.logActivity({
-        task_id: taskId,
+        task_id: null,
         actor: ctx.actor,
         action_type: 'delete_task',
         before_json: null,
-        after_json: null,
+        after_json: { deleted_task_id: taskId },
         reason: action.reason,
       });
     } else if (action.type === 'create_task') {
