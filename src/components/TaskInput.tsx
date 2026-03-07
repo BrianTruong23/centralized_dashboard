@@ -5,6 +5,9 @@ import { generateId } from '@/lib/utils';
 import clsx from 'clsx';
 import { Plus } from 'lucide-react';
 import { parseDateFromText, dayRegex, parseTagFromText, tagRegex } from '@/lib/smartDate';
+import { parseTemporal, ParsedTemporal } from '@/lib/temporalParser';
+import { TemporalClarificationModal } from './TemporalClarificationModal';
+import { formatDateKey } from '@/lib/dateKey';
 
 interface TaskInputProps {
   onAddTask: (task: Task) => void;
@@ -24,6 +27,9 @@ export const TaskInput = ({ onAddTask, defaultDate, projects = [], defaultProjec
   const [energyLevel, setEnergyLevel] = useState<TaskEnergyLevel>('medium');
   const [deadline, setDeadline] = useState(defaultDate || '');
   const [isExpanded, setIsExpanded] = useState(false);
+  const [temporalParsed, setTemporalParsed] = useState<ParsedTemporal | null>(null);
+  const [showClarification, setShowClarification] = useState(false);
+  const [ambiguousAlternatives, setAmbiguousAlternatives] = useState<ParsedTemporal[]>([]);
 
   // Update deadline when defaultDate changes (e.g. switching views)
   useEffect(() => {
@@ -43,15 +49,26 @@ export const TaskInput = ({ onAddTask, defaultDate, projects = [], defaultProjec
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    
+    // Check for ambiguous temporal parsing
+    if (temporalParsed?.confidence === 'ambiguous' && ambiguousAlternatives.length > 0) {
+      setShowClarification(true);
+      return;
+    }
+    
+    const finalTitle = temporalParsed?.cleanedText || title.trim();
+    if (!finalTitle) return;
 
     // Resolve category name from project ID
     const project = projects.find(p => p.id === projectId);
     const categoryName = project ? project.name : 'Inbox';
 
+    // Use parsed temporal data if available, otherwise fall back to manual deadline
+    const finalDeadline = temporalParsed?.due_date || temporalParsed?.scheduled_date || deadline || undefined;
+
     const newTask: Task = {
       id: generateId(),
-      title,
+      title: finalTitle,
       description,
       category: categoryName,
       priority,
@@ -60,7 +77,11 @@ export const TaskInput = ({ onAddTask, defaultDate, projects = [], defaultProjec
       status: 'todo',
       tags: [],
       createdAt: Date.now(),
-      deadline: deadline || undefined,
+      deadline: finalDeadline,
+      due_time: temporalParsed?.due_time,
+      scheduled_date: temporalParsed?.scheduled_date,
+      scheduled_time: temporalParsed?.scheduled_time,
+      is_all_day: temporalParsed?.is_all_day,
       project_id: projectId || undefined,
     };
 
@@ -69,19 +90,44 @@ export const TaskInput = ({ onAddTask, defaultDate, projects = [], defaultProjec
     // Reset form
     setTitle('');
     setDescription('');
-    // Keep other defaults or reset? Resetting usually better.
     setPriority(3);
     setEstimatedMinutes(60);
     setEnergyLevel('medium');
     setDeadline(defaultDate || '');
+    setTemporalParsed(null);
     setIsExpanded(false);
   };
 
-  // Parse date on title change
+  // Parse temporal information on title change
   useEffect(() => {
-    const match = parseDateFromText(title);
-    if (match) {
+    if (!title.trim()) {
+      setTemporalParsed(null);
+      return;
+    }
+
+    const parsed = parseTemporal(title);
+    
+    // Handle ambiguous cases
+    if (parsed.confidence === 'ambiguous' && parsed.ambiguous && parsed.ambiguous.length > 0) {
+      // For now, we'll show clarification modal on submit
+      // Store the parsed result for later use
+      setTemporalParsed(parsed);
+      // Generate alternatives for clarification
+      // This is simplified - in production, you'd generate actual alternatives
+      setAmbiguousAlternatives([parsed]);
+    } else if (parsed.confidence === 'high' || parsed.confidence === 'medium') {
+      setTemporalParsed(parsed);
+      // Update deadline if parsed date is available
+      if (parsed.due_date || parsed.scheduled_date) {
+        setDeadline(parsed.due_date || parsed.scheduled_date || '');
+      }
+    } else {
+      // Low confidence - fall back to old parser
+      const match = parseDateFromText(title);
+      if (match) {
         setDeadline(match.date);
+      }
+      setTemporalParsed(null);
     }
   }, [title]);
 
@@ -250,6 +296,56 @@ export const TaskInput = ({ onAddTask, defaultDate, projects = [], defaultProjec
           </div>
         )}
       </form>
+
+      {/* Temporal Clarification Modal */}
+      <TemporalClarificationModal
+        isOpen={showClarification}
+        onClose={() => setShowClarification(false)}
+        onConfirm={(selected) => {
+          setTemporalParsed(selected);
+          setShowClarification(false);
+          // Re-submit with selected interpretation
+          const finalTitle = selected.cleanedText || title.trim();
+          if (finalTitle) {
+            const project = projects.find(p => p.id === projectId);
+            const categoryName = project ? project.name : 'Inbox';
+            const finalDeadline = selected.due_date || selected.scheduled_date || deadline || undefined;
+
+            const newTask: Task = {
+              id: generateId(),
+              title: finalTitle,
+              description,
+              category: categoryName,
+              priority,
+              estimatedMinutes,
+              energyLevel,
+              status: 'todo',
+              tags: [],
+              createdAt: Date.now(),
+              deadline: finalDeadline,
+              due_time: selected.due_time,
+              scheduled_date: selected.scheduled_date,
+              scheduled_time: selected.scheduled_time,
+              is_all_day: selected.is_all_day,
+              project_id: projectId || undefined,
+            };
+
+            onAddTask(newTask);
+            // Reset form
+            setTitle('');
+            setDescription('');
+            setPriority(3);
+            setEstimatedMinutes(60);
+            setEnergyLevel('medium');
+            setDeadline(defaultDate || '');
+            setTemporalParsed(null);
+            setIsExpanded(false);
+          }
+        }}
+        ambiguous={temporalParsed?.ambiguous || []}
+        originalText={title}
+        alternatives={ambiguousAlternatives}
+      />
     </div>
   );
 };
