@@ -22,6 +22,7 @@ export interface ParsedTemporal {
   confidence: 'high' | 'medium' | 'low' | 'ambiguous';
   ambiguous?: string[]; // Alternative interpretations
   cleanedText: string; // Text with temporal phrases removed
+  detectedPhrases?: Array<{ phrase: string; start: number; end: number; type: 'date' | 'time' | 'datetime' }>; // For highlighting
 }
 
 interface TemporalMatch {
@@ -30,6 +31,8 @@ interface TemporalMatch {
   value: Date | null;
   confidence: number;
   originalText: string;
+  startIndex: number;
+  endIndex: number;
 }
 
 export class TemporalParser {
@@ -52,6 +55,7 @@ export class TemporalParser {
       return {
         cleanedText: '',
         confidence: 'high',
+        detectedPhrases: [],
       };
     }
 
@@ -62,13 +66,14 @@ export class TemporalParser {
       return {
         cleanedText: originalText,
         confidence: 'high',
+        detectedPhrases: [],
       };
     }
 
     // Sort matches by confidence and position
     matches.sort((a, b) => {
       if (b.confidence !== a.confidence) return b.confidence - a.confidence;
-      return a.originalText.indexOf(a.phrase) - b.originalText.indexOf(b.phrase);
+      return a.startIndex - b.startIndex;
     });
 
     // Check for ambiguity
@@ -83,6 +88,7 @@ export class TemporalParser {
           cleanedText: this.removeTemporalPhrases(originalText, matches),
           confidence: 'ambiguous',
           ambiguous: highConfidenceMatches.map(m => m.phrase),
+          detectedPhrases: matches.map(m => ({ phrase: m.phrase, start: m.startIndex, end: m.endIndex, type: m.type === 'time' ? 'time' : m.type === 'datetime' ? 'datetime' : 'date' })),
         };
       }
     }
@@ -93,6 +99,7 @@ export class TemporalParser {
         cleanedText: this.removeTemporalPhrases(originalText, matches),
         confidence: 'medium',
         ambiguous: mediumConfidenceMatches.map(m => m.phrase),
+        detectedPhrases: matches.map(m => ({ phrase: m.phrase, start: m.startIndex, end: m.endIndex, type: m.type === 'time' ? 'time' : m.type === 'datetime' ? 'datetime' : 'date' })),
       };
     }
 
@@ -102,6 +109,7 @@ export class TemporalParser {
       return {
         cleanedText: this.removeTemporalPhrases(originalText, matches),
         confidence: 'low',
+        detectedPhrases: matches.map(m => ({ phrase: m.phrase, start: m.startIndex, end: m.endIndex, type: m.type === 'time' ? 'time' : m.type === 'datetime' ? 'datetime' : 'date' })),
       };
     }
 
@@ -117,6 +125,7 @@ export class TemporalParser {
     const result: ParsedTemporal = {
       cleanedText: this.removeTemporalPhrases(originalText, matches),
       confidence: bestMatch.confidence >= 0.8 ? 'high' : bestMatch.confidence >= 0.5 ? 'medium' : 'low',
+      detectedPhrases: matches.map(m => ({ phrase: m.phrase, start: m.startIndex, end: m.endIndex, type: m.type === 'time' ? 'time' : m.type === 'datetime' ? 'datetime' : 'date' })),
     };
 
     if (hasAt || hasTime) {
@@ -140,11 +149,11 @@ export class TemporalParser {
 
     // Weekday patterns
     const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const weekdayRegex = new RegExp(`\\b(next\\s+)?(${weekdays.join('|')})\\b`, 'gi');
+    const weekdayRegex = new RegExp(`\\b(?:(by|on|before|until)\\s+)?(?:(next)\\s+)?(${weekdays.join('|')})\\b`, 'gi');
     let match;
     while ((match = weekdayRegex.exec(text)) !== null) {
-      const isNext = match[1]?.toLowerCase().includes('next');
-      const weekday = weekdays.indexOf(match[2].toLowerCase());
+      const isNext = !!match[2];
+      const weekday = weekdays.indexOf(match[3].toLowerCase());
       const date = this.getNextWeekday(weekday, isNext);
       matches.push({
         phrase: match[0],
@@ -152,6 +161,8 @@ export class TemporalParser {
         value: date,
         confidence: 0.9,
         originalText: text,
+        startIndex: match.index!,
+        endIndex: match.index! + match[0].length,
       });
     }
 
@@ -178,6 +189,8 @@ export class TemporalParser {
           value: date,
           confidence: 0.85,
           originalText: text,
+          startIndex: match.index!,
+          endIndex: match.index! + match[0].length,
         });
       }
     }
@@ -212,6 +225,8 @@ export class TemporalParser {
           value: date,
           confidence: 0.9,
           originalText: text,
+          startIndex: match.index!,
+          endIndex: match.index! + match[0].length,
         });
       }
     }
@@ -234,6 +249,8 @@ export class TemporalParser {
           value: date,
           confidence: 0.7,
           originalText: text,
+          startIndex: match.index!,
+          endIndex: match.index! + match[0].length,
         });
       }
     }
@@ -270,12 +287,16 @@ export class TemporalParser {
       if (nearbyTime && dateMatch.value && nearbyTime.value) {
         const combinedDate = new Date(dateMatch.value);
         combinedDate.setHours(nearbyTime.value.getHours(), nearbyTime.value.getMinutes(), 0, 0);
+        const startIndex = Math.min(dateMatch.startIndex, nearbyTime.startIndex);
+        const endIndex = Math.max(dateMatch.endIndex, nearbyTime.endIndex);
         combined.push({
           phrase: `${dateMatch.phrase} ${nearbyTime.phrase}`,
           type: 'datetime',
           value: combinedDate,
           confidence: Math.min(dateMatch.confidence, nearbyTime.confidence),
           originalText: text,
+          startIndex,
+          endIndex,
         });
       } else if (dateMatch.value) {
         combined.push(dateMatch);
