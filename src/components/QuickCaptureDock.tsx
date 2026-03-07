@@ -232,11 +232,17 @@ export const QuickCaptureDock = ({
 
   // Render highlighted text with temporal phrases - using exact text matching to preserve cursor position
   const renderHighlightedText = () => {
-    if (!title || !temporalParsed?.detectedPhrases || temporalParsed.detectedPhrases.length === 0) {
+    const detectedPhrases = (
+      temporalParsed as (ParsedTemporal & {
+        detectedPhrases?: Array<{ phrase: string; start: number; end: number; type: 'date' | 'time' | 'datetime' }>;
+      }) | null
+    )?.detectedPhrases ?? [];
+
+    if (!title || detectedPhrases.length === 0) {
       return <span className="text-gray-900 dark:text-gray-100">{title}</span>;
     }
 
-    const phrases = temporalParsed.detectedPhrases.sort((a, b) => a.start - b.start);
+    const phrases = detectedPhrases.sort((a, b) => a.start - b.start);
     const parts: Array<{ text: string; highlight: boolean }> = [];
     let lastIndex = 0;
 
