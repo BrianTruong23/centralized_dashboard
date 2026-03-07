@@ -947,6 +947,7 @@ export default function Home() {
                           projects={projects}
                           addProject={addProjectFn}
                           onNoteSaved={() => setNotesRefreshToken((prev) => prev + 1)}
+                          isPro={effectiveIsPro}
                         />
           </section>
         <section className="mb-8">
@@ -1107,7 +1108,6 @@ export default function Home() {
                                         tasks={filteredTasks}
                                         onUpdateTask={updateTask}
                                         onDeleteTask={deleteTask}
-                                        onFocusTask={handleFocusTask}
                                         projects={projects}
                                       />
                                     </div>
@@ -1118,7 +1118,6 @@ export default function Home() {
                                       tasks={filteredTasks}
                                       onUpdateTask={updateTask}
                                       onDeleteTask={deleteTask}
-                                      onFocusTask={handleFocusTask}
                                       projects={projects}
                                     />
                                   </div>
@@ -1163,7 +1162,7 @@ export default function Home() {
                                         <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
                                     </summary>
                                     <div className="mt-2">
-                                        <DailyNotes userId={userId} onAddTask={addTask} projects={projects} addProject={addProjectFn} />
+                                        <DailyNotes userId={userId} onAddTask={addTask} projects={projects} addProject={addProjectFn} isPro={effectiveIsPro} />
                  </div>
                                 </details>
                             </section>
@@ -1218,9 +1217,7 @@ export default function Home() {
                                         tasks={filteredTasks}
                                         onUpdateTask={updateTask}
                                         onDeleteTask={deleteTask}
-                                        onFocusTask={handleFocusTask}
                                         projects={projects}
-                                        isInbox={true}
                                     />
                                 </div>
         </section>
@@ -1266,7 +1263,6 @@ export default function Home() {
                                         tasks={filteredTasks}
                                         onUpdateTask={updateTask}
                                         onDeleteTask={deleteTask}
-                                        onFocusTask={handleFocusTask}
                                         projects={projects}
                                     />
                                 </div>
@@ -1286,7 +1282,6 @@ export default function Home() {
                                     tasks={filteredTasks}
             onUpdateTask={updateTask} 
             onDeleteTask={deleteTask} 
-                                    onFocusTask={handleFocusTask}
                                     projects={projects}
           />
         </section>

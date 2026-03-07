@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { notesDb } from '@/lib/notes';
-import { Loader2, Sparkles, Save, Plus, CheckCircle, ListPlus, Calendar, Pencil, WandSparkles, List } from 'lucide-react';
+import { Loader2, Sparkles, Save, Plus, CheckCircle, ListPlus, Calendar, Pencil, WandSparkles, ChevronsUpDown, TextQuote, Briefcase } from 'lucide-react';
 import { Task, TaskCategory, TaskEnergyLevel } from '@/types/task';
 import { Project, CreateProjectInput } from '@/types/project';
 
@@ -23,6 +23,7 @@ interface DailyNotesProps {
   projects?: Project[];
   addProject?: (input: CreateProjectInput) => Promise<Project | undefined>;
   onNoteSaved?: () => void;
+  isPro?: boolean;
 }
 
 type DailyNotesCache = {
@@ -86,7 +87,7 @@ function getSelectionAnchorFromTextarea(
   };
 }
 
-export function DailyNotes({ userId, onAddTask, showHistory = false, projects = [], addProject, onNoteSaved }: DailyNotesProps) {
+export function DailyNotes({ userId, onAddTask, showHistory = false, projects = [], addProject, onNoteSaved, isPro = false }: DailyNotesProps) {
   const MAX_NOTE_WORDS = 500;
   const [noteContent, setNoteContent] = useState('');
   const [summary, setSummary] = useState('');
@@ -102,13 +103,14 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [selectedRange, setSelectedRange] = useState<{ start: number; end: number; text: string } | null>(null);
-  const [selectionActionLoading, setSelectionActionLoading] = useState<'refine' | 'summarize' | null>(null);
+  const [selectionActionLoading, setSelectionActionLoading] = useState<'rephrase' | 'shorten' | 'elaborate' | 'more_formal' | 'custom' | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const writingSurfaceRef = useRef<HTMLDivElement | null>(null);
   const [refineAnchor, setRefineAnchor] = useState<{ x: number; y: number } | null>(null);
   const [isSelectionMenuOpen, setIsSelectionMenuOpen] = useState(false);
   const selectionMenuRef = useRef<HTMLDivElement | null>(null);
   const selectionTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const [selectionPrompt, setSelectionPrompt] = useState('');
 
   // State for missing projects handling
   const [missingProjects, setMissingProjects] = useState<string[]>([]);
@@ -350,8 +352,17 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
     setRefineAnchor(null);
   };
 
-  const handleSelectionAction = async (mode: 'refine' | 'summarize') => {
+  const handleSelectionAction = async (
+    mode: 'rephrase' | 'shorten' | 'elaborate' | 'more_formal' | 'custom'
+  ) => {
     if (!selectedRange || selectionActionLoading) return;
+    if (!isPro) {
+      setError('Text refinement is a Pro feature.');
+      setIsSelectionMenuOpen(false);
+      return;
+    }
+    if (mode === 'custom' && !selectionPrompt.trim()) return;
+
     setSelectionActionLoading(mode);
     setError(null);
     try {
@@ -362,6 +373,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
           selectedText: selectedRange.text,
           fullText: noteContent,
           mode,
+          instruction: selectionPrompt.trim() || undefined,
         }),
       });
 
@@ -382,14 +394,16 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
       setSelectedRange(null);
       setRefineAnchor(null);
       setIsSelectionMenuOpen(false);
+      setSelectionPrompt('');
       requestAnimationFrame(() => {
         const element = textareaRef.current;
         if (!element) return;
         element.focus();
         element.setSelectionRange(nextCursor, nextCursor);
       });
-    } catch (err: any) {
-      setError(err?.message || 'Failed to refine selection');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to refine selection';
+      setError(message);
     } finally {
       setSelectionActionLoading(null);
     }
@@ -650,7 +664,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
             </div>
           </div>
           <div ref={writingSurfaceRef} className="relative rounded-2xl bg-gray-50/70 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800 px-5 py-4">
-            {selectedRange && refineAnchor && (
+            {selectedRange && refineAnchor && isPro && (
               <>
                 <button
                   ref={selectionTriggerRef}
@@ -666,26 +680,59 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
                 {isSelectionMenuOpen && (
                   <div
                     ref={selectionMenuRef}
-                    className="absolute z-20 min-w-[170px] rounded-xl border border-gray-200 bg-white p-1.5 shadow-lg dark:border-gray-700 dark:bg-gray-800"
+                    className="absolute z-20 min-w-[280px] rounded-xl border border-gray-200 bg-white p-2 shadow-lg dark:border-gray-700 dark:bg-gray-800"
                     style={{ left: refineAnchor.x, top: refineAnchor.y + 40 }}
                   >
+                    <div className="mb-1.5">
+                      <input
+                        type="text"
+                        value={selectionPrompt}
+                        onChange={(e) => setSelectionPrompt(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            void handleSelectionAction('custom');
+                          }
+                        }}
+                        placeholder="Modify with a prompt"
+                        className="w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700 outline-none focus:border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                      />
+                    </div>
                     <button
                       type="button"
-                      onClick={() => handleSelectionAction('refine')}
+                      onClick={() => handleSelectionAction('rephrase')}
                       disabled={!!selectionActionLoading}
                       className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-60 dark:text-gray-200 dark:hover:bg-gray-700"
                     >
                       <WandSparkles size={14} />
-                      Refine
+                      Rephrase
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleSelectionAction('summarize')}
+                      onClick={() => handleSelectionAction('shorten')}
                       disabled={!!selectionActionLoading}
                       className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-60 dark:text-gray-200 dark:hover:bg-gray-700"
                     >
-                      <List size={14} />
-                      Summarize
+                      <ChevronsUpDown size={14} />
+                      Shorten
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectionAction('elaborate')}
+                      disabled={!!selectionActionLoading}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-60 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      <TextQuote size={14} />
+                      Elaborate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectionAction('more_formal')}
+                      disabled={!!selectionActionLoading}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-60 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      <Briefcase size={14} />
+                      More formal
                     </button>
                   </div>
                 )}
