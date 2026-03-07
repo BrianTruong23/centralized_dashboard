@@ -77,18 +77,34 @@ function toDate(value?: string | null): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+function toTimeString(date: Date): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(
+    date.getSeconds()
+  ).padStart(2, '0')}`;
+}
+
 function getTaskTimeRange(task: Task): { start: Date; end: Date; dayKey: string } | null {
   const startFromTimestamp = toDate(task.start_time);
   if (startFromTimestamp) {
+    const dayKeyFromDeadline = normalizeDateKey(task.deadline);
+    const anchoredStart = dayKeyFromDeadline
+      ? parseLocalDateTime(dayKeyFromDeadline, toTimeString(startFromTimestamp))
+      : startFromTimestamp;
+
     const endFromTimestamp = toDate(task.end_time);
-    const computedEnd =
+    const durationFromTimestamps =
       endFromTimestamp && endFromTimestamp.getTime() > startFromTimestamp.getTime()
-        ? endFromTimestamp
-        : new Date(startFromTimestamp.getTime() + Math.max(task.estimatedMinutes || 60, 30) * 60 * 1000);
+        ? Math.round((endFromTimestamp.getTime() - startFromTimestamp.getTime()) / 60000)
+        : null;
+    const computedEnd = new Date(
+      anchoredStart.getTime() +
+        Math.max(durationFromTimestamps || task.estimatedMinutes || 60, 30) * 60 * 1000
+    );
+
     return {
-      start: startFromTimestamp,
+      start: anchoredStart,
       end: computedEnd,
-      dayKey: formatDateKey(startFromTimestamp),
+      dayKey: dayKeyFromDeadline || formatDateKey(anchoredStart),
     };
   }
 
