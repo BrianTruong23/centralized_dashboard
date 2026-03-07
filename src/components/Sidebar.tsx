@@ -154,11 +154,11 @@ export const Sidebar = ({
         {/* Header with Logo + UserDropdown */}
         <div className="p-4 mb-2 flex items-center gap-3">
            <div
-             className="w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center"
+             className="w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center"
              style={{ backgroundColor: 'var(--accent-solid)', color: 'var(--accent-solid-foreground)' }}
              aria-label="Minismo"
            >
-             <ListTodo size={24} />
+             <ListTodo size={18} />
            </div>
            <div className="min-w-0 flex-1">
                {user ? (
