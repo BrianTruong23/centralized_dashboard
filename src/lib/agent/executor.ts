@@ -7,6 +7,13 @@ type ExecutorContext = {
   alreadyExecutedActionIds?: Set<string>;
 };
 
+type PlannedTaskShape = { id?: string | null };
+type PlannedDayShape = {
+  date?: string | null;
+  tasks?: PlannedTaskShape[] | null;
+  task_ids?: Array<string | null> | null;
+};
+
 export async function executeApprovedActions(
   actions: ProposedAction[],
   tools: AgentTools,
@@ -70,8 +77,22 @@ export async function executeApprovedActions(
       });
     } else if (action.type === 'create_plan') {
       const weekRange = String(action.patch?.week_range ?? '');
-      const days = Array.isArray(action.patch?.days) ? (action.patch?.days as any[]) : [];
+      const days = Array.isArray(action.patch?.days) ? (action.patch?.days as PlannedDayShape[]) : [];
       await tools.createPlan(weekRange, days);
+      for (const day of days) {
+        const date = typeof day?.date === 'string' ? day.date : undefined;
+        if (!date) continue;
+        const idsFromTasks = Array.isArray(day?.tasks)
+          ? day.tasks.map((task) => String(task?.id ?? '')).filter(Boolean)
+          : [];
+        const idsFromTaskIds = Array.isArray(day?.task_ids)
+          ? day.task_ids.map((taskId) => String(taskId ?? '')).filter(Boolean)
+          : [];
+        const taskIds = idsFromTasks.length > 0 ? idsFromTasks : idsFromTaskIds;
+        for (const taskId of taskIds) {
+          await tools.updateTask(taskId, { due_at: date });
+        }
+      }
       await tools.logActivity({
         task_id: null,
         actor: ctx.actor,
