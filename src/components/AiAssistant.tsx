@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { Sparkles, Send, X, Maximize2, Minimize2, Eraser, History, ChevronDown, Loader2, Brain } from 'lucide-react';
 import { formatDateKey } from '@/lib/dateKey';
@@ -19,6 +19,14 @@ interface Message {
   content?: string;
   reply?: InboxCopilotReply;
   mode?: 'answer_only' | 'answer_with_suggested_actions';
+}
+
+interface ConversationHistoryItem {
+  id: string;
+  title: string;
+  messages: Message[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface PlanTaskDraft {
@@ -120,6 +128,8 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
   const [pendingFollowUp, setPendingFollowUp] = useState<PendingFollowUp>(null);
   const [actionsVisibleByMessage, setActionsVisibleByMessage] = useState<Record<string, boolean>>({});
   const [appliedHistory, setAppliedHistory] = useState<Array<{ messageId: string; actionId: string }>>([]);
+  const [conversationHistory, setConversationHistory] = useState<ConversationHistoryItem[]>([]);
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
 
   const panelClass = useMemo(
     () =>
@@ -131,6 +141,109 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
 
   const actionKey = (messageId: string, actionId: string) => `${messageId}:${actionId}`;
   const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+  const historyStorageKey = `ai_assistant_history_v1:${userId || 'anon'}`;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = localStorage.getItem(historyStorageKey);
+      if (!raw) {
+        setConversationHistory([]);
+        return;
+      }
+      const parsed = JSON.parse(raw) as ConversationHistoryItem[];
+      if (!Array.isArray(parsed)) {
+        setConversationHistory([]);
+        return;
+      }
+      const normalized = parsed
+        .map((item: unknown) => {
+          const it = (item ?? {}) as Partial<ConversationHistoryItem> & { userText?: string; assistantReply?: InboxCopilotReply; mode?: Message['mode'] };
+          if (Array.isArray(it.messages)) {
+            return {
+              id: String(it.id || `conv-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
+              title: String(it.title || 'Conversation'),
+              messages: it.messages as Message[],
+              createdAt: String(it.createdAt || new Date().toISOString()),
+              updatedAt: String(it.updatedAt || it.createdAt || new Date().toISOString()),
+            } as ConversationHistoryItem;
+          }
+          if (typeof it.userText === 'string' && it.assistantReply) {
+            const now = new Date().toISOString();
+            return {
+              id: String(it.id || `conv-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`),
+              title: it.userText.slice(0, 80),
+              messages: [
+                { id: `legacy-u-${Date.now()}`, role: 'user', content: it.userText },
+                { id: `legacy-a-${Date.now()}`, role: 'assistant', reply: it.assistantReply, mode: it.mode },
+              ],
+              createdAt: String(it.createdAt || now),
+              updatedAt: String(it.createdAt || now),
+            } as ConversationHistoryItem;
+          }
+          return null;
+        })
+        .filter((item): item is ConversationHistoryItem => Boolean(item));
+      setConversationHistory(normalized.slice(-10));
+    } catch {
+      setConversationHistory([]);
+    }
+  }, [historyStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(historyStorageKey, JSON.stringify(conversationHistory.slice(-10)));
+    } catch {
+      // ignore storage errors
+    }
+  }, [conversationHistory, historyStorageKey]);
+
+  useEffect(() => {
+    if (!currentConversationId || messages.length === 0) return;
+    const nowIso = new Date().toISOString();
+    const firstUserText =
+      messages.find((m) => m.role === 'user' && typeof m.content === 'string')?.content?.trim() || 'Conversation';
+    const title = firstUserText.length > 80 ? `${firstUserText.slice(0, 77)}...` : firstUserText;
+
+    setConversationHistory((prev) => {
+      const existing = prev.find((item) => item.id === currentConversationId);
+      if (!existing) {
+        return [
+          ...prev,
+          {
+            id: currentConversationId,
+            title,
+            messages,
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          },
+        ].slice(-10);
+      }
+      return prev
+        .map((item) =>
+          item.id === currentConversationId
+            ? {
+                ...item,
+                title,
+                messages,
+                updatedAt: nowIso,
+              }
+            : item
+        )
+        .slice(-10);
+    });
+  }, [messages, currentConversationId]);
+
+  const pushAssistantMessage = (
+    reply: InboxCopilotReply,
+    mode?: 'answer_only' | 'answer_with_suggested_actions'
+  ) => {
+    const assistantId = `assistant-${Date.now()}`;
+    const assistantMessage: Message = { id: assistantId, role: 'assistant', reply, mode };
+    setMessages((prev) => [...prev, assistantMessage]);
+    return assistantId;
+  };
 
   const buildContextSummary = () => {
     const active = tasks.filter((t) => t.status !== 'done');
@@ -148,6 +261,22 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
       return `assistant: ${answer}`;
     });
     return recent.join('\n');
+  };
+
+  const clearConversationHistory = () => {
+    setConversationHistory([]);
+    try {
+      localStorage.removeItem(historyStorageKey);
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const loadHistoryIntoConversation = (item: ConversationHistoryItem) => {
+    setMessages(item.messages);
+    setCurrentConversationId(item.id);
+    setPendingFollowUp(null);
+    setInput('');
   };
 
   const buildAppliedActionsSummary = () => {
@@ -451,6 +580,10 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
     const text = input.trim();
     if (!text) return;
 
+    if (!currentConversationId) {
+      setCurrentConversationId(`conv-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    }
+
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -479,21 +612,14 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
       if (hidden) {
         setActionsVisibleByMessage((prev) => ({ ...prev, [hidden.id]: true }));
         setPendingFollowUp({ type: 'apply_actions', messageId: hidden.id });
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `assistant-${Date.now()}`,
-            role: 'assistant',
-            reply: {
-              understanding: 'You asked to see suggested actions.',
-              known: [],
-              inferred: [],
-              answer: 'I have shown the suggested actions for the latest answer.',
-              actions: [],
-              confirmation: 'You can apply one action, apply all, or say undo later.',
-            },
-          },
-        ]);
+        pushAssistantMessage({
+          understanding: 'You asked to see suggested actions.',
+          known: [],
+          inferred: [],
+          answer: 'I have shown the suggested actions for the latest answer.',
+          actions: [],
+          confirmation: 'You can apply one action, apply all, or say undo later.',
+        });
         setIsThinking(false);
         return;
       }
@@ -501,21 +627,14 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
 
     if (applyAllLike && latestAssistantWithActions?.reply) {
       const status = await applyAllActionsForMessage(latestAssistantWithActions.id, latestAssistantWithActions.reply.actions || []);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `assistant-${Date.now()}`,
-          role: 'assistant',
-          reply: {
-            understanding: 'You asked to apply all suggested actions.',
-            known: [],
-            inferred: [],
-            answer: status,
-            actions: [],
-            confirmation: 'If you want, I can suggest a different action set next.',
-          },
-        },
-      ]);
+      pushAssistantMessage({
+        understanding: 'You asked to apply all suggested actions.',
+        known: [],
+        inferred: [],
+        answer: status,
+        actions: [],
+        confirmation: 'If you want, I can suggest a different action set next.',
+      });
       setPendingFollowUp({ type: 'different_action_set', fromMessageId: latestAssistantWithActions.id, fromActionSkills: (latestAssistantWithActions.reply.actions || []).map((a) => a.skill) });
       setIsThinking(false);
       return;
@@ -525,21 +644,14 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
       const first = (latestAssistantWithActions.reply.actions || []).find((a) => a.executable);
       if (first) {
         await executeAction(latestAssistantWithActions.id, first);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `assistant-${Date.now()}`,
-            role: 'assistant',
-            reply: {
-              understanding: 'You asked to apply the first suggested action.',
-              known: [],
-              inferred: [],
-              answer: `Applied "${first.label}".`,
-              actions: [],
-              confirmation: 'If you want, I can apply the rest or suggest a different set.',
-            },
-          },
-        ]);
+        pushAssistantMessage({
+          understanding: 'You asked to apply the first suggested action.',
+          known: [],
+          inferred: [],
+          answer: `Applied "${first.label}".`,
+          actions: [],
+          confirmation: 'If you want, I can apply the rest or suggest a different set.',
+        });
       }
       setIsThinking(false);
       return;
@@ -558,40 +670,26 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
             copy.splice(idx, 1);
             return copy;
           });
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `assistant-${Date.now()}`,
-              role: 'assistant',
-              reply: {
-                understanding: 'You asked to undo the latest applied action.',
-                known: [],
-                inferred: [],
-                answer: `Reverted "${action.label}".`,
-                actions: [],
-                confirmation: 'You can continue or ask for new suggestions.',
-              },
-            },
-          ]);
+          pushAssistantMessage({
+            understanding: 'You asked to undo the latest applied action.',
+            known: [],
+            inferred: [],
+            answer: `Reverted "${action.label}".`,
+            actions: [],
+            confirmation: 'You can continue or ask for new suggestions.',
+          });
           setIsThinking(false);
           return;
         }
       }
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `assistant-${Date.now()}`,
-          role: 'assistant',
-          reply: {
-            understanding: 'You asked to undo.',
-            known: [],
-            inferred: [],
-            answer: 'I could not find a recent applied action to undo.',
-            actions: [],
-            confirmation: 'Try applying an action first, then ask undo.',
-          },
-        },
-      ]);
+      pushAssistantMessage({
+        understanding: 'You asked to undo.',
+        known: [],
+        inferred: [],
+        answer: 'I could not find a recent applied action to undo.',
+        actions: [],
+        confirmation: 'Try applying an action first, then ask undo.',
+      });
       setIsThinking(false);
       return;
     }
@@ -611,14 +709,7 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
         actions: [],
         confirmation: `You can reply with a number (1-${options.length}) or the mode name.`,
       };
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `assistant-${Date.now()}`,
-          role: 'assistant',
-          reply: choiceReply,
-        },
-      ]);
+      pushAssistantMessage(choiceReply);
       setPendingFollowUp({ type: 'choose_next_assist_mode', options });
       setIsThinking(false);
       return;
@@ -645,28 +736,13 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
           actions: [],
           confirmation: `Reply with ${aliases}.`,
         };
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `assistant-${Date.now()}`,
-            role: 'assistant',
-            reply: nudgeReply,
-          },
-        ]);
+        pushAssistantMessage(nudgeReply);
         setIsThinking(false);
         return;
       }
 
       const reply = buildInboxCopilotReply(tasks, modePrompt);
-      const nextAssistantId = `assistant-${Date.now()}`;
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: nextAssistantId,
-          role: 'assistant',
-          reply,
-        },
-      ]);
+      const nextAssistantId = pushAssistantMessage(reply);
       if ((reply.actions || []).length > 0) {
         setPendingFollowUp({ type: 'apply_actions', messageId: nextAssistantId });
       } else {
@@ -693,14 +769,7 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
           ? 'If you want, I can suggest a different action set.'
           : 'Applied. If you want, I can now suggest a different action set.',
       };
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `assistant-${Date.now()}`,
-          role: 'assistant',
-          reply: memoryReply,
-        },
-      ]);
+      pushAssistantMessage(memoryReply);
       const appliedFromSkills = (targetActions || []).map((a) => a.skill);
       setPendingFollowUp({
         type: 'different_action_set',
@@ -713,9 +782,7 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
 
     const mode = await routeResponseMode(text);
     const reply = buildInboxCopilotReply(tasks, text);
-    const assistantMessageId = `assistant-${Date.now()}`;
-    const assistantMessage: Message = { id: assistantMessageId, role: 'assistant', reply, mode };
-    setMessages((prev) => [...prev, assistantMessage]);
+    const assistantMessageId = pushAssistantMessage(reply, mode);
     const autoPlanActions = (reply.actions || []).filter((a) => a.skill === 'auto_plan');
     if (autoPlanActions.length > 0) {
       setPlanDrafts((prev) => {
@@ -757,6 +824,7 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
     setPendingFollowUp(null);
     setActionsVisibleByMessage({});
     setAppliedHistory([]);
+    setCurrentConversationId(null);
   };
 
   const togglePlanTaskIncluded = (key: string, taskId: string) => {
@@ -1148,20 +1216,49 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
 
               {showActivity && (
                 <div className="px-4 pb-3 max-h-48 overflow-y-auto">
-                  {messages.length === 0 ? (
+                  <div className="mb-2 flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={clearConversationHistory}
+                      disabled={conversationHistory.length === 0}
+                      className="px-2 py-1 rounded-md text-[11px] border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+                    >
+                      Clear history
+                    </button>
+                  </div>
+                  {conversationHistory.length === 0 ? (
                     <p className="text-xs text-gray-500 dark:text-gray-400 py-2">No activity yet</p>
                   ) : (
                     <div className="space-y-1.5">
-                      {messages
-                        .filter((m) => m.role === 'user')
+                      {[...conversationHistory]
                         .slice()
                         .reverse()
-                        .map((m) => (
+                        .map((item) => (
                           <div
-                            key={`activity-${m.id}`}
+                            key={`activity-${item.id}`}
                             className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 text-xs text-gray-700 dark:text-gray-200"
                           >
-                            {m.content}
+                            <div className="font-medium text-gray-800 dark:text-gray-100 truncate">{item.title}</div>
+                            <div className="text-gray-500 dark:text-gray-400 mt-1">
+                              {item.messages.filter((m) => m.role === 'user').length} user messages ·{' '}
+                              {item.messages.filter((m) => m.role === 'assistant').length} assistant replies
+                            </div>
+                            <div className="text-gray-400 dark:text-gray-500 mt-1 line-clamp-2">
+                              {item.messages
+                                .filter((m) => m.role === 'assistant' && m.reply?.answer)
+                                .slice(-1)[0]
+                                ?.reply?.answer || 'No assistant response yet'}
+                            </div>
+                            <div className="mt-2 flex items-center justify-between">
+                              <span className="text-[10px] text-gray-400">{new Date(item.updatedAt).toLocaleString()}</span>
+                              <button
+                                type="button"
+                                onClick={() => loadHistoryIntoConversation(item)}
+                                className="px-2 py-1 rounded-md text-[11px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                              >
+                                Load into chat
+                              </button>
+                            </div>
                           </div>
                         ))}
                     </div>
