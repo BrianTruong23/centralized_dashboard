@@ -47,6 +47,11 @@ type PendingFollowUp =
   | { type: 'choose_next_assist_mode'; options: NextAssistOption[] }
   | null;
 
+type NextAssistResponse = {
+  options: NextAssistOption[];
+  question: string;
+};
+
 const QUICK_PROMPTS = [
   'What should I do today?',
   'What is most urgent in my inbox?',
@@ -67,7 +72,7 @@ function nextWorkDates(count: number): string[] {
   return dates;
 }
 
-function buildAlternativeModes(fromSkills: string[]): NextAssistOption[] {
+function buildFallbackAlternativeModes(fromSkills: string[]): NextAssistOption[] {
   const base: NextAssistOption[] = [
     {
       key: 'today',
@@ -136,6 +141,26 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
     return `active=${active.length}; overdue=${overdue}; no_date=${noDate}; doing=${doing}`;
   };
 
+  const buildConversationSummary = () => {
+    const recent = messages.slice(-8).map((m) => {
+      if (m.role === 'user') return `user: ${String(m.content || '').slice(0, 160)}`;
+      const answer = String(m.reply?.answer || '').replace(/\s+/g, ' ').slice(0, 180);
+      return `assistant: ${answer}`;
+    });
+    return recent.join('\n');
+  };
+
+  const buildAppliedActionsSummary = () => {
+    const recent = [...appliedHistory].slice(-8);
+    if (recent.length === 0) return 'none';
+    return recent
+      .map((entry) => {
+        const action = findActionFromMessage(entry.messageId, entry.actionId);
+        return action ? `${action.skill}: ${action.label}` : `${entry.actionId}`;
+      })
+      .join(' | ');
+  };
+
   const routeResponseMode = async (message: string): Promise<'answer_only' | 'answer_with_suggested_actions'> => {
     try {
       const res = await fetch('/api/agent/route-mode', {
@@ -151,6 +176,51 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
     const lower = message.toLowerCase();
     const actionLike = /(move|set|change|apply|plan|declutter|clean up|cleanup|rewrite|clarify|defer|batch|mark|update)/.test(lower);
     return actionLike ? 'answer_with_suggested_actions' : 'answer_only';
+  };
+
+  const suggestNextAssistOptions = async (fromSkills: string[]): Promise<NextAssistResponse> => {
+    try {
+      const res = await fetch('/api/agent/next-assist-options', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contextSummary: buildContextSummary(),
+          fromActionSkills: fromSkills,
+          recentUserMessages: messages.filter((m) => m.role === 'user').slice(-5).map((m) => m.content || ''),
+          conversationSummary: buildConversationSummary(),
+          appliedActionsSummary: buildAppliedActionsSummary(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data?.options) && data.options.length > 0) {
+        const options = data.options
+          .map((opt: unknown) => {
+            const option = (opt ?? {}) as { key?: unknown; label?: unknown; prompt?: unknown; aliases?: unknown };
+            return {
+              key: String(option.key || '').trim().toLowerCase(),
+              label: String(option.label || '').trim(),
+              prompt: String(option.prompt || '').trim(),
+              aliases: Array.isArray(option.aliases)
+                ? option.aliases.map((a: unknown) => String(a || '').toLowerCase()).filter(Boolean)
+                : [],
+            };
+          })
+          .filter((opt: NextAssistOption) => opt.key && opt.label && opt.prompt);
+        if (options.length > 0) {
+          return {
+            options: options.slice(0, 3),
+            question: String(data?.question || '').trim(),
+          };
+        }
+      }
+    } catch {
+      // fallback below
+    }
+    const options = buildFallbackAlternativeModes(fromSkills);
+    return {
+      options,
+      question: `Do you want me to continue with ${options.map((o) => o.label.toLowerCase()).join(' or ')}?`,
+    };
   };
 
   const findActionFromMessage = (messageId: string, actionId: string): SuggestedAction | null => {
@@ -527,19 +597,19 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
     }
 
     if (yesLike && pendingFollowUp?.type === 'different_action_set') {
-      const options = buildAlternativeModes(pendingFollowUp.fromActionSkills);
-      const optionText = options
-        .map((option, idx) => `(${idx + 1}) ${option.label}`)
-        .join(', or ');
-      const aliasHint = options.map((o) => `"${o.key}"`).join(' / ');
+      const nextAssist = await suggestNextAssistOptions(pendingFollowUp.fromActionSkills);
+      const options = nextAssist.options;
+      const defaultHint = options.map((option, idx) => `(${idx + 1}) ${option.label}`).join(', or ');
+      const dynamicQuestion = nextAssist.question?.trim() || `Great. I can do one of these next: ${defaultHint}`;
+      const optionLines = options.map((option, idx) => `${idx + 1}. ${option.label}`).join('\n');
 
       const choiceReply: InboxCopilotReply = {
         understanding: 'You want another helpful action set after applying the last one.',
         known: ['I can continue with a different assistant mode.'],
         inferred: [],
-        answer: 'Great. I can do one of these next:',
+        answer: `${dynamicQuestion}\n\nNext steps I can run now:\n${optionLines}`,
         actions: [],
-        confirmation: `Do you want me to ${optionText}? Reply with ${aliasHint}.`,
+        confirmation: `You can reply with a number (1-${options.length}) or the mode name.`,
       };
       setMessages((prev) => [
         ...prev,
@@ -556,11 +626,13 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
 
     if (pendingFollowUp?.type === 'choose_next_assist_mode') {
       const lower = text.toLowerCase();
+      const numericChoiceMatch = lower.match(/\b([1-3])\)?\b/);
+      const numericIndex = numericChoiceMatch ? Number(numericChoiceMatch[1]) - 1 : -1;
       const selectedOption = pendingFollowUp.options.find(
         (option) =>
           lower.includes(option.key) ||
           option.aliases.some((alias) => lower.includes(alias))
-      );
+      ) || (numericIndex >= 0 ? pendingFollowUp.options[numericIndex] : undefined);
       const modePrompt = selectedOption?.prompt || null;
 
       if (!modePrompt) {
@@ -827,7 +899,7 @@ export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
 
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Answer</p>
-                        <p>{msg.reply?.answer}</p>
+                        <p className="whitespace-pre-line">{msg.reply?.answer}</p>
                       </div>
 
                       {(msg.reply?.actions || []).length > 0 && (actionsVisibleByMessage[msg.id] ?? true) && (
