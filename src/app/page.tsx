@@ -809,7 +809,7 @@ export default function Home() {
           <div>
             <h1 className={clsx(
               "font-bold tracking-tighter mb-1 font-mono uppercase text-[var(--accent-solid)]",
-              (currentView === 'today' || currentView === 'inbox' || currentView === 'completed') ? "text-xl" : "text-3xl"
+              (currentView === 'today' || currentView === 'inbox' || currentView === 'upcoming' || currentView === 'completed' || currentView === 'daily-notes') ? "text-xl" : "text-3xl"
             )}>
                {currentView === 'today' ? (
                  <div className="flex items-center gap-3">

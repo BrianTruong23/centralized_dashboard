@@ -444,16 +444,16 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                 Month
               </button>
               <button
-                onClick={() => setViewMode('day')}
-                className={clsx('px-3 py-1.5 text-sm rounded-md', viewMode === 'day' ? 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border border-[var(--accent-border)]' : 'text-gray-600 dark:text-gray-300')}
-              >
-                Day
-              </button>
-              <button
                 onClick={() => setViewMode('week')}
                 className={clsx('px-3 py-1.5 text-sm rounded-md', viewMode === 'week' ? 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border border-[var(--accent-border)]' : 'text-gray-600 dark:text-gray-300')}
               >
                 Week
+              </button>
+              <button
+                onClick={() => setViewMode('day')}
+                className={clsx('px-3 py-1.5 text-sm rounded-md', viewMode === 'day' ? 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border border-[var(--accent-border)]' : 'text-gray-600 dark:text-gray-300')}
+              >
+                Day
               </button>
             </div>
             <button onClick={() => handleNavigate('prev')} className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300">
