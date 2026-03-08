@@ -16,6 +16,7 @@ import {
   Eye,
   AlertTriangle,
   RotateCcw,
+  Eraser,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { supabase } from '@/lib/supabase';
@@ -661,6 +662,16 @@ export function AiAssistant({ userId }: AiAssistantProps) {
     setShowDetails((prev) => ({ ...prev, [messageId]: !prev[messageId] }));
   };
 
+  const handleClearContext = () => {
+    setMessages([]);
+    setCurrentRun(null);
+    setApprovedActionIds(new Set());
+    setShowDetails({});
+    setEditableDays([]);
+    setError(null);
+    setInput('');
+  };
+
   return (
     <>
       {isOpen && (
@@ -962,6 +973,15 @@ export function AiAssistant({ userId }: AiAssistantProps) {
                   className="flex-1 min-h-[44px] max-h-32 px-4 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)]/30 resize-none"
                   rows={1}
                 />
+                <button
+                  type="button"
+                  onClick={handleClearContext}
+                  disabled={isLoading || isExecuting || (!currentRun && messages.length === 0)}
+                  className="px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors flex items-center justify-center"
+                  title="Clear context"
+                >
+                  <Eraser size={16} />
+                </button>
                 <button
                   type="button"
                   onClick={handlePropose}
