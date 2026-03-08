@@ -13,6 +13,8 @@ create table tasks (
   estimated_minutes integer default 60,
   energy_level text default 'medium',
   deadline timestamp with time zone,
+  start_time timestamp with time zone,
+  end_time timestamp with time zone,
   tags text[] default '{}',
   completed boolean default false,
   status text default 'todo',

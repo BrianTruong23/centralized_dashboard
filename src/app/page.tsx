@@ -228,6 +228,12 @@ export default function Home() {
   });
 
   const [currentView, setCurrentView] = useState('today');
+  const [inboxDisplayView, setInboxDisplayView] = useState<'inbox' | 'kanban' | 'calendar'>(() => {
+    if (typeof window === 'undefined') return 'inbox';
+    const stored = localStorage.getItem('inbox_display_view');
+    if (stored === 'kanban' || stored === 'calendar' || stored === 'inbox') return stored;
+    return 'inbox';
+  });
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [notesRefreshToken, setNotesRefreshToken] = useState(0);
 
@@ -252,6 +258,7 @@ export default function Home() {
   const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
   const [activeFocusTask, setActiveFocusTask] = useState<Task | null>(null);
   const [isFocusModalOpen, setIsFocusModalOpen] = useState(false);
+  const [focusModalAutoStart, setFocusModalAutoStart] = useState(false);
   
   // Auto Plan State
   const [isAutoPlanModalOpen, setIsAutoPlanModalOpen] = useState(false);
@@ -298,6 +305,35 @@ export default function Home() {
       // ignore storage errors
     }
   }, [planningPreferences]);
+
+  useEffect(() => {
+    if (currentView === 'inbox' || currentView === 'kanban' || currentView === 'calendar') {
+      setInboxDisplayView(currentView);
+      try {
+        localStorage.setItem('inbox_display_view', currentView);
+      } catch {
+        // ignore storage errors
+      }
+    }
+  }, [currentView]);
+
+  const switchInboxDisplayView = (next: 'inbox' | 'kanban' | 'calendar') => {
+    setInboxDisplayView(next);
+    try {
+      localStorage.setItem('inbox_display_view', next);
+    } catch {
+      // ignore storage errors
+    }
+    setCurrentView(next);
+  };
+
+  const handleSidebarViewChange = (nextView: string) => {
+    if (nextView === 'inbox') {
+      setCurrentView(inboxDisplayView);
+      return;
+    }
+    setCurrentView(nextView);
+  };
 
   const getDefaultDate = () => {
     if (currentView === 'today') {
@@ -492,6 +528,7 @@ export default function Home() {
       ? dayPlan.find(t => t.id === focusedTaskId) || dayPlan[0]
       : dayPlan[0];
     setActiveFocusTask(taskToFocus);
+    setFocusModalAutoStart(true);
     setIsFocusModalOpen(true);
   };
 
@@ -544,11 +581,13 @@ export default function Home() {
   const handleFocusTask = (task: Task) => {
     setManualFocusTaskId(task.id);
     setActiveFocusTask(task);
+    setFocusModalAutoStart(false);
     setIsFocusModalOpen(true);
   };
 
   const handleStartFocusSession = (task: Task) => {
     setActiveFocusTask(task);
+    setFocusModalAutoStart(true);
     setIsFocusModalOpen(true);
   };
 
@@ -722,7 +761,7 @@ export default function Home() {
       {/* Sidebar */}
        <Sidebar
           currentView={currentView}
-          onViewChange={setCurrentView}
+          onViewChange={handleSidebarViewChange}
           tasks={tasks}
           onAddTask={() => setIsCreateTaskModalOpen(true)}
           user={user}
@@ -798,49 +837,63 @@ export default function Home() {
 
           <div className="flex items-center gap-2 w-full md:w-auto">
              {showViewSwitcher && (
-               <div className="relative">
-                 <button
-                   onClick={() => setShowViewDropdown((prev) => !prev)}
-                   className="px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 flex items-center gap-1"
-                 >
-                   {viewSwitcherLabel}
-                   <ChevronDown size={12} />
-                 </button>
-                 {showViewDropdown && (
-                   <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-20 min-w-[120px]">
-                     <button
-                       type="button"
-                       onClick={() => {
-                         setCurrentView('inbox');
-                         setShowViewDropdown(false);
-                       }}
-                       className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-                     >
-                       List
-                     </button>
-                     <button
-                       type="button"
-                       onClick={() => {
-                         setCurrentView('kanban');
-                         setShowViewDropdown(false);
-                       }}
-                       className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-                     >
-                       Kanban
-                     </button>
-                     <button
-                       type="button"
-                       onClick={() => {
-                         setCurrentView('calendar');
-                         setShowViewDropdown(false);
-                       }}
-                       className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-                     >
-                       Calendar
-                     </button>
-                   </div>
-                 )}
-               </div>
+               <>
+                 <div className="md:hidden">
+                   <select
+                     value={currentView === 'kanban' ? 'kanban' : currentView === 'calendar' ? 'calendar' : 'inbox'}
+                     onChange={(e) => switchInboxDisplayView(e.target.value as 'inbox' | 'kanban' | 'calendar')}
+                     className="h-9 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2.5 text-sm text-gray-700 dark:text-gray-200 outline-none"
+                   >
+                     <option value="inbox">List</option>
+                     <option value="kanban">Kanban</option>
+                     <option value="calendar">Calendar</option>
+                   </select>
+                 </div>
+
+                 <div className="relative hidden md:block">
+                   <button
+                     onClick={() => setShowViewDropdown((prev) => !prev)}
+                     className="px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 flex items-center gap-1 bg-white dark:bg-gray-900"
+                   >
+                     {viewSwitcherLabel}
+                     <ChevronDown size={12} />
+                   </button>
+                   {showViewDropdown && (
+                     <div className="absolute left-0 md:left-auto md:right-0 top-full mt-1 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-[120] min-w-[140px]">
+                       <button
+                         type="button"
+                         onClick={() => {
+                           switchInboxDisplayView('inbox');
+                           setShowViewDropdown(false);
+                         }}
+                         className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                       >
+                         List
+                       </button>
+                       <button
+                         type="button"
+                         onClick={() => {
+                           switchInboxDisplayView('kanban');
+                           setShowViewDropdown(false);
+                         }}
+                         className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                       >
+                         Kanban
+                       </button>
+                       <button
+                         type="button"
+                         onClick={() => {
+                           switchInboxDisplayView('calendar');
+                           setShowViewDropdown(false);
+                         }}
+                         className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                       >
+                         Calendar
+                       </button>
+                     </div>
+                   )}
+                 </div>
+               </>
              )}
 
              <div className="relative group flex-1 md:flex-none">
@@ -908,6 +961,7 @@ export default function Home() {
                           projects={projects}
                           addProject={addProjectFn}
                           onNoteSaved={() => setNotesRefreshToken((prev) => prev + 1)}
+                          isPro={effectiveIsPro}
                         />
           </section>
         <section className="mb-8">
@@ -1068,7 +1122,6 @@ export default function Home() {
                                         tasks={filteredTasks}
                                         onUpdateTask={updateTask}
                                         onDeleteTask={deleteTask}
-                                        onFocusTask={handleFocusTask}
                                         projects={projects}
                                       />
                                     </div>
@@ -1079,7 +1132,6 @@ export default function Home() {
                                       tasks={filteredTasks}
                                       onUpdateTask={updateTask}
                                       onDeleteTask={deleteTask}
-                                      onFocusTask={handleFocusTask}
                                       projects={projects}
                                     />
                                   </div>
@@ -1124,7 +1176,7 @@ export default function Home() {
                                         <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
                                     </summary>
                                     <div className="mt-2">
-                                        <DailyNotes userId={userId} onAddTask={addTask} projects={projects} addProject={addProjectFn} />
+                                        <DailyNotes userId={userId} onAddTask={addTask} projects={projects} addProject={addProjectFn} isPro={effectiveIsPro} />
                  </div>
                                 </details>
                             </section>
@@ -1179,25 +1231,11 @@ export default function Home() {
                                         tasks={filteredTasks}
                                         onUpdateTask={updateTask}
                                         onDeleteTask={deleteTask}
-                                        onFocusTask={handleFocusTask}
                                         projects={projects}
-                                        isInbox={true}
                                     />
                                 </div>
         </section>
 
-                            {/* Notes - Collapsed */}
-        <section>
-                                <details className="group">
-                                    <summary className="cursor-pointer text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center justify-between py-2 px-1">
-                                        <span>Notes</span>
-                                        <ChevronDown size={12} className="transition-transform group-open:rotate-180" />
-                                    </summary>
-                                    <div className="mt-2">
-                                        <DailyNotes userId={userId} onAddTask={addTask} projects={projects} addProject={addProjectFn} />
-                                    </div>
-                                </details>
-                            </section>
                         </>
                     ) : currentView === 'upcoming' ? (
                         <>
@@ -1239,7 +1277,6 @@ export default function Home() {
                                         tasks={filteredTasks}
                                         onUpdateTask={updateTask}
                                         onDeleteTask={deleteTask}
-                                        onFocusTask={handleFocusTask}
                                         projects={projects}
                                     />
                                 </div>
@@ -1259,7 +1296,6 @@ export default function Home() {
                                     tasks={filteredTasks}
             onUpdateTask={updateTask} 
             onDeleteTask={deleteTask} 
-                                    onFocusTask={handleFocusTask}
                                     projects={projects}
           />
         </section>
@@ -1339,12 +1375,17 @@ export default function Home() {
       
       <FocusSessionModal 
         isOpen={isFocusModalOpen}
-        onClose={() => setIsFocusModalOpen(false)}
+        onClose={() => {
+          setIsFocusModalOpen(false);
+          setFocusModalAutoStart(false);
+        }}
         task={activeFocusTask}
         showFocusPlant={focusPlantEnabled}
+        autoStart={focusModalAutoStart}
         onComplete={(task) => {
           updateTask({ ...task, status: 'done' });
           setIsFocusModalOpen(false);
+          setFocusModalAutoStart(false);
           setActiveFocusTask(null);
         }}
       />
