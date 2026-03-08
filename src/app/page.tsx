@@ -837,49 +837,63 @@ export default function Home() {
 
           <div className="flex items-center gap-2 w-full md:w-auto">
              {showViewSwitcher && (
-               <div className="relative">
-                 <button
-                   onClick={() => setShowViewDropdown((prev) => !prev)}
-                   className="px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 flex items-center gap-1 bg-white dark:bg-gray-900"
-                 >
-                   {viewSwitcherLabel}
-                   <ChevronDown size={12} />
-                 </button>
-                 {showViewDropdown && (
-                   <div className="absolute left-0 md:left-auto md:right-0 top-full mt-1 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-[120] min-w-[140px]">
-                     <button
-                       type="button"
-                       onClick={() => {
-                         switchInboxDisplayView('inbox');
-                         setShowViewDropdown(false);
-                       }}
-                       className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-                     >
-                       List
-                     </button>
-                     <button
-                       type="button"
-                       onClick={() => {
-                         switchInboxDisplayView('kanban');
-                         setShowViewDropdown(false);
-                       }}
-                       className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-                     >
-                       Kanban
-                     </button>
-                     <button
-                       type="button"
-                       onClick={() => {
-                         switchInboxDisplayView('calendar');
-                         setShowViewDropdown(false);
-                       }}
-                       className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
-                     >
-                       Calendar
-                     </button>
-                   </div>
-                 )}
-               </div>
+               <>
+                 <div className="md:hidden">
+                   <select
+                     value={currentView === 'kanban' ? 'kanban' : currentView === 'calendar' ? 'calendar' : 'inbox'}
+                     onChange={(e) => switchInboxDisplayView(e.target.value as 'inbox' | 'kanban' | 'calendar')}
+                     className="h-9 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2.5 text-sm text-gray-700 dark:text-gray-200 outline-none"
+                   >
+                     <option value="inbox">List</option>
+                     <option value="kanban">Kanban</option>
+                     <option value="calendar">Calendar</option>
+                   </select>
+                 </div>
+
+                 <div className="relative hidden md:block">
+                   <button
+                     onClick={() => setShowViewDropdown((prev) => !prev)}
+                     className="px-2.5 py-1.5 rounded-md border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 flex items-center gap-1 bg-white dark:bg-gray-900"
+                   >
+                     {viewSwitcherLabel}
+                     <ChevronDown size={12} />
+                   </button>
+                   {showViewDropdown && (
+                     <div className="absolute left-0 md:left-auto md:right-0 top-full mt-1 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-[120] min-w-[140px]">
+                       <button
+                         type="button"
+                         onClick={() => {
+                           switchInboxDisplayView('inbox');
+                           setShowViewDropdown(false);
+                         }}
+                         className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                       >
+                         List
+                       </button>
+                       <button
+                         type="button"
+                         onClick={() => {
+                           switchInboxDisplayView('kanban');
+                           setShowViewDropdown(false);
+                         }}
+                         className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                       >
+                         Kanban
+                       </button>
+                       <button
+                         type="button"
+                         onClick={() => {
+                           switchInboxDisplayView('calendar');
+                           setShowViewDropdown(false);
+                         }}
+                         className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
+                       >
+                         Calendar
+                       </button>
+                     </div>
+                   )}
+                 </div>
+               </>
              )}
 
              <div className="relative group flex-1 md:flex-none">

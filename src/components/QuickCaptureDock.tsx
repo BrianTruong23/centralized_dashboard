@@ -321,13 +321,10 @@ export const QuickCaptureDock = ({
     <div
       ref={dockRef}
       className={clsx(
-        "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 transition-all duration-300 ease-out",
+        "fixed bottom-6 left-3 right-[4.75rem] translate-x-0 md:left-1/2 md:right-auto md:-translate-x-1/2 z-50 transition-all duration-300 ease-out",
+        isExpanded ? "w-[calc(100vw-1.5rem)] md:w-[min(600px,90vw)]" : "w-[calc(100vw-6rem)] md:w-auto",
         isVisible ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 translate-y-4 pointer-events-none"
       )}
-      style={{
-        maxWidth: 'calc(100% - 2rem)',
-        width: isExpanded ? 'min(600px, 90vw)' : 'auto',
-      }}
     >
       <div
         className={clsx(

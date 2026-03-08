@@ -1013,7 +1013,7 @@ export function AiAssistant({ userId }: AiAssistantProps) {
 
       <button
         onClick={() => setIsOpen((v) => !v)}
-        className="fixed bottom-20 md:bottom-4 right-4 md:right-20 z-[300] p-3 rounded-full shadow-lg border border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] hover:bg-[var(--accent-solid)] hover:text-[var(--accent-solid-foreground)] transition-colors"
+        className="fixed bottom-6 md:bottom-4 right-4 md:right-20 z-[300] p-3 rounded-full shadow-lg border border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] hover:bg-[var(--accent-solid)] hover:text-[var(--accent-solid-foreground)] transition-colors"
         title="AI assistant"
       >
         <Sparkles size={20} />
