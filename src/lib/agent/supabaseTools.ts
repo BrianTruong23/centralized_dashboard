@@ -113,6 +113,7 @@ export function createSupabaseAgentTools(userToken: string): AgentTools {
       if (typeof patch.priority === 'number') body.priority = patch.priority;
       if (typeof patch.estimate_minutes === 'number') body.estimated_minutes = patch.estimate_minutes;
       if (typeof patch.due_at === 'string') body.deadline = patch.due_at;
+      if (typeof patch.project_id === 'string') body.project_id = patch.project_id;
       if (typeof patch.archived === 'boolean') body.archived = patch.archived;
       const url = `${supabaseUrl()}/rest/v1/tasks?id=eq.${id}`;
       await requestOk(url, {

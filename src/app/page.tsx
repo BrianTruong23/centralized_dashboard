@@ -266,6 +266,7 @@ export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isActivityLogOpen, setIsActivityLogOpen] = useState(false);
+  const [isClearingCompleted, setIsClearingCompleted] = useState(false);
   const [focusPlantEnabled, setFocusPlantEnabled] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     const raw = localStorage.getItem('focus_plant_enabled');
@@ -737,6 +738,18 @@ export default function Home() {
     setActiveFilters({ status: [], priority: [], category: [] });
   };
 
+  const handleDeleteAllCompleted = async () => {
+    const completedTaskIds = tasks.filter((t) => t.status === 'done').map((t) => t.id);
+    if (completedTaskIds.length === 0 || isClearingCompleted) return;
+
+    setIsClearingCompleted(true);
+    try {
+      await Promise.all(completedTaskIds.map((id) => deleteTask(id)));
+    } finally {
+      setIsClearingCompleted(false);
+    }
+  };
+
   if (!isLoaded) {
     return <LoadingScreen />;
   }
@@ -796,7 +809,7 @@ export default function Home() {
           <div>
             <h1 className={clsx(
               "font-bold tracking-tighter mb-1 font-mono uppercase text-[var(--accent-solid)]",
-              (currentView === 'today' || currentView === 'inbox') ? "text-xl" : "text-3xl"
+              (currentView === 'today' || currentView === 'inbox' || currentView === 'completed') ? "text-xl" : "text-3xl"
             )}>
                {currentView === 'today' ? (
                  <div className="flex items-center gap-3">
@@ -819,6 +832,13 @@ export default function Home() {
                      {todoTasks.length} {todoTasks.length === 1 ? 'task' : 'tasks'}
                         </span>
                  </div>
+              ) : currentView === 'completed' ? (
+                <div className="flex items-center gap-3">
+                  <span>Completed</span>
+                  <span className="text-sm font-normal text-gray-500 dark:text-gray-400 normal-case">
+                    {filteredTasks.length} {filteredTasks.length === 1 ? 'task' : 'tasks'}
+                  </span>
+                </div>
                ) : currentView === 'calendar' ? (
                  <div className="flex items-center gap-3">
                    <span>Calendar</span>
@@ -927,6 +947,17 @@ export default function Home() {
                     projects={projects}
                  />
                    </div>
+
+             {effectiveIsPro && ['inbox', 'kanban', 'calendar'].includes(currentView) && (
+               <button
+                 onClick={() => setIsInboxCleanupModalOpen(true)}
+                 className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center gap-1 transition-colors text-sm"
+                 title="Review inbox for cleanup suggestions"
+               >
+                 <Sparkles size={14} />
+                 Clean-up
+               </button>
+             )}
                 </div>
         </header>
 
@@ -1207,18 +1238,7 @@ export default function Home() {
                                                 <span>{noPriority} no priority</span>
                                             )}
 
-                                            <div className="ml-auto flex items-center gap-2">
-                                                {effectiveIsPro && (
-                                                    <button
-                                                        onClick={() => setIsInboxCleanupModalOpen(true)}
-                                                        className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 flex items-center gap-1 transition-colors"
-                                                        title="Review inbox for cleanup suggestions"
-                                                    >
-                                                        <Sparkles size={12} />
-                                                        Clean-up
-                                                    </button>
-                                                )}
-                                            </div>
+                                            <div className="ml-auto flex items-center gap-2" />
                                         </div>
                                     </section>
                                 );
@@ -1278,6 +1298,33 @@ export default function Home() {
                                         onUpdateTask={updateTask}
                                         onDeleteTask={deleteTask}
                                         projects={projects}
+                                    />
+                                </div>
+                            </section>
+                        </>
+                    ) : currentView === 'completed' ? (
+                        <>
+                            <section className="mb-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                        Completed Tasks ({filteredTasks.length})
+                                    </h2>
+                                    <button
+                                      type="button"
+                                      onClick={handleDeleteAllCompleted}
+                                      disabled={filteredTasks.length === 0 || isClearingCompleted}
+                                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-red-200 dark:border-red-900/50 text-xs font-semibold text-red-600 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      <Trash2 size={13} />
+                                      {isClearingCompleted ? 'Deleting...' : 'Delete all completed'}
+                                    </button>
+                                </div>
+                                <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
+                                    <TaskList
+                                      tasks={filteredTasks}
+                                      onUpdateTask={updateTask}
+                                      onDeleteTask={deleteTask}
+                                      projects={projects}
                                     />
                                 </div>
                             </section>
@@ -1391,6 +1438,8 @@ export default function Home() {
       />
       <AiAssistant
         userId={user?.id}
+        tasks={tasks}
+        onUpdateTask={updateTask}
       />
       <AmbientSound />
       

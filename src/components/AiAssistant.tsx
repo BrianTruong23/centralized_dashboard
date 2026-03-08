@@ -1,675 +1,732 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Loader2,
-  Sparkles,
-  Send,
-  X,
-  Maximize2,
-  Minimize2,
-  Check,
-  History,
-  Clock,
-  ChevronDown,
-  ChevronRight,
-  Eye,
-  AlertTriangle,
-  RotateCcw,
-  Eraser,
-} from 'lucide-react';
+import { useMemo, useState } from 'react';
 import clsx from 'clsx';
-import { supabase } from '@/lib/supabase';
-import { AgentRunRecord, ProposedAction } from '@/lib/agent/types';
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-  useSortable,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { Sparkles, Send, X, Maximize2, Minimize2, Eraser, History, ChevronDown, Loader2, Brain } from 'lucide-react';
+import { formatDateKey } from '@/lib/dateKey';
+import { Task } from '@/types/task';
+import { buildInboxCopilotReply, InboxCopilotReply, SuggestedAction } from '@/lib/inboxCopilot';
 
 interface AiAssistantProps {
   userId?: string;
+  tasks: Task[];
+  onUpdateTask: (task: Task) => Promise<void> | void;
 }
-
-type RunDisplayState = 'preview' | 'applied' | 'conversation';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
-  content: string;
-  run?: AgentRunRecord;
-  runState?: RunDisplayState;
-  resultLines?: string[];
-  timestamp: Date;
+  content?: string;
+  reply?: InboxCopilotReply;
+  mode?: 'answer_only' | 'answer_with_suggested_actions';
 }
 
-type TaskSnapshot = {
+interface PlanTaskDraft {
   id: string;
-  text: string;
-  status: 'todo' | 'doing' | 'done';
-  priority: number | null;
-  deadline: string | null;
-  estimated_minutes: number | null;
-  project_id: string | null;
-  archived: boolean;
-};
-
-type UndoOperation =
-  | { type: 'restore'; taskId: string; snapshot: TaskSnapshot }
-  | { type: 'recreate'; snapshot: TaskSnapshot };
-
-interface AppliedRunMeta {
-  summaryLines: string[];
-  undoOperations: UndoOperation[];
-  undone: boolean;
+  title: string;
+  priority: number;
+  included: boolean;
 }
 
-function shortRunId(id: string): string {
-  return id.slice(0, 8);
+interface PlanDayDraft {
+  date: string;
+  label: string;
+  tasks: PlanTaskDraft[];
 }
 
-function SortableTask({ task, id }: { task: any; id: string }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id,
-    data: { task },
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.3 : 1,
-    cursor: 'grab',
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className="flex flex-col gap-1 p-2 rounded-md border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 shadow-sm hover:shadow-md transition-shadow"
-    >
-      <div className="font-medium text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight">{task.title}</div>
-      <div className="flex flex-wrap gap-2 items-center text-[10px] mt-0.5">
-        {task.project && (
-          <span className="px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200">{task.project}</span>
-        )}
-        {task.estimated_minutes && (
-          <span className="font-medium text-gray-500 dark:text-gray-300 flex items-center gap-1">
-            <Clock size={10} /> {task.estimated_minutes}m
-          </span>
-        )}
-        <span className="font-bold text-gray-500 ml-auto">P{task.priority || 4}</span>
-      </div>
-    </div>
-  );
+interface NextAssistOption {
+  key: string;
+  label: string;
+  prompt: string;
+  aliases: string[];
 }
 
-function getPlainLanguageLabel(action: ProposedAction): string {
-  const taskTitle = action.patch?.task_title;
-  if (typeof taskTitle === 'string' && taskTitle.trim().length > 0) {
-    return taskTitle;
+type PendingFollowUp =
+  | { type: 'apply_actions'; messageId: string }
+  | { type: 'different_action_set'; fromMessageId: string; fromActionSkills: string[] }
+  | { type: 'choose_next_assist_mode'; options: NextAssistOption[] }
+  | null;
+
+const QUICK_PROMPTS = [
+  'What should I do today?',
+  'What is most urgent in my inbox?',
+  'Declutter my inbox',
+  'Auto plan my week',
+];
+
+function nextWorkDates(count: number): string[] {
+  const dates: string[] = [];
+  const cursor = new Date();
+  while (dates.length < count) {
+    const day = cursor.getDay();
+    if (day !== 0 && day !== 6) {
+      dates.push(formatDateKey(cursor));
+    }
+    cursor.setDate(cursor.getDate() + 1);
   }
-
-  switch (action.type) {
-    case 'create_task':
-      return 'Add a new task';
-    case 'update_task':
-      return action.patch?.status ? `Mark as ${action.patch.status}` : 'Update task details';
-    case 'delete_task':
-      return 'Delete task';
-    case 'archive_task':
-      return 'Archive task';
-    case 'create_plan':
-      return 'Build this week\'s schedule';
-    case 'answer':
-      return 'Suggested next step';
-    default:
-      return String(action.type).replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
-  }
+  return dates;
 }
 
-function getActionDescription(action: ProposedAction): string {
-  if (action.reason) return action.reason;
-  return action.expected_outcome || 'Apply this change';
+function buildAlternativeModes(fromSkills: string[]): NextAssistOption[] {
+  const base: NextAssistOption[] = [
+    {
+      key: 'today',
+      label: 'Suggest what to do today',
+      prompt: 'What should I do today?',
+      aliases: ['today', 'do today', 'what today', 'focus today', 'suggest today'],
+    },
+    {
+      key: 'declutter',
+      label: 'Declutter inbox',
+      prompt: 'Declutter my inbox',
+      aliases: ['declutter', 'cleanup', 'clean up', 'organize inbox', 'inbox cleanup'],
+    },
+    {
+      key: 'plan',
+      label: 'Auto plan week',
+      prompt: 'Auto plan my week',
+      aliases: ['plan', 'auto plan', 'schedule', 'week', 'weekly plan'],
+    },
+  ];
+
+  const lastWasDeclutter = fromSkills.includes('declutter') || fromSkills.includes('rewrite_title');
+  const lastWasPlan = fromSkills.includes('auto_plan');
+  const lastWasPrioritize = fromSkills.includes('move_to_today') || fromSkills.includes('move_status');
+
+  if (lastWasDeclutter) return base.filter((o) => o.key !== 'declutter');
+  if (lastWasPlan) return base.filter((o) => o.key !== 'plan');
+  if (lastWasPrioritize) return base.filter((o) => o.key !== 'today');
+  return base.slice(0, 2);
 }
 
-function getRunState(run: AgentRunRecord): RunDisplayState {
-  const hasExecuted = (run.executed_actions_json || []).length > 0;
-  const hasProposal = (run.proposed_plan_json?.proposed_actions || []).length > 0;
-  if (hasExecuted) return 'applied';
-  if (hasProposal) return 'preview';
-  return 'conversation';
-}
-
-function runPendingActions(run: AgentRunRecord): ProposedAction[] {
-  const executed = new Set((run.executed_actions_json || []).map((a) => a.action_id));
-  return (run.proposed_plan_json?.proposed_actions || []).filter((a) => !executed.has(a.action_id));
-}
-
-function chooseSuggestedActions(actions: ProposedAction[]): ProposedAction[] {
-  const safe = actions.filter((a) => !a.destructive && !a.requires_approval);
-  const sensitive = actions.filter((a) => a.destructive || a.requires_approval);
-  return [...safe.slice(0, 3), ...sensitive.slice(0, Math.max(0, 3 - safe.length))].slice(0, 3);
-}
-
-function summarizeExecutedActions(actions: ProposedAction[]): string[] {
-  if (actions.length === 0) return ['Applied. No new task changes were needed.'];
-
-  const scheduled: string[] = [];
-  const completed: string[] = [];
-  const updated: string[] = [];
-  const archived: string[] = [];
-  const deleted: string[] = [];
-  const created: string[] = [];
-
-  actions.forEach((action) => {
-    const title = typeof action.patch?.task_title === 'string' ? action.patch.task_title : 'task';
-
-    if (action.type === 'create_plan') {
-      const days = Array.isArray(action.patch?.days) ? action.patch?.days : [];
-      const total = days.reduce((count: number, day: any) => count + (Array.isArray(day.tasks) ? day.tasks.length : 0), 0);
-      scheduled.push(`${total} task${total === 1 ? '' : 's'} placed into a weekly plan`);
-      return;
-    }
-
-    if (action.type === 'update_task') {
-      const status = action.patch?.status;
-      if (status === 'done') completed.push(title);
-      else if (typeof action.patch?.due_at === 'string' || typeof action.patch?.deadline === 'string') scheduled.push(title);
-      else updated.push(title);
-      return;
-    }
-
-    if (action.type === 'archive_task') {
-      archived.push(title);
-      return;
-    }
-
-    if (action.type === 'delete_task') {
-      deleted.push(title);
-      return;
-    }
-
-    if (action.type === 'create_task') {
-      created.push(typeof action.patch?.title === 'string' ? action.patch.title : 'New task');
-    }
-  });
-
-  const lines: string[] = [];
-  if (scheduled.length > 0) lines.push(`Scheduled: ${scheduled.join(', ')}`);
-  if (completed.length > 0) lines.push(`Marked complete: ${completed.join(', ')}`);
-  if (updated.length > 0) lines.push(`Updated: ${updated.join(', ')}`);
-  if (created.length > 0) lines.push(`Created: ${created.join(', ')}`);
-  if (archived.length > 0) lines.push(`Archived: ${archived.join(', ')}`);
-  if (deleted.length > 0) lines.push(`Deleted: ${deleted.join(', ')}`);
-  return lines;
-}
-
-export function AiAssistant({ userId }: AiAssistantProps) {
+export function AiAssistant({ userId, tasks, onUpdateTask }: AiAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [input, setInput] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isExecuting, setIsExecuting] = useState(false);
-  const [isUndoing, setIsUndoing] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [currentRun, setCurrentRun] = useState<AgentRunRecord | null>(null);
-  const [approvedActionIds, setApprovedActionIds] = useState<Set<string>>(new Set());
-  const [history, setHistory] = useState<AgentRunRecord[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [showDetails, setShowDetails] = useState<Record<string, boolean>>({});
-  const [editableDays, setEditableDays] = useState<any[]>([]);
-  const [appliedRuns, setAppliedRuns] = useState<Record<string, AppliedRunMeta>>({});
+  const [showActivity, setShowActivity] = useState(false);
+  const [isApplying, setIsApplying] = useState<Record<string, boolean>>({});
+  const [appliedResult, setAppliedResult] = useState<Record<string, string>>({});
+  const [appliedFlags, setAppliedFlags] = useState<Record<string, boolean>>({});
+  const [actionUndo, setActionUndo] = useState<Record<string, Task[]>>({});
+  const [isThinking, setIsThinking] = useState(false);
+  const [planDrafts, setPlanDrafts] = useState<Record<string, PlanDayDraft[]>>({});
+  const [draggingPlan, setDraggingPlan] = useState<{ key: string; fromDate: string; taskId: string } | null>(null);
+  const [pendingFollowUp, setPendingFollowUp] = useState<PendingFollowUp>(null);
+  const [actionsVisibleByMessage, setActionsVisibleByMessage] = useState<Record<string, boolean>>({});
+  const [appliedHistory, setAppliedHistory] = useState<Array<{ messageId: string; actionId: string }>>([]);
 
-  const quickPrompts = [
-    'Prioritize my inbox for today',
-    'Schedule this week based on due dates',
-    'What should I do next?',
-  ];
-
-  const panelClass = expanded
-    ? 'fixed inset-4 z-[300] rounded-[18px] border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-[0_18px_40px_rgba(0,0,0,0.12)] overflow-hidden'
-    : 'fixed left-1/2 top-1/2 z-[300] w-[min(94vw,720px)] max-h-[85vh] -translate-x-1/2 -translate-y-1/2 rounded-[18px] border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-[0_18px_40px_rgba(0,0,0,0.12)] overflow-hidden';
-
-  const getAccessToken = useCallback(async (): Promise<string> => {
-    if (!supabase) throw new Error('Supabase is not configured');
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const token = session?.access_token;
-    if (!token) throw new Error('Please sign in first');
-    return token;
-  }, []);
-
-  const fetchTaskSnapshots = useCallback(
-    async (token: string, taskIds: string[]): Promise<Record<string, TaskSnapshot>> => {
-      const uniqueIds = Array.from(new Set(taskIds.filter(Boolean)));
-      if (uniqueIds.length === 0) return {};
-
-      const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (!baseUrl || !anonKey) return {};
-
-      const url = new URL(`${baseUrl}/rest/v1/tasks`);
-      url.searchParams.set('select', 'id,text,status,priority,deadline,estimated_minutes,project_id,archived');
-      url.searchParams.set('id', `in.(${uniqueIds.join(',')})`);
-
-      const res = await fetch(url.toString(), {
-        method: 'GET',
-        headers: {
-          apikey: anonKey,
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (!res.ok) return {};
-      const rows = (await res.json()) as TaskSnapshot[];
-
-      const map: Record<string, TaskSnapshot> = {};
-      rows.forEach((row) => {
-        map[row.id] = {
-          id: row.id,
-          text: row.text,
-          status: row.status,
-          priority: row.priority ?? null,
-          deadline: row.deadline ?? null,
-          estimated_minutes: row.estimated_minutes ?? null,
-          project_id: row.project_id ?? null,
-          archived: Boolean(row.archived),
-        };
-      });
-      return map;
-    },
-    []
+  const panelClass = useMemo(
+    () =>
+      expanded
+        ? 'fixed inset-4 z-[300] rounded-[18px] border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-[0_18px_40px_rgba(0,0,0,0.12)] overflow-hidden'
+        : 'fixed left-1/2 top-1/2 z-[300] w-[min(94vw,760px)] max-h-[85vh] -translate-x-1/2 -translate-y-1/2 rounded-[18px] border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-[0_18px_40px_rgba(0,0,0,0.12)] overflow-hidden',
+    [expanded]
   );
 
-  const runUndoOperation = useCallback(async (token: string, operation: UndoOperation) => {
-    const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!baseUrl || !anonKey) throw new Error('Supabase environment is not available.');
+  const actionKey = (messageId: string, actionId: string) => `${messageId}:${actionId}`;
+  const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
 
-    if (operation.type === 'restore') {
-      const { snapshot, taskId } = operation;
-      const res = await fetch(`${baseUrl}/rest/v1/tasks?id=eq.${taskId}`, {
-        method: 'PATCH',
-        headers: {
-          apikey: anonKey,
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          Prefer: 'return=minimal',
-        },
-        body: JSON.stringify({
-          text: snapshot.text,
-          status: snapshot.status,
-          priority: snapshot.priority,
-          deadline: snapshot.deadline,
-          estimated_minutes: snapshot.estimated_minutes,
-          project_id: snapshot.project_id,
-          archived: snapshot.archived,
-        }),
+  const buildContextSummary = () => {
+    const active = tasks.filter((t) => t.status !== 'done');
+    const today = formatDateKey(new Date());
+    const overdue = active.filter((t) => t.deadline && t.deadline < today).length;
+    const noDate = active.filter((t) => !t.deadline).length;
+    const doing = active.filter((t) => t.status === 'doing').length;
+    return `active=${active.length}; overdue=${overdue}; no_date=${noDate}; doing=${doing}`;
+  };
+
+  const routeResponseMode = async (message: string): Promise<'answer_only' | 'answer_with_suggested_actions'> => {
+    try {
+      const res = await fetch('/api/agent/route-mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, contextSummary: buildContextSummary() }),
       });
-      if (!res.ok) throw new Error('Undo failed for one of the tasks.');
+      const data = await res.json().catch(() => ({}));
+      if (data?.mode === 'answer_only' || data?.mode === 'answer_with_suggested_actions') return data.mode;
+    } catch {
+      // fallback below
+    }
+    const lower = message.toLowerCase();
+    const actionLike = /(move|set|change|apply|plan|declutter|clean up|cleanup|rewrite|clarify|defer|batch|mark|update)/.test(lower);
+    return actionLike ? 'answer_with_suggested_actions' : 'answer_only';
+  };
+
+  const findActionFromMessage = (messageId: string, actionId: string): SuggestedAction | null => {
+    const msg = messages.find((m) => m.id === messageId);
+    const action = msg?.reply?.actions?.find((a) => a.id === actionId);
+    return action || null;
+  };
+
+  const buildPlanDraft = (action: SuggestedAction): PlanDayDraft[] => {
+    const dates = nextWorkDates(5);
+    const days: PlanDayDraft[] = dates.map((date) => ({
+      date,
+      label: date,
+      tasks: [],
+    }));
+    const taskIds = action.taskIds || [];
+    taskIds.forEach((taskId, idx) => {
+      const task = taskById.get(taskId);
+      if (!task) return;
+      const dayIdx = idx % days.length;
+      days[dayIdx].tasks.push({
+        id: task.id,
+        title: task.title,
+        priority: task.priority || 4,
+        included: true,
+      });
+    });
+    return days;
+  };
+
+  const wasActionApplied = (messageId: string, actionId: string) => Boolean(appliedFlags[actionKey(messageId, actionId)]);
+
+  const revertAction = async (messageId: string, action: SuggestedAction) => {
+    const key = actionKey(messageId, action.id);
+    const snapshots = actionUndo[key] || [];
+    if (snapshots.length === 0) {
+      setAppliedResult((prev) => ({ ...prev, [key]: 'Nothing to revert for this action.' }));
       return;
     }
-
-    const { snapshot } = operation;
-    const createRes = await fetch(`${baseUrl}/rest/v1/tasks`, {
-      method: 'POST',
-      headers: {
-        apikey: anonKey,
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=minimal',
-      },
-      body: JSON.stringify({
-        text: snapshot.text,
-        status: snapshot.status,
-        priority: snapshot.priority,
-        deadline: snapshot.deadline,
-        estimated_minutes: snapshot.estimated_minutes,
-        project_id: snapshot.project_id,
-        archived: false,
-      }),
-    });
-    if (!createRes.ok) throw new Error('Undo failed for one of the deleted tasks.');
-  }, []);
-
-  const loadHistory = useCallback(async () => {
-    if (!userId || !isOpen) return;
-    setHistoryLoading(true);
+    setIsApplying((prev) => ({ ...prev, [key]: true }));
     try {
-      const token = await getAccessToken();
-      const res = await fetch('/api/agent/history', {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Failed to load history');
-      setHistory((data.runs || []) as AgentRunRecord[]);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load history');
+      for (const snapshot of snapshots) {
+        await onUpdateTask(snapshot);
+      }
+      setAppliedFlags((prev) => ({ ...prev, [key]: false }));
+      setAppliedResult((prev) => ({ ...prev, [key]: `Reverted. Restored ${snapshots.length} task(s).` }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to revert action.';
+      setAppliedResult((prev) => ({ ...prev, [key]: `Error: ${message}` }));
     } finally {
-      setHistoryLoading(false);
+      setIsApplying((prev) => ({ ...prev, [key]: false }));
     }
-  }, [getAccessToken, isOpen, userId]);
+  };
 
-  useEffect(() => {
-    void loadHistory();
-  }, [loadHistory]);
+  const executeAction = async (messageId: string, action: SuggestedAction) => {
+    if (!action.executable) return;
+    const key = actionKey(messageId, action.id);
 
-  const actions = useMemo(() => {
-    if (!currentRun) return [];
-    return runPendingActions(currentRun);
-  }, [currentRun]);
+    setIsApplying((prev) => ({ ...prev, [key]: true }));
 
-  const suggestedActions = useMemo(() => chooseSuggestedActions(actions), [actions]);
+    try {
+      const byId = new Map(tasks.map((t) => [t.id, t]));
+      const targetTasks = (action.taskIds || []).map((id) => byId.get(id)).filter(Boolean) as Task[];
+      const snapshots = targetTasks.map((task) => ({ ...task }));
 
-  const handlePropose = async () => {
-    if (!input.trim()) return;
-    const userMessage = input.trim();
-    setError(null);
-    setIsLoading(true);
+      if (targetTasks.length === 0) {
+        setAppliedResult((prev) => ({ ...prev, [key]: 'Nothing changed. No matching tasks found.' }));
+        return;
+      }
 
-    const userMsg: Message = {
+      const today = formatDateKey(new Date());
+
+      if (action.skill === 'move_to_today' || action.skill === 'declutter') {
+        for (const task of targetTasks) {
+          await onUpdateTask({ ...task, deadline: today });
+        }
+        setActionUndo((prev) => ({ ...prev, [key]: snapshots }));
+        setAppliedFlags((prev) => ({ ...prev, [key]: true }));
+        setAppliedHistory((prev) => [...prev, { messageId, actionId: action.id }]);
+        setAppliedResult((prev) => ({ ...prev, [key]: `Applied. Moved ${targetTasks.length} task(s) to Today.` }));
+        return;
+      }
+
+      if (action.skill === 'move_status') {
+        const status = action.status || 'doing';
+        for (const task of targetTasks) {
+          await onUpdateTask({ ...task, status });
+        }
+        setActionUndo((prev) => ({ ...prev, [key]: snapshots }));
+        setAppliedFlags((prev) => ({ ...prev, [key]: true }));
+        setAppliedHistory((prev) => [...prev, { messageId, actionId: action.id }]);
+        setAppliedResult((prev) => ({ ...prev, [key]: `Applied. Updated ${targetTasks.length} task(s) to ${status}.` }));
+        return;
+      }
+
+      if (action.skill === 'change_priority') {
+        const priority = action.priority || 3;
+        for (const task of targetTasks) {
+          await onUpdateTask({ ...task, priority: Math.max(1, Math.min(5, priority)) as Task['priority'] });
+        }
+        setActionUndo((prev) => ({ ...prev, [key]: snapshots }));
+        setAppliedFlags((prev) => ({ ...prev, [key]: true }));
+        setAppliedHistory((prev) => [...prev, { messageId, actionId: action.id }]);
+        setAppliedResult((prev) => ({ ...prev, [key]: `Applied. Set priority to P${priority} for ${targetTasks.length} task(s).` }));
+        return;
+      }
+
+      if (action.skill === 'set_due_date') {
+        if (!action.dueDate) {
+          setAppliedResult((prev) => ({ ...prev, [key]: 'Nothing changed. Missing due date.' }));
+          return;
+        }
+        for (const task of targetTasks) {
+          await onUpdateTask({ ...task, deadline: action.dueDate });
+        }
+        setActionUndo((prev) => ({ ...prev, [key]: snapshots }));
+        setAppliedFlags((prev) => ({ ...prev, [key]: true }));
+        setAppliedHistory((prev) => [...prev, { messageId, actionId: action.id }]);
+        setAppliedResult((prev) => ({ ...prev, [key]: `Applied. Set due date to ${action.dueDate} for ${targetTasks.length} task(s).` }));
+        return;
+      }
+
+      if (action.skill === 'rewrite_title') {
+        const titleByTaskId = action.titleByTaskId || {};
+        const rewriteTargets = targetTasks.filter((task) => typeof titleByTaskId[task.id] === 'string');
+        if (rewriteTargets.length === 0) {
+          setAppliedResult((prev) => ({ ...prev, [key]: 'Nothing changed. No title suggestions found.' }));
+          return;
+        }
+        for (const task of rewriteTargets) {
+          const nextTitle = titleByTaskId[task.id];
+          await onUpdateTask({ ...task, title: nextTitle });
+        }
+        setActionUndo((prev) => ({ ...prev, [key]: rewriteTargets.map((t) => ({ ...t })) }));
+        setAppliedFlags((prev) => ({ ...prev, [key]: true }));
+        setAppliedHistory((prev) => [...prev, { messageId, actionId: action.id }]);
+        setAppliedResult((prev) => ({ ...prev, [key]: `Applied. Rewrote ${rewriteTargets.length} task title(s).` }));
+        return;
+      }
+
+      if (action.skill === 'clarify_task') {
+        const titleByTaskId = action.titleByTaskId || {};
+        const clarifyTargets = targetTasks.filter((task) => typeof titleByTaskId[task.id] === 'string');
+        if (clarifyTargets.length === 0) {
+          setAppliedResult((prev) => ({ ...prev, [key]: 'Nothing changed. No clarification suggestions found.' }));
+          return;
+        }
+        for (const task of clarifyTargets) {
+          const nextTitle = titleByTaskId[task.id];
+          await onUpdateTask({ ...task, title: nextTitle });
+        }
+        setActionUndo((prev) => ({ ...prev, [key]: clarifyTargets.map((t) => ({ ...t })) }));
+        setAppliedFlags((prev) => ({ ...prev, [key]: true }));
+        setAppliedHistory((prev) => [...prev, { messageId, actionId: action.id }]);
+        setAppliedResult((prev) => ({ ...prev, [key]: `Applied. Clarified ${clarifyTargets.length} task(s).` }));
+        return;
+      }
+
+      if (action.skill === 'defer_task') {
+        const deferDate = action.dueDate || (() => {
+          const nextWeek = new Date();
+          nextWeek.setDate(nextWeek.getDate() + 7);
+          return formatDateKey(nextWeek);
+        })();
+        for (const task of targetTasks) {
+          await onUpdateTask({ ...task, deadline: deferDate });
+        }
+        setActionUndo((prev) => ({ ...prev, [key]: snapshots }));
+        setAppliedFlags((prev) => ({ ...prev, [key]: true }));
+        setAppliedHistory((prev) => [...prev, { messageId, actionId: action.id }]);
+        setAppliedResult((prev) => ({ ...prev, [key]: `Applied. Deferred ${targetTasks.length} task(s) to ${deferDate}.` }));
+        return;
+      }
+
+      if (action.skill === 'auto_plan') {
+        const draft = planDrafts[key] || buildPlanDraft(action);
+        const includedAssignments = draft.flatMap((day) =>
+          day.tasks.filter((t) => t.included).map((t) => ({ date: day.date, taskId: t.id }))
+        );
+        if (includedAssignments.length === 0) {
+          setAppliedResult((prev) => ({ ...prev, [key]: 'Nothing changed. No selected tasks in the weekly plan.' }));
+          return;
+        }
+
+        const includedTasks = includedAssignments.map((a) => byId.get(a.taskId)).filter(Boolean) as Task[];
+        const autoSnapshots = includedTasks.map((task) => ({ ...task }));
+        for (const assignment of includedAssignments) {
+          const task = byId.get(assignment.taskId);
+          if (!task) continue;
+          await onUpdateTask({ ...task, deadline: assignment.date });
+        }
+        setActionUndo((prev) => ({ ...prev, [key]: autoSnapshots }));
+        setAppliedFlags((prev) => ({ ...prev, [key]: true }));
+        setAppliedHistory((prev) => [...prev, { messageId, actionId: action.id }]);
+        setAppliedResult((prev) => ({ ...prev, [key]: `Applied. Planned ${includedAssignments.length} task(s) across this week.` }));
+        return;
+      }
+
+      setAppliedResult((prev) => ({ ...prev, [key]: 'No supported action applied.' }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to apply action.';
+      setAppliedResult((prev) => ({ ...prev, [key]: `Error: ${message}` }));
+    } finally {
+      setIsApplying((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
+  const applyAllActionsForMessage = async (messageId: string, actions: SuggestedAction[]) => {
+    const executable = actions.filter((a) => a.executable);
+    if (executable.length === 0) return 'Nothing changed. No executable actions available.';
+
+    const remaining = executable.filter((a) => !wasActionApplied(messageId, a.id));
+    if (remaining.length === 0) return 'Applied already. All suggested actions were already applied.';
+
+    const allKey = actionKey(messageId, '__all__');
+    setIsApplying((prev) => ({ ...prev, [allKey]: true }));
+    try {
+      for (const action of remaining) {
+        await executeAction(messageId, action);
+      }
+      return `Applied. ${remaining.length} action(s) were applied.`;
+    } finally {
+      setIsApplying((prev) => ({ ...prev, [allKey]: false }));
+    }
+  };
+
+  const submitMessage = async () => {
+    const text = input.trim();
+    if (!text) return;
+
+    const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: userMessage,
-      timestamp: new Date(),
+      content: text,
     };
-    setMessages((prev) => [...prev, userMsg]);
+
+    const textNormalized = text.toLowerCase().trim();
+    const yesLike = /^(yes|yep|yeah|sure|ok|okay|please do|go ahead|apply|apply all)\b/.test(textNormalized);
+    const showActionsLike = /(show actions|show suggested|show options|show me actions)/.test(textNormalized);
+    const applyAllLike = /^(apply all|do all|do that|apply them)\b/.test(textNormalized);
+    const applyFirstLike = /(apply (the )?(first|1st|one)|do the first)/.test(textNormalized);
+    const undoLike = /^(undo|undo that|revert|revert that)\b/.test(textNormalized);
+    const latestAssistantWithActions = [...messages]
+      .reverse()
+      .find((m) => m.role === 'assistant' && (m.reply?.actions?.length || 0) > 0);
+
+    setMessages((prev) => [...prev, userMessage]);
     setInput('');
+    setIsThinking(true);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    try {
-      const token = await getAccessToken();
-      const res = await fetch('/api/agent/propose', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ request_text: userMessage }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Failed to run agent');
-      const nextRun = data.run as AgentRunRecord;
-      setCurrentRun(nextRun);
-
-      if (nextRun.proposed_plan_json?.proposed_plan?.days) {
-        setEditableDays(nextRun.proposed_plan_json.proposed_plan.days);
-      } else {
-        setEditableDays([]);
-      }
-
-      const safeActionIds = (nextRun.proposed_plan_json?.proposed_actions || [])
-        .filter((a: ProposedAction) => !a.destructive && !a.requires_approval)
-        .map((a: ProposedAction) => a.action_id);
-      setApprovedActionIds(new Set(safeActionIds));
-
-      const assistantMsg: Message = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content:
-          nextRun.proposed_plan_json.analysis_summary ||
-          'I reviewed your request. Here is a preview of what I can do next.',
-        run: nextRun,
-        runState: getRunState(nextRun),
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
-      await loadHistory();
-    } catch (err: any) {
-      setError(err?.message || 'Failed to run agent');
-      const errorMsg: Message = {
-        id: `error-${Date.now()}`,
-        role: 'assistant',
-        content: `Sorry, I hit an issue: ${err?.message || 'Failed to process your request'}`,
-        runState: 'conversation',
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const toggleApproveAction = (action: ProposedAction) => {
-    const next = new Set(approvedActionIds);
-    if (next.has(action.action_id)) next.delete(action.action_id);
-    else next.add(action.action_id);
-    setApprovedActionIds(next);
-  };
-
-  const handleExecute = async (actionIds?: string[]) => {
-    if (!currentRun) return;
-    setError(null);
-    setIsExecuting(true);
-    try {
-      const token = await getAccessToken();
-      const approvedIdsArray = actionIds || Array.from(approvedActionIds);
-
-      const actionsToExecute = currentRun.proposed_plan_json.proposed_actions.filter((a) => approvedIdsArray.includes(a.action_id));
-      const snapshotTaskIds = actionsToExecute
-        .filter((a) => ['update_task', 'archive_task', 'delete_task'].includes(a.type) && a.target_task_id)
-        .map((a) => String(a.target_task_id));
-      const snapshots = await fetchTaskSnapshots(token, snapshotTaskIds);
-
-      let payloadAction = null;
-      const planAction = currentRun.proposed_plan_json.proposed_actions.find((a) => a.type === 'create_plan');
-      if (planAction && approvedIdsArray.includes(planAction.action_id)) {
-        payloadAction = {
-          action_id: planAction.action_id,
-          patch: {
-            ...planAction.patch,
-            days: editableDays,
+    if (showActionsLike) {
+      const hidden = [...messages]
+        .reverse()
+        .find((m) => m.role === 'assistant' && (m.reply?.actions?.length || 0) > 0 && actionsVisibleByMessage[m.id] === false);
+      if (hidden) {
+        setActionsVisibleByMessage((prev) => ({ ...prev, [hidden.id]: true }));
+        setPendingFollowUp({ type: 'apply_actions', messageId: hidden.id });
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `assistant-${Date.now()}`,
+            role: 'assistant',
+            reply: {
+              understanding: 'You asked to see suggested actions.',
+              known: [],
+              inferred: [],
+              answer: 'I have shown the suggested actions for the latest answer.',
+              actions: [],
+              confirmation: 'You can apply one action, apply all, or say undo later.',
+            },
           },
-        };
+        ]);
+        setIsThinking(false);
+        return;
       }
-
-      const beforeExecutedIds = new Set((currentRun.executed_actions_json || []).map((a) => a.action_id));
-      const res = await fetch('/api/agent/execute', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          run_id: currentRun.id,
-          approved_action_ids: approvedIdsArray,
-          modified_actions: payloadAction ? [payloadAction] : [],
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Execution failed');
-
-      const nextRun = data.run as AgentRunRecord;
-      const newExecuted = (nextRun.executed_actions_json || []).filter((a) => !beforeExecutedIds.has(a.action_id));
-      const summaryLines = summarizeExecutedActions(newExecuted);
-
-      const undoOperations: UndoOperation[] = [];
-      newExecuted.forEach((action) => {
-        if (!action.target_task_id) return;
-        const snapshot = snapshots[action.target_task_id];
-        if (!snapshot) return;
-
-        if (action.type === 'update_task' || action.type === 'archive_task') {
-          undoOperations.push({ type: 'restore', taskId: action.target_task_id, snapshot });
-        }
-        if (action.type === 'delete_task') {
-          undoOperations.push({ type: 'recreate', snapshot });
-        }
-      });
-
-      setAppliedRuns((prev) => ({
-        ...prev,
-        [nextRun.id]: {
-          summaryLines,
-          undoOperations,
-          undone: false,
-        },
-      }));
-
-      setCurrentRun(nextRun);
-      setMessages((prev) =>
-        prev.map((msg) => {
-          if (msg.role === 'assistant' && msg.run?.id === nextRun.id) {
-            return {
-              ...msg,
-              run: nextRun,
-              runState: 'applied' as RunDisplayState,
-              resultLines: summaryLines,
-            };
-          }
-          return msg;
-        })
-      );
-
-      const appliedMsg: Message = {
-        id: `applied-${Date.now()}`,
-        role: 'assistant',
-        content: 'Applied. I updated your workspace with the approved actions.',
-        run: nextRun,
-        runState: 'applied',
-        resultLines: summaryLines,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, appliedMsg]);
-      await loadHistory();
-    } catch (err: any) {
-      setError(err?.message || 'Execution failed');
-    } finally {
-      setIsExecuting(false);
     }
-  };
 
-  const handleUndo = async (runId: string) => {
-    const meta = appliedRuns[runId];
-    if (!meta || meta.undoOperations.length === 0 || meta.undone) return;
-
-    setIsUndoing(true);
-    setError(null);
-    try {
-      const token = await getAccessToken();
-      for (const operation of meta.undoOperations) {
-        await runUndoOperation(token, operation);
-      }
-
-      setAppliedRuns((prev) => ({
-        ...prev,
-        [runId]: {
-          ...meta,
-          undone: true,
-        },
-      }));
-
+    if (applyAllLike && latestAssistantWithActions?.reply) {
+      const status = await applyAllActionsForMessage(latestAssistantWithActions.id, latestAssistantWithActions.reply.actions || []);
       setMessages((prev) => [
         ...prev,
         {
-          id: `undo-${Date.now()}`,
+          id: `assistant-${Date.now()}`,
           role: 'assistant',
-          content: 'Undo complete. I reverted the last reversible changes from that action.',
-          runState: 'conversation',
-          timestamp: new Date(),
+          reply: {
+            understanding: 'You asked to apply all suggested actions.',
+            known: [],
+            inferred: [],
+            answer: status,
+            actions: [],
+            confirmation: 'If you want, I can suggest a different action set next.',
+          },
         },
       ]);
-    } catch (err: any) {
-      setError(err?.message || 'Undo failed');
-    } finally {
-      setIsUndoing(false);
-    }
-  };
-
-  const handleQuickAction = async (action: ProposedAction) => {
-    if (action.destructive || action.requires_approval) {
-      const confirmed = window.confirm(
-        `${getPlainLanguageLabel(action)}\n\n${getActionDescription(action)}\n\nThis action can affect your tasks directly. Continue?`
-      );
-      if (!confirmed) return;
-    }
-    await handleExecute([action.action_id]);
-  };
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over) return;
-
-    const activeStr = String(active.id);
-    const overStr = String(over.id);
-
-    const [, activeDayStr, activeTaskStr] = activeStr.split('_');
-    const activeDayIdx = parseInt(activeDayStr, 10);
-    const activeTaskIdx = parseInt(activeTaskStr, 10);
-
-    let overDayIdx = -1;
-    let overTaskIdx = -1;
-
-    if (overStr.startsWith('day_')) {
-      overDayIdx = parseInt(overStr.split('_')[1], 10);
-    } else if (overStr.startsWith('task_')) {
-      const parts = overStr.split('_');
-      overDayIdx = parseInt(parts[1], 10);
-      overTaskIdx = parseInt(parts[2], 10);
+      setPendingFollowUp({ type: 'different_action_set', fromMessageId: latestAssistantWithActions.id, fromActionSkills: (latestAssistantWithActions.reply.actions || []).map((a) => a.skill) });
+      setIsThinking(false);
+      return;
     }
 
-    if (activeDayIdx === -1 || overDayIdx === -1) return;
-
-    setEditableDays((prev) => {
-      const next = JSON.parse(JSON.stringify(prev));
-      const sourceDay = next[activeDayIdx];
-      const targetDay = next[overDayIdx];
-
-      const [movedTask] = sourceDay.tasks.splice(activeTaskIdx, 1);
-
-      if (activeDayIdx === overDayIdx) {
-        const destIdx = overTaskIdx === -1 ? sourceDay.tasks.length : overTaskIdx;
-        sourceDay.tasks.splice(destIdx, 0, movedTask);
-      } else {
-        movedTask.day = targetDay.day;
-        movedTask.date = targetDay.date;
-        const destIdx = overTaskIdx === -1 ? targetDay.tasks.length : overTaskIdx;
-        targetDay.tasks.splice(destIdx, 0, movedTask);
+    if (applyFirstLike && latestAssistantWithActions?.reply) {
+      const first = (latestAssistantWithActions.reply.actions || []).find((a) => a.executable);
+      if (first) {
+        await executeAction(latestAssistantWithActions.id, first);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `assistant-${Date.now()}`,
+            role: 'assistant',
+            reply: {
+              understanding: 'You asked to apply the first suggested action.',
+              known: [],
+              inferred: [],
+              answer: `Applied "${first.label}".`,
+              actions: [],
+              confirmation: 'If you want, I can apply the rest or suggest a different set.',
+            },
+          },
+        ]);
       }
-      return next;
-    });
+      setIsThinking(false);
+      return;
+    }
+
+    if (undoLike) {
+      const last = [...appliedHistory].reverse()[0];
+      if (last) {
+        const action = findActionFromMessage(last.messageId, last.actionId);
+        if (action) {
+          await revertAction(last.messageId, action);
+          setAppliedHistory((prev) => {
+            const idx = prev.findIndex((it) => it.messageId === last.messageId && it.actionId === last.actionId);
+            if (idx === -1) return prev;
+            const copy = [...prev];
+            copy.splice(idx, 1);
+            return copy;
+          });
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `assistant-${Date.now()}`,
+              role: 'assistant',
+              reply: {
+                understanding: 'You asked to undo the latest applied action.',
+                known: [],
+                inferred: [],
+                answer: `Reverted "${action.label}".`,
+                actions: [],
+                confirmation: 'You can continue or ask for new suggestions.',
+              },
+            },
+          ]);
+          setIsThinking(false);
+          return;
+        }
+      }
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          reply: {
+            understanding: 'You asked to undo.',
+            known: [],
+            inferred: [],
+            answer: 'I could not find a recent applied action to undo.',
+            actions: [],
+            confirmation: 'Try applying an action first, then ask undo.',
+          },
+        },
+      ]);
+      setIsThinking(false);
+      return;
+    }
+
+    if (yesLike && pendingFollowUp?.type === 'different_action_set') {
+      const options = buildAlternativeModes(pendingFollowUp.fromActionSkills);
+      const optionText = options
+        .map((option, idx) => `(${idx + 1}) ${option.label}`)
+        .join(', or ');
+      const aliasHint = options.map((o) => `"${o.key}"`).join(' / ');
+
+      const choiceReply: InboxCopilotReply = {
+        understanding: 'You want another helpful action set after applying the last one.',
+        known: ['I can continue with a different assistant mode.'],
+        inferred: [],
+        answer: 'Great. I can do one of these next:',
+        actions: [],
+        confirmation: `Do you want me to ${optionText}? Reply with ${aliasHint}.`,
+      };
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          reply: choiceReply,
+        },
+      ]);
+      setPendingFollowUp({ type: 'choose_next_assist_mode', options });
+      setIsThinking(false);
+      return;
+    }
+
+    if (pendingFollowUp?.type === 'choose_next_assist_mode') {
+      const lower = text.toLowerCase();
+      const selectedOption = pendingFollowUp.options.find(
+        (option) =>
+          lower.includes(option.key) ||
+          option.aliases.some((alias) => lower.includes(alias))
+      );
+      const modePrompt = selectedOption?.prompt || null;
+
+      if (!modePrompt) {
+        const aliases = pendingFollowUp.options.map((o) => `"${o.key}"`).join(' / ');
+        const nudgeReply: InboxCopilotReply = {
+          understanding: 'I am waiting for your mode selection.',
+          known: [],
+          inferred: [],
+          answer: 'Please choose one mode so I can continue.',
+          actions: [],
+          confirmation: `Reply with ${aliases}.`,
+        };
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `assistant-${Date.now()}`,
+            role: 'assistant',
+            reply: nudgeReply,
+          },
+        ]);
+        setIsThinking(false);
+        return;
+      }
+
+      const reply = buildInboxCopilotReply(tasks, modePrompt);
+      const nextAssistantId = `assistant-${Date.now()}`;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextAssistantId,
+          role: 'assistant',
+          reply,
+        },
+      ]);
+      if ((reply.actions || []).length > 0) {
+        setPendingFollowUp({ type: 'apply_actions', messageId: nextAssistantId });
+      } else {
+        setPendingFollowUp(null);
+      }
+      setIsThinking(false);
+      return;
+    }
+
+    if (yesLike && (pendingFollowUp?.type === 'apply_actions' || latestAssistantWithActions?.reply)) {
+      const assistantId = pendingFollowUp?.type === 'apply_actions' ? pendingFollowUp.messageId : latestAssistantWithActions!.id;
+      const targetMessage = messages.find((m) => m.id === assistantId) || latestAssistantWithActions;
+      const targetActions = targetMessage?.reply?.actions || [];
+      const statusText = await applyAllActionsForMessage(assistantId, targetActions);
+      const allAppliedAlready = statusText.startsWith('Applied already');
+
+      const memoryReply: InboxCopilotReply = {
+        understanding: 'You want me to apply the suggested actions from the previous step.',
+        known: ['I checked the latest pending action set in this conversation memory and its apply state.'],
+        inferred: [],
+        answer: statusText,
+        actions: [],
+        confirmation: allAppliedAlready
+          ? 'If you want, I can suggest a different action set.'
+          : 'Applied. If you want, I can now suggest a different action set.',
+      };
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          reply: memoryReply,
+        },
+      ]);
+      const appliedFromSkills = (targetActions || []).map((a) => a.skill);
+      setPendingFollowUp({
+        type: 'different_action_set',
+        fromMessageId: assistantId,
+        fromActionSkills: appliedFromSkills,
+      });
+      setIsThinking(false);
+      return;
+    }
+
+    const mode = await routeResponseMode(text);
+    const reply = buildInboxCopilotReply(tasks, text);
+    const assistantMessageId = `assistant-${Date.now()}`;
+    const assistantMessage: Message = { id: assistantMessageId, role: 'assistant', reply, mode };
+    setMessages((prev) => [...prev, assistantMessage]);
+    const autoPlanActions = (reply.actions || []).filter((a) => a.skill === 'auto_plan');
+    if (autoPlanActions.length > 0) {
+      setPlanDrafts((prev) => {
+        const next = { ...prev };
+        autoPlanActions.forEach((action) => {
+          const key = actionKey(assistantMessageId, action.id);
+          if (!next[key]) next[key] = buildPlanDraft(action);
+        });
+        return next;
+      });
+    }
+    if ((reply.actions || []).length > 0 && mode === 'answer_with_suggested_actions') {
+      setPendingFollowUp({ type: 'apply_actions', messageId: assistantMessageId });
+    } else {
+      setPendingFollowUp(null);
+    }
+    if ((reply.actions || []).length > 0) {
+      setActionsVisibleByMessage((prev) => ({ ...prev, [assistantMessageId]: mode === 'answer_with_suggested_actions' }));
+    }
+    setIsThinking(false);
   };
 
   const onPromptKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      void handlePropose();
+      void submitMessage();
     }
   };
 
-  const toggleDetails = (messageId: string) => {
-    setShowDetails((prev) => ({ ...prev, [messageId]: !prev[messageId] }));
+  const clearContext = () => {
+    setMessages([]);
+    setInput('');
+    setAppliedResult({});
+    setIsApplying({});
+    setAppliedFlags({});
+    setActionUndo({});
+    setPlanDrafts({});
+    setDraggingPlan(null);
+    setPendingFollowUp(null);
+    setActionsVisibleByMessage({});
+    setAppliedHistory([]);
   };
 
-  const handleClearContext = () => {
-    setMessages([]);
-    setCurrentRun(null);
-    setApprovedActionIds(new Set());
-    setShowDetails({});
-    setEditableDays([]);
-    setError(null);
-    setInput('');
+  const togglePlanTaskIncluded = (key: string, taskId: string) => {
+    setPlanDrafts((prev) => {
+      const draft = prev[key];
+      if (!draft) return prev;
+      return {
+        ...prev,
+        [key]: draft.map((day) => ({
+          ...day,
+          tasks: day.tasks.map((task) =>
+            task.id === taskId ? { ...task, included: !task.included } : task
+          ),
+        })),
+      };
+    });
+  };
+
+  const movePlanTask = (key: string, fromDate: string, toDate: string, taskId: string) => {
+    if (fromDate === toDate) return;
+    setPlanDrafts((prev) => {
+      const draft = prev[key];
+      if (!draft) return prev;
+      const fromDay = draft.find((d) => d.date === fromDate);
+      const toDay = draft.find((d) => d.date === toDate);
+      if (!fromDay || !toDay) return prev;
+      const task = fromDay.tasks.find((t) => t.id === taskId);
+      if (!task) return prev;
+
+      return {
+        ...prev,
+        [key]: draft.map((day) => {
+          if (day.date === fromDate) {
+            return { ...day, tasks: day.tasks.filter((t) => t.id !== taskId) };
+          }
+          if (day.date === toDate) {
+            return { ...day, tasks: [...day.tasks, task] };
+          }
+          return day;
+        }),
+      };
+    });
   };
 
   return (
@@ -682,7 +739,7 @@ export function AiAssistant({ userId }: AiAssistantProps) {
                 <Sparkles size={16} />
                 AI Assistant
               </h3>
-              <p className="text-sm text-gray-500 mt-0.5">Chat with your productivity assistant</p>
+              <p className="text-sm text-gray-500 mt-0.5">Grounded inbox copilot with explicit actions and confirmation.</p>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -709,14 +766,14 @@ export function AiAssistant({ userId }: AiAssistantProps) {
               {messages.length === 0 && (
                 <div className="text-center text-gray-500 dark:text-gray-400 py-8">
                   <Sparkles size={32} className="mx-auto mb-3 text-gray-400" />
-                  <p className="text-sm">Start a conversation to plan your work and apply changes safely.</p>
+                  <p className="text-sm">Ask anything about your inbox. I will answer from real task context only.</p>
                   <div className="flex flex-wrap gap-2 justify-center mt-4">
-                    {quickPrompts.map((prompt) => (
+                    {QUICK_PROMPTS.map((prompt) => (
                       <button
                         key={prompt}
                         type="button"
                         onClick={() => setInput(prompt)}
-                        className="px-3 py-1.5 text-xs rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                        className="rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                       >
                         {prompt}
                       </button>
@@ -725,242 +782,251 @@ export function AiAssistant({ userId }: AiAssistantProps) {
                 </div>
               )}
 
-              {messages.map((msg) => {
-                const run = msg.run;
-                const isCurrentRun = Boolean(run && currentRun && run.id === currentRun.id);
-                const pendingActions = run ? runPendingActions(run) : [];
-                const topActions = chooseSuggestedActions(pendingActions);
-                const state = msg.runState || (run ? getRunState(run) : 'conversation');
-                const runMeta = run ? appliedRuns[run.id] : undefined;
-                const resultLines = msg.resultLines || runMeta?.summaryLines || [];
-                const runDays = isCurrentRun
-                  ? editableDays
-                  : Array.isArray(run?.proposed_plan_json?.proposed_plan?.days)
-                    ? run?.proposed_plan_json?.proposed_plan?.days
-                    : [];
+              {messages.map((msg) => (
+                <div key={msg.id} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {msg.role === 'assistant' && (
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] border border-[var(--accent-border)] flex items-center justify-center">
+                      <Sparkles size={16} />
+                    </div>
+                  )}
 
-                return (
-                  <div
-                    key={msg.id}
-                    className={clsx('flex gap-3', msg.role === 'user' ? 'justify-end' : 'justify-start')}
-                  >
-                    {msg.role === 'assistant' && (
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] border border-[var(--accent-border)] flex items-center justify-center">
-                        <Sparkles size={16} />
-                      </div>
-                    )}
-                    <div
-                      className={clsx(
-                        'max-w-[80%] rounded-2xl px-4 py-3',
-                        msg.role === 'user'
-                          ? 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)]'
-                          : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100'
-                      )}
-                    >
-                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-
-                      {msg.role === 'assistant' && run && (
-                        <div className="mt-3 space-y-3">
-                          {state === 'preview' && (
-                            <div className="rounded-xl border border-amber-200/70 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-900/20 px-3 py-2 text-xs">
-                              <p className="font-semibold text-amber-800 dark:text-amber-200">Preview only</p>
-                              <p className="text-amber-700 dark:text-amber-300 mt-0.5">Nothing changed yet. Review and apply when ready.</p>
+                  {msg.role === 'user' ? (
+                    <div className="max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-relaxed accent-solid-btn">{msg.content}</div>
+                  ) : (
+                    <div className="max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 space-y-3">
+                      <details className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                        <summary className="list-none cursor-pointer px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 flex items-center justify-between">
+                          <span className="inline-flex items-center gap-1.5"><Brain size={12} /> Thinking</span>
+                          <ChevronDown size={14} />
+                        </summary>
+                        <div className="px-3 pb-3 space-y-2">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Understanding</p>
+                            <p>{msg.reply?.understanding}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">What I know</p>
+                            <ul className="list-disc pl-4 space-y-0.5">
+                              {(msg.reply?.known || []).map((line) => (
+                                <li key={`${msg.id}-known-${line}`}>{line}</li>
+                              ))}
+                            </ul>
+                          </div>
+                          {(msg.reply?.inferred || []).length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">What I inferred</p>
+                              <ul className="list-disc pl-4 space-y-0.5">
+                                {(msg.reply?.inferred || []).map((line) => (
+                                  <li key={`${msg.id}-infer-${line}`}>{line}</li>
+                                ))}
+                              </ul>
                             </div>
-                          )}
-
-                          {state === 'applied' && (
-                            <div className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/80 dark:bg-emerald-900/20 px-3 py-2 text-xs">
-                              <p className="font-semibold text-emerald-800 dark:text-emerald-200">Applied</p>
-                              {resultLines.length > 0 && (
-                                <ul className="mt-1.5 space-y-0.5 text-emerald-700 dark:text-emerald-300">
-                                  {resultLines.map((line, index) => (
-                                    <li key={`${msg.id}-result-${index}`}>{line}</li>
-                                  ))}
-                                </ul>
-                              )}
-                              {runMeta && runMeta.undoOperations.length > 0 && !runMeta.undone && (
-                                <button
-                                  type="button"
-                                  onClick={() => void handleUndo(run.id)}
-                                  disabled={isUndoing}
-                                  className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 disabled:opacity-50 transition-colors"
-                                >
-                                  {isUndoing ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
-                                  Undo
-                                </button>
-                              )}
-                              {runMeta?.undone && <p className="mt-1 text-emerald-700 dark:text-emerald-300">Undo applied.</p>}
-                            </div>
-                          )}
-
-                          {topActions.length > 0 && (
-                            <div className="space-y-2">
-                              <p className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400 font-semibold">Suggested actions</p>
-                              {topActions.map((action) => {
-                                const isApproved = approvedActionIds.has(action.action_id);
-                                return (
-                                  <button
-                                    key={action.action_id}
-                                    type="button"
-                                    onClick={() => void handleQuickAction(action)}
-                                    disabled={isExecuting || !isCurrentRun}
-                                    className={clsx(
-                                      'w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors',
-                                      action.destructive || action.requires_approval
-                                        ? 'border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200'
-                                        : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-900 dark:text-gray-100',
-                                      (isExecuting || !isCurrentRun) && 'opacity-50 cursor-not-allowed'
-                                    )}
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex-1">
-                                        <div className="font-medium flex items-center gap-2">
-                                          {getPlainLanguageLabel(action)}
-                                          {(action.destructive || action.requires_approval) && (
-                                            <AlertTriangle size={14} className="text-amber-600" />
-                                          )}
-                                        </div>
-                                        <div className="text-xs text-gray-600 dark:text-gray-300 mt-0.5">{getActionDescription(action)}</div>
-                                      </div>
-                                      {isApproved && <Check size={16} className="text-emerald-600 ml-2" />}
-                                    </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-
-                          {(runDays.length > 0 || pendingActions.length > topActions.length) && (
-                            <button
-                              type="button"
-                              onClick={() => toggleDetails(msg.id)}
-                              className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-gray-700 dark:text-gray-200 transition-colors"
-                            >
-                              <span className="flex items-center gap-2">
-                                <Eye size={14} />
-                                {showDetails[msg.id] ? 'Hide preview details' : 'View preview details'}
-                              </span>
-                              {showDetails[msg.id] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                            </button>
-                          )}
-
-                          {showDetails[msg.id] && (
-                            <div className="space-y-3 pt-2 border-t border-gray-200 dark:border-gray-700">
-                              {runDays.length > 0 && (
-                                <div className="space-y-2">
-                                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">Schedule preview</p>
-                                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                                    <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1">
-                                      {runDays.map((day: any, dayIdx: number) => {
-                                        const taskIds = day.tasks.map((_: any, tIdx: number) => `task_${dayIdx}_${tIdx}`);
-                                        return (
-                                          <div key={dayIdx} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden text-sm">
-                                            <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
-                                              <span className="font-medium text-gray-900 dark:text-gray-100 text-xs">{day.day}</span>
-                                              <span className="text-xs text-gray-500">
-                                                {new Date(day.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                              </span>
-                                            </div>
-                                            <SortableContext id={`day_${dayIdx}`} items={taskIds} strategy={verticalListSortingStrategy}>
-                                              <div className="p-1.5 space-y-1 min-h-[30px]">
-                                                {day.tasks?.length === 0 ? (
-                                                  <div className="text-xs text-center text-gray-400 dark:text-gray-500 py-1 italic">Free day</div>
-                                                ) : (
-                                                  day.tasks.map((task: any, tIdx: number) => (
-                                                    <SortableTask key={`task_${dayIdx}_${tIdx}`} id={`task_${dayIdx}_${tIdx}`} task={task} />
-                                                  ))
-                                                )}
-                                              </div>
-                                            </SortableContext>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </DndContext>
-                                </div>
-                              )}
-
-                              {pendingActions.length > topActions.length && (
-                                <div className="space-y-2">
-                                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-300">
-                                    Preview actions ({approvedActionIds.size}/{pendingActions.length} selected)
-                                  </p>
-                                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                                    {pendingActions.slice(topActions.length).map((action) => {
-                                      const isApproved = approvedActionIds.has(action.action_id);
-                                      return (
-                                        <div
-                                          key={action.action_id}
-                                          className="flex items-center justify-between p-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
-                                        >
-                                          <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-medium text-gray-900 dark:text-gray-100">{getPlainLanguageLabel(action)}</p>
-                                            <p className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 line-clamp-1">{getActionDescription(action)}</p>
-                                          </div>
-                                          <button
-                                            type="button"
-                                            onClick={() => toggleApproveAction(action)}
-                                            disabled={!isCurrentRun}
-                                            className={clsx(
-                                              'ml-2 px-2 py-1 rounded text-xs border transition-colors',
-                                              isApproved
-                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-700'
-                                                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700',
-                                              !isCurrentRun && 'opacity-50 cursor-not-allowed'
-                                            )}
-                                          >
-                                            {isApproved ? 'Selected' : 'Select'}
-                                          </button>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {isCurrentRun && pendingActions.length > 0 && approvedActionIds.size > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => void handleExecute()}
-                              disabled={isExecuting}
-                              className="w-full px-4 py-2 rounded-lg accent-solid-btn text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
-                            >
-                              {isExecuting ? (
-                                <span className="flex items-center justify-center gap-2">
-                                  <Loader2 size={14} className="animate-spin" />
-                                  Applying...
-                                </span>
-                              ) : (
-                                `Apply all selected (${approvedActionIds.size})`
-                              )}
-                            </button>
                           )}
                         </div>
-                      )}
-                    </div>
-                    {msg.role === 'user' && (
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-                        <span className="text-xs font-medium text-gray-600 dark:text-gray-200">You</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                      </details>
 
-              {isLoading && (
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Answer</p>
+                        <p>{msg.reply?.answer}</p>
+                      </div>
+
+                      {(msg.reply?.actions || []).length > 0 && (actionsVisibleByMessage[msg.id] ?? true) && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Suggested actions</p>
+                          <button
+                            type="button"
+                            onClick={() => void applyAllActionsForMessage(msg.id, msg.reply?.actions || [])}
+                            disabled={Boolean(isApplying[actionKey(msg.id, '__all__')])}
+                            className="w-full px-3 py-2 rounded-md text-xs font-semibold border accent-solid-btn disabled:opacity-60"
+                          >
+                            {isApplying[actionKey(msg.id, '__all__')] ? (
+                              <span className="inline-flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Applying all…</span>
+                            ) : (
+                              'Apply all actions'
+                            )}
+                          </button>
+                          {(msg.reply?.actions || []).map((action) => {
+                            const key = actionKey(msg.id, action.id);
+                            const applying = Boolean(isApplying[key]);
+                            const result = appliedResult[key];
+                            const applied = wasActionApplied(msg.id, action.id);
+                            const planDraft = action.skill === 'auto_plan' ? planDrafts[key] || [] : [];
+                            return (
+                              <div key={action.id} className="rounded-lg border border-gray-200 dark:border-gray-700 p-2.5 bg-white dark:bg-gray-900">
+                                {action.skill === 'auto_plan' && planDraft.length > 0 && (
+                                  <div className="mb-3">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+                                      Weekly plan preview (drag tasks across days)
+                                    </p>
+                                    <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                                      {planDraft.map((day) => (
+                                        <div
+                                          key={`${key}-${day.date}`}
+                                          className="rounded-md border border-gray-200 dark:border-gray-700 p-2 bg-gray-50/70 dark:bg-gray-800/50 min-h-[120px]"
+                                          onDragOver={(e) => e.preventDefault()}
+                                          onDrop={(e) => {
+                                            e.preventDefault();
+                                            if (!draggingPlan || draggingPlan.key !== key) return;
+                                            movePlanTask(key, draggingPlan.fromDate, day.date, draggingPlan.taskId);
+                                            setDraggingPlan(null);
+                                          }}
+                                        >
+                                          <p className="text-[11px] font-semibold text-gray-600 dark:text-gray-300 mb-1.5">{day.label}</p>
+                                          <div className="space-y-1.5">
+                                            {day.tasks.map((task) => (
+                                              <div
+                                                key={`${key}-${day.date}-${task.id}`}
+                                                draggable
+                                                onDragStart={() => setDraggingPlan({ key, fromDate: day.date, taskId: task.id })}
+                                                onDragEnd={() => setDraggingPlan(null)}
+                                                className={clsx(
+                                                  'rounded-md border p-1.5 text-xs cursor-grab active:cursor-grabbing bg-white dark:bg-gray-900',
+                                                  task.included
+                                                    ? 'border-gray-200 dark:border-gray-700'
+                                                    : 'border-gray-100 dark:border-gray-800 opacity-50'
+                                                )}
+                                              >
+                                                <label className="flex items-start gap-1.5">
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={task.included}
+                                                    onChange={() => togglePlanTaskIncluded(key, task.id)}
+                                                    className="mt-0.5 rounded border-gray-300"
+                                                  />
+                                                  <span className="leading-tight">{task.title}</span>
+                                                </label>
+                                              </div>
+                                            ))}
+                                            {day.tasks.length === 0 && (
+                                              <p className="text-[11px] text-gray-400 italic">No tasks</p>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <p className="font-medium">{action.label}</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{action.description}</p>
+                                    {Array.isArray(action.taskIds) && action.taskIds.length > 0 && (
+                                      <div className="mt-2 space-y-1">
+                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                                          Tasks in this action
+                                        </p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {action.taskIds.slice(0, 6).map((taskId) => {
+                                            const task = taskById.get(taskId);
+                                            const title = task?.title || taskId;
+                                            const rewritten = action.titleByTaskId?.[taskId];
+                                            return (
+                                              <span
+                                                key={`${key}-${taskId}`}
+                                                className="inline-flex items-center gap-1 rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-1.5 py-0.5 text-[11px] text-gray-700 dark:text-gray-300"
+                                                title={rewritten ? `${title} -> ${rewritten}` : title}
+                                              >
+                                                {rewritten ? `${title} -> ${rewritten}` : title}
+                                              </span>
+                                            );
+                                          })}
+                                          {action.taskIds.length > 6 && (
+                                            <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                                              +{action.taskIds.length - 6} more
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                    {action.skill === 'break_into_subtasks' &&
+                                      action.subtasksByTaskId &&
+                                      Object.keys(action.subtasksByTaskId).length > 0 && (
+                                        <div className="mt-2 space-y-1">
+                                          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                                            Suggested subtasks
+                                          </p>
+                                          <ul className="list-disc pl-4 text-[11px] text-gray-600 dark:text-gray-300 space-y-0.5">
+                                            {Object.values(action.subtasksByTaskId).flat().slice(0, 6).map((line, idx) => (
+                                              <li key={`${key}-subtask-${idx}`}>{line}</li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    disabled={(!action.executable && !applied) || applying}
+                                    onClick={() => void (applied ? revertAction(msg.id, action) : executeAction(msg.id, action))}
+                                    className={clsx(
+                                      'px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors',
+                                      applied
+                                        ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                        : action.executable
+                                        ? 'accent-solid-btn'
+                                        : 'border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800',
+                                      applying && 'opacity-80'
+                                    )}
+                                  >
+                                    {applying ? (
+                                      <Loader2 size={13} className="animate-spin" />
+                                    ) : applied ? (
+                                      'Applied'
+                                    ) : action.executable ? (
+                                      'Apply'
+                                    ) : (
+                                      'Unavailable'
+                                    )}
+                                  </button>
+                                </div>
+                                {action.missingInfo && (
+                                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1.5">Missing info: {action.missingInfo}</p>
+                                )}
+                                {result && <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1.5">{result}</p>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {(msg.reply?.actions || []).length > 0 && !(actionsVisibleByMessage[msg.id] ?? true) && (
+                        <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            Suggested actions are hidden for this advice-style answer.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActionsVisibleByMessage((prev) => ({ ...prev, [msg.id]: true }));
+                              setPendingFollowUp({ type: 'apply_actions', messageId: msg.id });
+                            }}
+                            className="mt-2 px-3 py-1.5 rounded-md text-xs font-semibold border accent-solid-btn"
+                          >
+                            Show suggested actions
+                          </button>
+                        </div>
+                      )}
+
+                      <p className="text-sm font-medium">
+                        {(msg.reply?.actions || []).length > 0 && !(actionsVisibleByMessage[msg.id] ?? true)
+                          ? 'If you want, tap "Show suggested actions".'
+                          : msg.reply?.confirmation}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {isThinking && (
                 <div className="flex gap-3 justify-start">
                   <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] border border-[var(--accent-border)] flex items-center justify-center">
                     <Sparkles size={16} />
                   </div>
-                  <div className="bg-gray-100 dark:bg-gray-800 rounded-2xl px-4 py-3">
-                    <Loader2 size={16} className="animate-spin text-gray-400" />
+                  <div className="max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 inline-flex items-center gap-2">
+                    <Loader2 size={14} className="animate-spin" />
+                    Agent thinking...
                   </div>
                 </div>
               )}
-
-              {error && <div className="text-xs text-red-600 bg-red-50 p-3 rounded-lg border border-red-100">{error}</div>}
             </div>
 
             <div className="border-t border-gray-100 dark:border-gray-800 p-4 bg-white dark:bg-gray-900">
@@ -969,14 +1035,15 @@ export function AiAssistant({ userId }: AiAssistantProps) {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={onPromptKeyDown}
-                  placeholder="Ask me anything..."
+                  placeholder="Ask about inbox: urgent tasks, what to do next, declutter, due dates..."
                   className="flex-1 min-h-[44px] max-h-32 px-4 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[var(--accent-ring)]/30 resize-none"
                   rows={1}
+                  disabled={!userId || isThinking}
                 />
                 <button
                   type="button"
-                  onClick={handleClearContext}
-                  disabled={isLoading || isExecuting || (!currentRun && messages.length === 0)}
+                  onClick={clearContext}
+                  disabled={messages.length === 0 && !input}
                   className="px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-300 hover:text-gray-700 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 transition-colors flex items-center justify-center"
                   title="Clear context"
                 >
@@ -984,44 +1051,47 @@ export function AiAssistant({ userId }: AiAssistantProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={handlePropose}
-                  disabled={!userId || isLoading || !input.trim()}
+                  onClick={() => void submitMessage()}
+                  disabled={!userId || !input.trim() || isThinking}
                   className="px-4 py-2 rounded-xl border border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] hover:bg-[var(--accent-solid)] hover:text-[var(--accent-solid-foreground)] disabled:opacity-50 transition-colors flex items-center justify-center"
                 >
-                  {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                  {isThinking ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
                 </button>
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Press Enter to send, Shift+Enter for new line</p>
+              {!userId && <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Sign in to use chat UI.</p>}
             </div>
 
             <div className="border-t border-gray-100 dark:border-gray-800">
               <button
-                onClick={() => setShowHistory(!showHistory)}
+                type="button"
+                onClick={() => setShowActivity((v) => !v)}
                 className="w-full px-4 py-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
                 <div className="flex items-center gap-2">
                   <History size={14} />
                   <span>View activity</span>
                 </div>
-                <ChevronDown size={14} className={clsx('transition-transform duration-200', showHistory && 'rotate-180')} />
+                <ChevronDown size={14} className={`transition-transform duration-200 ${showActivity ? 'rotate-180' : ''}`} />
               </button>
 
-              {showHistory && (
+              {showActivity && (
                 <div className="px-4 pb-3 max-h-48 overflow-y-auto">
-                  {historyLoading ? (
-                    <p className="text-xs text-gray-500 dark:text-gray-400 py-2">Loading...</p>
-                  ) : history.length === 0 ? (
+                  {messages.length === 0 ? (
                     <p className="text-xs text-gray-500 dark:text-gray-400 py-2">No activity yet</p>
                   ) : (
                     <div className="space-y-1.5">
-                      {history.map((item) => (
-                        <div
-                          key={item.id}
-                          className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 text-xs text-gray-700 dark:text-gray-200"
-                        >
-                          <span className="font-medium">#{shortRunId(item.id)}</span> · {item.intent} · {(item.executed_actions_json || []).length} applied
-                        </div>
-                      ))}
+                      {messages
+                        .filter((m) => m.role === 'user')
+                        .slice()
+                        .reverse()
+                        .map((m) => (
+                          <div
+                            key={`activity-${m.id}`}
+                            className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-2 text-xs text-gray-700 dark:text-gray-200"
+                          >
+                            {m.content}
+                          </div>
+                        ))}
                     </div>
                   )}
                 </div>
