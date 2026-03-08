@@ -56,19 +56,15 @@ export function DailyNotesHistory({ userId, refreshToken = 0 }: DailyNotesHistor
       setLoading(true);
       const notes = await notesDb.fetchNotes(userId);
       const history = (notes || []).sort((a, b) => b.createdAt - a.createdAt);
+      const today = new Date();
+      const todayKey = formatDateKey(today);
+      const todaysNotes = history.filter((note) => formatDateKey(new Date(note.createdAt)) === todayKey);
 
       setPastNotes(history);
 
-      if (history.length > 0) {
-        const firstDate = new Date(history[0].createdAt);
-        const firstDayKey = formatDateKey(firstDate);
-        setVisibleMonth(new Date(firstDate.getFullYear(), firstDate.getMonth(), 1));
-        setSelectedDayKey(firstDayKey);
-        setSelectedNoteId(history[0].id);
-      } else {
-        setSelectedDayKey(null);
-        setSelectedNoteId(null);
-      }
+      setVisibleMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+      setSelectedDayKey(todayKey);
+      setSelectedNoteId(todaysNotes[0]?.id || null);
     } catch (err) {
       console.error('Failed to load notes history', err);
     } finally {
@@ -290,7 +286,9 @@ export function DailyNotesHistory({ userId, refreshToken = 0 }: DailyNotesHistor
 
           <section className="rounded-xl border border-gray-200 dark:border-gray-700 p-4">
             {!selectedNote ? (
-              <p className="text-sm text-gray-500 dark:text-gray-400">Select a date with notes.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {selectedDayKey === formatDateKey(new Date()) ? 'No notes for today yet.' : 'Select a date with notes.'}
+              </p>
             ) : (
               <>
                 <div className="mb-3 flex items-start justify-between gap-3">
