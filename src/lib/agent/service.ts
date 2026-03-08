@@ -1,9 +1,10 @@
 import { AgentIntent } from './types';
-import { createProposal } from './planner';
+import { createProposal, rankTasksForPriority } from './planner';
 import { policyGate } from './policy';
 import { executeApprovedActions } from './executor';
 import { createSupabaseAgentTools } from './supabaseTools';
 import { AgentPreference, AgentProposal, AgentRunRecord, ProposedAction } from './types';
+import { analyzeInboxCleanup, CleanupReview } from './inboxCleanup';
 
 function env(name: string): string {
   const value = process.env[name];
@@ -96,6 +97,463 @@ function mergeApprovals(
   }));
 }
 
+function inferIntentFromRequest(input: string): AgentIntent {
+  const t = input.toLowerCase();
+  const compact = t.replace(/\s+/g, '');
+  const nextQuestionPattern = /what.*(i\s*do|do)\s*next/;
+
+  if (
+    t.includes('plan my week') ||
+    t.includes('auto plan') ||
+    t.includes('schedule my week') ||
+    t.includes('weekly plan') ||
+    t.includes('plan this week')
+  ) {
+    return 'schedule';
+  }
+  if (
+    t.includes('declutter') ||
+    t.includes('clean up') ||
+    t.includes('cleanup') ||
+    t.includes('clear inbox') ||
+    t.includes('organize inbox')
+  ) {
+    return 'declutter';
+  }
+  if (
+    t.includes('what should i do next') ||
+    t.includes('what do i do next') ||
+    t.includes('what i do next') ||
+    t.includes('what next') ||
+    t.includes('do next') ||
+    t.includes('next task') ||
+    t.includes('prioritize') ||
+    t.includes('top tasks') ||
+    t.includes('focus next') ||
+    compact.includes('whatidonext') ||
+    nextQuestionPattern.test(t)
+  ) {
+    return 'prioritize';
+  }
+  if (t.includes('delete') || t.includes('remove') || t.includes('archive') || t.includes('rename')) {
+    return 'edit_tasks';
+  }
+  return 'qna';
+}
+
+function safeDate(dateLike?: string | null): string {
+  if (!dateLike) return '';
+  const parsed = new Date(dateLike);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toISOString().slice(0, 10);
+}
+
+function formatWeekPlanSummary(proposal: AgentProposal, tasksById: Map<string, string>): string {
+  const days = proposal.proposed_plan?.days || [];
+  const lines: string[] = ['Here is your week plan preview. Nothing changed yet.'];
+  const activeDays = days.filter((day) => day.task_ids.length > 0);
+
+  activeDays.slice(0, 5).forEach((day) => {
+    const titles = day.task_ids
+      .slice(0, 3)
+      .map((id) => tasksById.get(id) || 'Task')
+      .join(', ');
+    lines.push(`- ${day.date}: ${titles}${day.task_ids.length > 3 ? '...' : ''}`);
+  });
+
+  if (activeDays.length === 0) {
+    lines.push('- I could not place tasks this week with current constraints.');
+  }
+
+  return lines.join('\n');
+}
+
+function formatPrioritiesSummary(tasks: ReturnType<typeof rankTasksForPriority>): string {
+  if (tasks.length === 0) {
+    return 'You are clear for now. I did not find active tasks to prioritize.';
+  }
+  const lines = ['Here is what you should do next:', ...tasks.slice(0, 5).map((task, i) => {
+    const due = safeDate(task.due_at);
+    return `${i + 1}. ${task.title}${due ? ` (due ${due})` : ''}`;
+  })];
+  return lines.join('\n');
+}
+
+function buildDeclutterActions(review: CleanupReview, tasksById: Map<string, string>): ProposedAction[] {
+  const actions: ProposedAction[] = [];
+  let idx = 1;
+  const seenDeleteTargets = new Set<string>();
+
+  review.duplicates.forEach((item) => {
+    const keep = item.details?.merge_with || item.task_ids[0];
+    item.task_ids
+      .filter((id) => id && id !== keep)
+      .forEach((id) => {
+        if (seenDeleteTargets.has(id)) return;
+        seenDeleteTargets.add(id);
+        actions.push({
+          action_id: `action_${idx++}`,
+          type: 'delete_task',
+          destructive: true,
+          requires_approval: true,
+          target_task_id: id,
+          patch: { task_title: tasksById.get(id) || 'Task' },
+          reason: item.explanation || 'Duplicate inbox item.',
+          expected_outcome: `Remove duplicate task "${tasksById.get(id) || 'Task'}".`,
+        });
+      });
+  });
+
+  review.stale.forEach((item) => {
+    item.task_ids.forEach((id) => {
+      actions.push({
+        action_id: `action_${idx++}`,
+        type: 'archive_task',
+        destructive: true,
+        requires_approval: true,
+        target_task_id: id,
+        patch: { task_title: tasksById.get(id) || 'Task' },
+        reason: item.explanation || 'Likely stale task.',
+        expected_outcome: `Archive "${tasksById.get(id) || 'Task'}" to declutter inbox.`,
+      });
+    });
+  });
+
+  review.vague.forEach((item) => {
+    const taskId = item.task_ids[0];
+    if (!taskId || !item.details?.suggested_title) return;
+    actions.push({
+      action_id: `action_${idx++}`,
+      type: 'update_task',
+      destructive: false,
+      requires_approval: false,
+      target_task_id: taskId,
+      patch: { title: item.details.suggested_title, task_title: tasksById.get(taskId) || 'Task' },
+      reason: item.explanation || 'Improve task clarity.',
+      expected_outcome: `Rename to "${item.details.suggested_title}".`,
+    });
+  });
+
+  review.missing_metadata.forEach((item) => {
+    const taskId = item.task_ids[0];
+    if (!taskId || !item.details?.suggested_metadata) return;
+    const meta = item.details.suggested_metadata;
+    actions.push({
+      action_id: `action_${idx++}`,
+      type: 'update_task',
+      destructive: false,
+      requires_approval: false,
+      target_task_id: taskId,
+      patch: {
+        due_at: meta.deadline || undefined,
+        priority: typeof meta.priority === 'number' ? meta.priority : undefined,
+        project_id: meta.project_id || undefined,
+        task_title: tasksById.get(taskId) || 'Task',
+      },
+      reason: item.explanation || 'Add missing metadata.',
+      expected_outcome: `Add metadata to "${tasksById.get(taskId) || 'Task'}".`,
+    });
+  });
+
+  return actions;
+}
+
+function formatDeclutterSummary(review: CleanupReview): string {
+  const dup = review.duplicates.length;
+  const stale = review.stale.length;
+  const vague = review.vague.length;
+  const missing = review.missing_metadata.length;
+  const total = dup + stale + vague + missing;
+
+  if (total === 0) {
+    return 'I reviewed your inbox and it already looks clean. No high-confidence cleanup actions needed.';
+  }
+
+  const lines = [
+    'I reviewed your inbox and prepared a cleanup preview. Nothing changed yet.',
+    `- Duplicates: ${dup}`,
+    `- Stale tasks: ${stale}`,
+    `- Vague titles: ${vague}`,
+    `- Missing metadata: ${missing}`,
+    'Approve the actions below and I will apply them.',
+  ];
+  return lines.join('\n');
+}
+
+function normalizeTitle(title: string): string {
+  return title.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function isVagueTitle(title: string): boolean {
+  const t = normalizeTitle(title);
+  const words = t.split(' ').filter(Boolean);
+  if (words.length <= 2) return true;
+  const vagueTokens = ['task', 'stuff', 'thing', 'misc', 'todo', 'work on', 'update', 'fix'];
+  return vagueTokens.some((token) => t === token || t.startsWith(`${token} `));
+}
+
+function plusDays(dayOffset: number): string {
+  const base = new Date();
+  base.setDate(base.getDate() + dayOffset);
+  return base.toISOString().slice(0, 10);
+}
+
+function isInboxQuestion(input: string): boolean {
+  const t = input.toLowerCase();
+  const cues = [
+    'inbox',
+    'urgent',
+    'overdue',
+    'today',
+    'next',
+    'focus',
+    'defer',
+    'low priority',
+    'duplicate',
+    'unclear',
+    'rewrite',
+    'schedule',
+    'categorize',
+    'tag',
+    'subtask',
+    'break down',
+  ];
+  return cues.some((cue) => t.includes(cue));
+}
+
+function buildInboxAdvisorProposal(
+  requestText: string,
+  inboxTasks: ReturnType<typeof rankTasksForPriority>,
+  allTasks: ReturnType<typeof rankTasksForPriority>
+): AgentProposal {
+  const query = requestText.toLowerCase();
+  const ranked = rankTasksForPriority(inboxTasks, new Date());
+  const byId = new Map(inboxTasks.map((task) => [task.id, task]));
+  const actions: ProposedAction[] = [];
+  let actionIndex = 1;
+
+  const overdue = ranked.filter((task) => {
+    if (!task.due_at) return false;
+    const ts = Date.parse(task.due_at);
+    return Number.isFinite(ts) && ts < Date.now();
+  });
+  const lowPriority = ranked.filter((task) => (task.priority ?? 3) >= 4);
+  const noDueDate = ranked.filter((task) => !task.due_at);
+  const vague = ranked.filter((task) => isVagueTitle(task.title));
+
+  const duplicates: string[][] = [];
+  const duplicateMap = new Map<string, string[]>();
+  ranked.forEach((task) => {
+    const key = normalizeTitle(task.title);
+    const group = duplicateMap.get(key) || [];
+    group.push(task.id);
+    duplicateMap.set(key, group);
+  });
+  duplicateMap.forEach((ids) => {
+    if (ids.length > 1) duplicates.push(ids);
+  });
+
+  const asksOverdue = query.includes('overdue') || query.includes('urgent');
+  const asksLowPriority = query.includes('low priority');
+  const asksDefer = query.includes('defer');
+  const asksDuplicate = query.includes('duplicate');
+  const asksRewrite = query.includes('unclear') || query.includes('rewrite');
+  const asksToday = query.includes('today');
+  const asksSchedule = query.includes('schedule');
+  const asksSubtasks = query.includes('subtask') || query.includes('break down');
+  const asksCategorize = query.includes('categorize') || query.includes('tag');
+
+  const primaryList =
+    asksOverdue
+      ? overdue
+      : asksLowPriority || asksDefer
+        ? lowPriority
+        : ranked;
+
+  const answerLines: string[] = [];
+  if (asksOverdue) {
+    answerLines.push(`I found ${overdue.length} overdue/urgent inbox task${overdue.length === 1 ? '' : 's'}.`);
+  } else if (asksLowPriority) {
+    answerLines.push(`I found ${lowPriority.length} low-priority inbox task${lowPriority.length === 1 ? '' : 's'}.`);
+  } else if (asksDuplicate) {
+    answerLines.push(`I found ${duplicates.length} duplicate group${duplicates.length === 1 ? '' : 's'} in your inbox.`);
+  } else if (asksRewrite) {
+    answerLines.push(`I found ${vague.length} task${vague.length === 1 ? '' : 's'} with unclear titles.`);
+  } else {
+    answerLines.push("Here is what I recommend from your inbox right now.");
+  }
+
+  primaryList.slice(0, 5).forEach((task, index) => {
+    const due = safeDate(task.due_at);
+    answerLines.push(`${index + 1}. ${task.title}${due ? ` (due ${due})` : ''}`);
+  });
+
+  const topForDoing = primaryList.slice(0, 3);
+  topForDoing.forEach((task) => {
+    actions.push({
+      action_id: `action_${actionIndex++}`,
+      type: 'update_task',
+      destructive: false,
+      requires_approval: false,
+      reason: `Move "${task.title}" to in progress so you can focus immediately.`,
+      expected_outcome: `Set "${task.title}" to doing.`,
+      target_task_id: task.id,
+      patch: { status: 'doing', task_title: task.title },
+    });
+  });
+
+  if (asksToday || query.includes('what should i do')) {
+    topForDoing.slice(0, 2).forEach((task) => {
+      actions.push({
+        action_id: `action_${actionIndex++}`,
+        type: 'update_task',
+        destructive: false,
+        requires_approval: true,
+        reason: `Put "${task.title}" into Today.`,
+        expected_outcome: `Set due date to today for "${task.title}".`,
+        target_task_id: task.id,
+        patch: { due_at: plusDays(0), task_title: task.title },
+      });
+    });
+  }
+
+  if (asksOverdue && overdue.length > 0) {
+    overdue.slice(0, 3).forEach((task) => {
+      actions.push({
+        action_id: `action_${actionIndex++}`,
+        type: 'update_task',
+        destructive: false,
+        requires_approval: true,
+        reason: `Raise priority for overdue task "${task.title}".`,
+        expected_outcome: `Set "${task.title}" priority to P1.`,
+        target_task_id: task.id,
+        patch: { priority: 1, task_title: task.title },
+      });
+    });
+  }
+
+  if (asksLowPriority || asksDefer) {
+    lowPriority.slice(0, 3).forEach((task, idx) => {
+      actions.push({
+        action_id: `action_${actionIndex++}`,
+        type: 'update_task',
+        destructive: false,
+        requires_approval: true,
+        reason: `Defer low-priority task "${task.title}" to reduce load now.`,
+        expected_outcome: `Schedule "${task.title}" later this week.`,
+        target_task_id: task.id,
+        patch: { due_at: plusDays(4 + idx), task_title: task.title },
+      });
+    });
+  }
+
+  if (asksDuplicate || query.includes('declutter')) {
+    duplicates.slice(0, 3).forEach((group) => {
+      const [, ...toDelete] = group;
+      toDelete.forEach((taskId) => {
+        const task = byId.get(taskId);
+        if (!task) return;
+        actions.push({
+          action_id: `action_${actionIndex++}`,
+          type: 'delete_task',
+          destructive: true,
+          requires_approval: true,
+          reason: `Likely duplicate of "${byId.get(group[0])?.title || 'another task'}".`,
+          expected_outcome: `Remove duplicate "${task.title}".`,
+          target_task_id: task.id,
+          patch: { task_title: task.title },
+        });
+      });
+    });
+  }
+
+  if (asksRewrite) {
+    vague.slice(0, 3).forEach((task) => {
+      const suggestedTitle = `Clarify: ${task.title}`;
+      actions.push({
+        action_id: `action_${actionIndex++}`,
+        type: 'update_task',
+        destructive: false,
+        requires_approval: false,
+        reason: `Rewrite vague title for "${task.title}".`,
+        expected_outcome: `Rename to "${suggestedTitle}".`,
+        target_task_id: task.id,
+        patch: { title: suggestedTitle, task_title: task.title },
+      });
+    });
+  }
+
+  if (asksSchedule || noDueDate.length > 0) {
+    noDueDate.slice(0, 2).forEach((task, idx) => {
+      actions.push({
+        action_id: `action_${actionIndex++}`,
+        type: 'update_task',
+        destructive: false,
+        requires_approval: true,
+        reason: `Add a date so "${task.title}" becomes actionable.`,
+        expected_outcome: `Set due date for "${task.title}".`,
+        target_task_id: task.id,
+        patch: { due_at: plusDays(1 + idx), task_title: task.title },
+      });
+    });
+  }
+
+  if (asksSubtasks) {
+    const biggest = ranked
+      .slice()
+      .sort((a, b) => (b.estimate_minutes ?? 0) - (a.estimate_minutes ?? 0))[0];
+    if (biggest) {
+      ['Plan', 'Execute', 'Review'].forEach((phase) => {
+        actions.push({
+          action_id: `action_${actionIndex++}`,
+          type: 'create_task',
+          destructive: false,
+          requires_approval: true,
+          reason: `Break "${biggest.title}" into smaller steps.`,
+          expected_outcome: `Create subtask "${phase} ${biggest.title}".`,
+          patch: {
+            title: `${phase} ${biggest.title}`,
+            status: 'todo',
+            priority: biggest.priority ?? 3,
+            due_at: biggest.due_at ?? null,
+            project_id: biggest.project_id ?? null,
+          },
+        });
+      });
+    }
+  }
+
+  if (asksCategorize) {
+    const commonProject = allTasks
+      .filter((task) => !!task.project_id)
+      .map((task) => task.project_id as string)[0];
+    if (commonProject) {
+      noDueDate.slice(0, 2).forEach((task) => {
+        actions.push({
+          action_id: `action_${actionIndex++}`,
+          type: 'update_task',
+          destructive: false,
+          requires_approval: true,
+          reason: `Categorize "${task.title}" into an existing project.`,
+          expected_outcome: `Assign "${task.title}" to a project.`,
+          target_task_id: task.id,
+          patch: { project_id: commonProject, task_title: task.title },
+        });
+      });
+    }
+  }
+
+  return {
+    intent: 'qna',
+    analysis_summary: `${answerLines.join('\n')}\n\nNext: choose suggested actions to apply.`,
+    questions: [
+      'Would you like me to apply only safe changes first?',
+      'Should I focus only on overdue tasks next?',
+    ],
+    proposed_actions: actions,
+  };
+}
+
 export async function proposeAgentRun(userToken: string, requestText: string): Promise<AgentRunRecord> {
   const userId = await getAuthUserId(userToken);
   const tools = createSupabaseAgentTools(userToken);
@@ -110,293 +568,94 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
     } satisfies AgentPreference);
   const tasks = await tools.listTasks({ user_id: userId, archived: false });
   const cleanTasks = tasks.filter((t) => t.user_id === preferences.user_id && !t.archived && t.status !== 'done');
-  
-  // Fetch projects to map IDs to Names
-  const projectsRes = await fetch(`${env('NEXT_PUBLIC_SUPABASE_URL')}/rest/v1/projects?user_id=eq.${userId}&select=id,name`, {
-    method: 'GET',
-    headers: baseHeaders(userToken)
-  });
-  let projectMap: Record<string, string> = {};
-  if (projectsRes.ok) {
-    const projectsData = await projectsRes.json();
-    projectsData.forEach((p: any) => {
-      projectMap[p.id] = p.name;
-    });
-  }
-
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error('Missing OPENROUTER_API_KEY');
-
-  const intentPrompt = `
-    User Request: "${requestText}"
-    User Tasks: ${JSON.stringify(cleanTasks.map(t => ({ title: t.title, project: t.project_id ? projectMap[t.project_id] || t.project_id : null })))}
-
-    ROLE: Friendly AI Productivity Assistant.
-    GOAL: Generate a natural language response and identify if the user wants to trigger a specific capability.
-    
-    CAPABILITIES (Intents):
-    - "schedule": User wants to plan or schedule tasks across days of the week.
-    - "declutter": User wants to remove duplicate or stale tasks, or asks to cleanup inbox.
-    - "prioritize": User wants to rank or know what to do next based on urgency.
-    - "edit_tasks": User wants to explicitly delete, edit, or archive a specific task.
-    - "qna": General conversation, questions, or asking for advice where no action should be proposed.
-
-    RULES:
-    1. Respond naturally to the user in the "response" field.
-    2. Pick the single most relevant intent from the CAPABILITIES list. If none apply or it's just chat, pick "qna".
-    3. Output MUST be valid JSON only.
-
-    OUTPUT FORMAT:
-    {
-      "response": "Your conversational reply here",
-      "intent": "schedule|declutter|prioritize|edit_tasks|qna"
-    }
-  `;
-
-  // Fetch initial routing + response
-  const routeRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'http://localhost:3000',
-      'X-Title': 'Centralized Dashboard AI Agent',
-    },
-    body: JSON.stringify({
-      model: 'google/gemini-2.5-flash-lite',
-      max_tokens: 1024,
-      messages: [
-        { role: 'system', content: 'You are an AI assistant. Return valid JSON only.' },
-        { role: 'user', content: intentPrompt }
-      ]
-    })
-  });
-
-  let intent: AgentIntent = 'qna';
-  let conversationalResponse = 'I am your AI productivity assistant. How can I help you today?';
-  
-  if (routeRes.ok) {
-    const data = await routeRes.json();
-    const content = data.choices?.[0]?.message?.content || '{}';
-    const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    try {
-      const parsed = JSON.parse(cleanContent);
-      if (parsed.intent) intent = parsed.intent;
-      if (parsed.response) conversationalResponse = parsed.response;
-    } catch (e) {
-      console.error('Failed to parse intent JSON:', cleanContent);
-    }
-  }
+  const inboxTasks = cleanTasks.filter((task) => task.inbox === true || !task.project_id);
+  const intent = inferIntentFromRequest(requestText);
+  const tasksById = new Map(cleanTasks.map((task) => [task.id, task.title]));
 
   let rawProposal: AgentProposal;
   if (intent === 'schedule') {
-    // Make external call to LLM for scheduling
-    const todayStr = new Date().toISOString().split('T')[0];
-
-    const prompt = `
-      Current Context:
-      - Today is ${todayStr}.
-      - User Request: "${requestText}"
-      - User Tasks (JSON array): ${JSON.stringify(cleanTasks.map(t => ({ title: t.title, estimate: t.estimate_minutes, priority: t.priority, due: t.due_at, project: t.project_id ? projectMap[t.project_id] || t.project_id : null })))}
-      - User Planning Preferences:
-        - Max tasks per day: ${preferences.max_tasks_per_day || 5}
-        - Work hours: ${preferences.work_hours?.start || '09:00'} to ${preferences.work_hours?.end || '17:00'}
-
-      ROLE: Expert Project Manager & Scheduler.
-      GOAL: Create a weekly plan (Mon-Sun) from the provided tasks to satisfy the user's request, focusing especially on taking tasks from the Inbox that don't have due dates and assigning them to days this week to keep the user productive.
-      RULES:
-      1. Schedule tasks by deadline & urgency first.
-      2. If a task has no due date or project (Inbox task), assign it a day this week so the user can make progress.
-      3. Spread out high-effort tasks evenly.
-      4. Only use the tasks provided in the JSON array. Match their titles EXACTLY.
-
-      OUTPUT JSON format only (no markdown):
-      {
-        "week_plan": [
-          {
-            "day": "Monday",
-            "date": "YYYY-MM-DD",
-            "tasks": [
-              {
-                "title": "Exact Task Title",
-                "reason": "Why scheduled here",
-                "estimated_minutes": 30,
-                "project": "Project Name or null"
-              }
-            ]
-          }
-        ]
-      }
-    `;
-
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:3000',
-        'X-Title': 'Centralized Dashboard AutoPlan Tool',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite',
-        max_tokens: 4096,
-        messages: [
-          { role: 'system', content: 'You are an expert scheduler. Return valid JSON only.' },
-          { role: 'user', content: prompt }
-        ]
-      })
-    });
-
-    if (!response.ok) {
-        throw new Error('Failed to generate schedule from AI');
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '{}';
-    const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const parsed = JSON.parse(cleanContent);
-
+    const proposal = createProposal(requestText, 'schedule', tasks, preferences);
     rawProposal = {
-      intent,
-      analysis_summary: conversationalResponse,
-      questions: [],
-      proposed_actions: [
-        {
-          action_id: 'action_1',
-          type: 'create_plan',
-          destructive: false,
-          requires_approval: false,
-          reason: 'AI analyzed your tasks and generated this weekly schedule.',
-          expected_outcome: 'A balanced week plan mapping your tasks to specific days.',
-          patch: {
-            week_range: `${todayStr}..${new Date(Date.now() + 6 * 86400000).toISOString().split('T')[0]}`,
-            days: parsed.week_plan || [],
-          },
-        }
-      ],
-      proposed_plan: {
-        week_range: `${todayStr}..${new Date(Date.now() + 6 * 86400000).toISOString().split('T')[0]}`,
-        days: parsed.week_plan || [],
-      }
+      ...proposal,
+      analysis_summary: formatWeekPlanSummary(proposal, tasksById),
     };
   } else if (intent === 'declutter' || intent === 'cleanup') {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      rawProposal = createProposal(requestText, 'declutter', tasks, preferences);
+      rawProposal.analysis_summary = 'I can run exact duplicate cleanup now. Set OPENROUTER_API_KEY to enable full inbox declutter analysis.';
+    } else {
+      const review = await analyzeInboxCleanup(
+        inboxTasks.map((task) => ({
+          id: task.id,
+          title: task.title,
+          deadline: task.due_at || null,
+          priority: task.priority ?? null,
+          project_id: task.project_id ?? null,
+          created_at: task.created_at || null,
+          status: task.status,
+        })),
+        apiKey
+      );
+      rawProposal = {
+        intent: 'declutter',
+        analysis_summary: formatDeclutterSummary(review),
+        questions: [],
+        proposed_actions: buildDeclutterActions(review, tasksById),
+      };
+    }
+  } else if (intent === 'prioritize') {
+    const ranked = rankTasksForPriority(cleanTasks, new Date());
+    const top = ranked.slice(0, 5);
+    const today = new Date().toISOString().slice(0, 10);
+    const proposedActions: ProposedAction[] = [];
+    top.forEach((task, index) => {
+      proposedActions.push({
+        action_id: `action_${proposedActions.length + 1}`,
+        type: 'update_task',
+        destructive: false,
+        requires_approval: false,
+        reason: `Set "${task.title}" as in progress so it appears in your active workflow.`,
+        expected_outcome: `Move "${task.title}" to in progress.`,
+        target_task_id: task.id,
+        patch: {
+          task_title: task.title,
+          status: 'doing',
+        },
+      });
 
-    // Layer 1: Exact matching
-    const duplicateKeys = (title: string) => title.trim().toLowerCase().replace(/\\s+/g, ' ');
-    const seen = new Map<string, typeof cleanTasks[0]>();
-    const exactDuplicates: typeof cleanTasks[0][] = [];
-    const uniqueTasks: typeof cleanTasks[0][] = [];
-
-    cleanTasks.forEach((task) => {
-      const key = duplicateKeys(task.title);
-      const first = seen.get(key);
-      if (first) {
-        exactDuplicates.push(task);
-      } else {
-        seen.set(key, task);
-        uniqueTasks.push(task);
+      if (index < 2) {
+        proposedActions.push({
+          action_id: `action_${proposedActions.length + 1}`,
+          type: 'update_task',
+          destructive: false,
+          requires_approval: true,
+          reason: `Place "${task.title}" into Today so it becomes actionable right away.`,
+          expected_outcome: `Schedule "${task.title}" for today (${today}).`,
+          target_task_id: task.id,
+          patch: {
+            task_title: task.title,
+            due_at: today,
+          },
+        });
       }
     });
-
-    // Layer 2: Semantic matching for remaining tasks via Gemini
-    const prompt = `
-      User Request: "${requestText}"
-      User Tasks (JSON array): ${JSON.stringify(uniqueTasks.map(t => ({ id: t.id, title: t.title, created_at: t.created_at }))) }
-
-      ROLE: Expert Productivity Assistant.
-      GOAL: Identify "duplicate" tasks or explicitly "stale" tasks that the user wants to declutter.
-      RULES:
-      1. Analyze the semantic meaning of the task titles.
-      2. If multiple tasks have the exact same meaning (e.g., "Select data for hiding" and "Select data for hiding \\n 30m"), keep the oldest one (by created_at) and mark the others for deletion.
-      3. If the user explicitly asks to remove stale tasks, identify tasks that seem out of place, but be conservative.
-      4. Return ONLY a JSON array of objects representing the tasks to delete.
-      5. DO NOT include the task title in the output JSON. Only return the ID and Reason to avoid JSON formatting errors.
-
-      OUTPUT JSON format only (no markdown):
-      {
-        "tasks_to_delete": [
-          {
-            "id": "task-uuid-here",
-            "reason": "Why this is considered a duplicate or stale."
-          }
-        ]
-      }
-    `;
-
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'http://localhost:3000',
-        'X-Title': 'Centralized Dashboard AI Agent',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite',
-        max_tokens: 4096,
-        messages: [
-          { role: 'system', content: 'You are an expert cleaner. Return valid JSON only.' },
-          { role: 'user', content: prompt }
-        ]
-      })
-    });
-
-    if (!response.ok) {
-        throw new Error('Failed to generate declutter plan from AI');
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '{}';
-    const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    let parsed: any = {};
-    try {
-      parsed = JSON.parse(cleanContent);
-    } catch (e) {
-      console.error('Failed to parse AI JSON for declutter:', cleanContent);
-    }
-    
-    const aiToDelete = parsed.tasks_to_delete || [];
-    
-    // Merge Layer 1 and Layer 2
-    let actionIndex = 1;
-    const actions: any[] = [];
-
-    // Add exact duplicates
-    for (const task of exactDuplicates) {
-      actions.push({
-        action_id: `action_${actionIndex++}`,
-        type: 'delete_task',
-        destructive: true,
-        requires_approval: true,
-        reason: 'Identified as an exact duplicate text match.',
-        expected_outcome: `Permanently delete task: "${task.title}"`,
-        target_task_id: task.id,
-        patch: { task_title: task.title }
-      });
-    }
-
-    // Add AI duplicates
-    for (const td of aiToDelete) {
-      const task = uniqueTasks.find(t => t.id === td.id);
-      if (!task) continue;
-      actions.push({
-        action_id: `action_${actionIndex++}`,
-        type: 'delete_task',
-        destructive: true,
-        requires_approval: true,
-        reason: td.reason || 'Identified as semantic duplicate or stale by AI.',
-        expected_outcome: `Permanently delete task: "${task.title}"`,
-        target_task_id: task.id,
-        patch: { task_title: task.title }
-      });
-    }
 
     rawProposal = {
       intent,
-      analysis_summary: `Analyzed ${cleanTasks.length} tasks. Found ${exactDuplicates.length} exact duplicates and ${aiToDelete.length} AI-identified duplicates.`,
-      questions: actions.length === 0 ? ['I could not find any clear duplicates or stale tasks. Can you specify what you want to remove?'] : [],
-      proposed_actions: actions,
+      analysis_summary: formatPrioritiesSummary(top),
+      questions: top.length === 0 ? ['Add or unarchive tasks so I can suggest your next actions.'] : [],
+      proposed_actions: proposedActions,
     };
+  } else if (intent === 'qna') {
+    rawProposal = isInboxQuestion(requestText)
+      ? buildInboxAdvisorProposal(requestText, inboxTasks, cleanTasks)
+      : {
+          intent,
+          analysis_summary: 'I can help you plan your week, declutter inbox, or suggest the next tasks to work on. Try one of those prompts and I will generate actionable steps.',
+          questions: [],
+          proposed_actions: [],
+        };
   } else {
     rawProposal = createProposal(requestText, intent, tasks, preferences);
   }

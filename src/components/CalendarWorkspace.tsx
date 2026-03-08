@@ -1,7 +1,23 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { addDays, addWeeks, format, getHours, getMinutes, isSameDay, parseISO, startOfDay, startOfWeek, subWeeks } from 'date-fns';
+import {
+  addDays,
+  addMonths,
+  addWeeks,
+  endOfMonth,
+  endOfWeek,
+  format,
+  getHours,
+  getMinutes,
+  isSameDay,
+  parseISO,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+  subMonths,
+  subWeeks,
+} from 'date-fns';
 import clsx from 'clsx';
 import { CalendarCheck, CalendarSync, ChevronLeft, ChevronRight, Link2, Unlink2, X } from 'lucide-react';
 import { Task } from '@/types/task';
@@ -9,7 +25,7 @@ import { Project } from '@/types/project';
 import { formatDateKey } from '@/lib/dateKey';
 import { generateId } from '@/lib/utils';
 
-type CalendarViewMode = 'day' | 'week';
+type CalendarViewMode = 'month' | 'day' | 'week';
 type SyncState = 'task_only' | 'calendar_only' | 'linked';
 
 interface GoogleCalendarEvent {
@@ -135,7 +151,7 @@ function seedEvents(baseDate: Date): GoogleCalendarEvent[] {
 }
 
 export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWorkspaceProps) => {
-  const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
+  const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const [anchorDate, setAnchorDate] = useState<Date>(new Date());
   const [googleConnected, setGoogleConnected] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -168,11 +184,30 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
 
   const days = useMemo(() => {
     if (viewMode === 'day') return [startOfDay(anchorDate)];
+    if (viewMode === 'month') return [];
     const weekStart = startOfWeek(anchorDate, { weekStartsOn: 1 });
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   }, [viewMode, anchorDate]);
 
-  const dayKeys = useMemo(() => days.map((d) => formatDateKey(d)), [days]);
+  const monthDays = useMemo(() => {
+    if (viewMode !== 'month') return [] as Date[];
+    const monthStart = startOfMonth(anchorDate);
+    const monthEnd = endOfMonth(anchorDate);
+    const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+    const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
+    const result: Date[] = [];
+    let cursor = gridStart;
+    while (cursor <= gridEnd) {
+      result.push(cursor);
+      cursor = addDays(cursor, 1);
+    }
+    return result;
+  }, [viewMode, anchorDate]);
+
+  const dayKeys = useMemo(
+    () => (viewMode === 'month' ? monthDays.map((d) => formatDateKey(d)) : days.map((d) => formatDateKey(d))),
+    [viewMode, monthDays, days]
+  );
   const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
   const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
 
@@ -228,6 +263,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
 
   const handleNavigate = (direction: 'prev' | 'next') => {
     setAnchorDate((prev) => {
+      if (viewMode === 'month') return direction === 'next' ? addMonths(prev, 1) : subMonths(prev, 1);
       if (viewMode === 'day') return addDays(prev, direction === 'next' ? 1 : -1);
       return direction === 'next' ? addWeeks(prev, 1) : subWeeks(prev, 1);
     });
@@ -389,7 +425,9 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
   };
 
   const headerLabel =
-    viewMode === 'day'
+    viewMode === 'month'
+      ? format(anchorDate, 'MMMM yyyy')
+      : viewMode === 'day'
       ? format(anchorDate, 'EEEE, MMM d, yyyy')
       : `${format(days[0], 'MMM d')} - ${format(days[days.length - 1], 'MMM d, yyyy')}`;
 
@@ -400,10 +438,10 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
           <div className="flex items-center gap-2">
             <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5">
               <button
-                onClick={() => setViewMode('day')}
-                className={clsx('px-3 py-1.5 text-sm rounded-md', viewMode === 'day' ? 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border border-[var(--accent-border)]' : 'text-gray-600 dark:text-gray-300')}
+                onClick={() => setViewMode('month')}
+                className={clsx('px-3 py-1.5 text-sm rounded-md', viewMode === 'month' ? 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border border-[var(--accent-border)]' : 'text-gray-600 dark:text-gray-300')}
               >
-                Day
+                Month
               </button>
               <button
                 onClick={() => setViewMode('week')}
@@ -411,16 +449,13 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
               >
                 Week
               </button>
+              <button
+                onClick={() => setViewMode('day')}
+                className={clsx('px-3 py-1.5 text-sm rounded-md', viewMode === 'day' ? 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border border-[var(--accent-border)]' : 'text-gray-600 dark:text-gray-300')}
+              >
+                Day
+              </button>
             </div>
-            <button
-              onClick={() => {
-                setAnchorDate(new Date());
-                setViewMode('day');
-              }}
-              className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300"
-            >
-              Today
-            </button>
             <button onClick={() => handleNavigate('prev')} className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300">
               <ChevronLeft size={16} />
             </button>
@@ -479,81 +514,146 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
 
       <div className={clsx("p-4 grid grid-cols-1 gap-4", unscheduledTasks.length > 0 && "xl:grid-cols-[1fr_280px]")}>
         <div className="overflow-auto rounded-xl border border-gray-200 dark:border-gray-700">
-          <div className={clsx('min-w-[640px]', viewMode === 'week' && 'min-w-[1180px]')}>
-            <div className="flex border-b border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/50">
-              <div className="w-16 p-2 text-xs text-gray-400" />
-              {days.map((day) => (
-                <div key={day.toISOString()} className="flex-1 min-w-[160px] p-2 text-xs font-semibold text-gray-600 dark:text-gray-300 border-l border-gray-200 dark:border-gray-700">
-                  <div>{format(day, 'EEE')}</div>
-                  <div className={clsx('text-sm', isSameDay(day, new Date()) && 'text-black dark:text-white')}>{format(day, 'MMM d')}</div>
-                </div>
-              ))}
+          {viewMode === 'month' ? (
+            <div className="min-w-[760px]">
+              <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/50">
+                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((label) => (
+                  <div key={label} className="px-2 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 border-l first:border-l-0 border-gray-200 dark:border-gray-700">
+                    {label}
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7">
+                {monthDays.map((day) => {
+                  const dayKey = formatDateKey(day);
+                  const entries = timelineEntries
+                    .filter((entry) => entry.dayKey === dayKey)
+                    .sort((a, b) => a.start.getTime() - b.start.getTime());
+                  const isCurrentMonth = day.getMonth() === anchorDate.getMonth();
+                  return (
+                    <div
+                      key={dayKey}
+                      className={clsx(
+                        'min-h-[132px] p-2 border-t border-l first:border-l-0 border-gray-200 dark:border-gray-700',
+                        !isCurrentMonth && 'bg-gray-50/40 dark:bg-gray-800/30',
+                        isSameDay(day, new Date()) && 'bg-[var(--accent-soft)]/25'
+                      )}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const taskId = e.dataTransfer.getData('text/plain');
+                        if (taskId) void handleDropTask(taskId, dayKey, 9);
+                      }}
+                    >
+                      <div className={clsx('text-xs font-semibold mb-1.5', isCurrentMonth ? 'text-gray-700 dark:text-gray-200' : 'text-gray-400 dark:text-gray-500')}>
+                        {format(day, 'd')}
+                      </div>
+                      <div className="space-y-1">
+                        {entries.slice(0, 3).map((entry) => (
+                          <button
+                            key={entry.id}
+                            type="button"
+                            onClick={() => {
+                              if (entry.source === 'task' && entry.task) openTaskEditor(entry.task);
+                            }}
+                            className={clsx(
+                              'w-full text-left rounded-md px-1.5 py-1 text-[11px] truncate text-white',
+                              entry.source === 'task' ? 'cursor-pointer' : 'cursor-default',
+                              entry.syncState === 'linked' && 'ring-1 ring-emerald-200 dark:ring-emerald-700'
+                            )}
+                            style={{ backgroundColor: entry.color }}
+                            title={`${entry.title} (${format(entry.start, 'HH:mm')})`}
+                          >
+                            <span className="opacity-90 mr-1">{format(entry.start, 'HH:mm')}</span>
+                            {entry.title}
+                          </button>
+                        ))}
+                        {entries.length > 3 && (
+                          <div className="text-[11px] text-gray-500 dark:text-gray-400">+{entries.length - 3} more</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-
-            <div className="flex">
-              <div className="w-16 shrink-0">
-                {Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i).map((hour) => (
-                  <div key={hour} className="h-16 pr-2 text-right text-xs text-gray-400 border-t border-gray-100 dark:border-gray-800">
-                    {format(new Date(2026, 0, 1, hour, 0, 0), 'HH:mm')}
+          ) : (
+            <div className={clsx('min-w-[640px]', viewMode === 'week' && 'min-w-[1180px]')}>
+              <div className="flex border-b border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/50">
+                <div className="w-16 p-2 text-xs text-gray-400" />
+                {days.map((day) => (
+                  <div key={day.toISOString()} className="flex-1 min-w-[160px] p-2 text-xs font-semibold text-gray-600 dark:text-gray-300 border-l border-gray-200 dark:border-gray-700">
+                    <div>{format(day, 'EEE')}</div>
+                    <div className={clsx('text-sm', isSameDay(day, new Date()) && 'text-black dark:text-white')}>{format(day, 'MMM d')}</div>
                   </div>
                 ))}
               </div>
 
-              {days.map((day) => {
-                const dayKey = formatDateKey(day);
-                const entries = timelineEntries.filter((entry) => entry.dayKey === dayKey);
-                return (
-                  <div key={dayKey} className="relative flex-1 min-w-[160px] border-l border-gray-200 dark:border-gray-700">
-                    {Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i).map((hour) => (
-                      <div
-                        key={`${dayKey}-${hour}`}
-                        className="h-16 border-t border-gray-100 dark:border-gray-800 hover:bg-gray-50/60 dark:hover:bg-gray-800/40"
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const taskId = e.dataTransfer.getData('text/plain');
-                          if (taskId) void handleDropTask(taskId, dayKey, hour);
-                        }}
-                      />
-                    ))}
+              <div className="flex">
+                <div className="w-16 shrink-0">
+                  {Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i).map((hour) => (
+                    <div key={hour} className="h-16 pr-2 text-right text-xs text-gray-400 border-t border-gray-100 dark:border-gray-800">
+                      {format(new Date(2026, 0, 1, hour, 0, 0), 'HH:mm')}
+                    </div>
+                  ))}
+                </div>
 
-                    {entries.map((entry) => {
-                      const startHour = getHours(entry.start);
-                      const startMin = getMinutes(entry.start);
-                      const durationMin = Math.max((entry.end.getTime() - entry.start.getTime()) / (60 * 1000), 30);
-                      const top = ((startHour - START_HOUR) + startMin / 60) * ROW_HEIGHT;
-                      const height = Math.max((durationMin / 60) * ROW_HEIGHT, 24);
-                      return (
+                {days.map((day) => {
+                  const dayKey = formatDateKey(day);
+                  const entries = timelineEntries.filter((entry) => entry.dayKey === dayKey);
+                  return (
+                    <div key={dayKey} className="relative flex-1 min-w-[160px] border-l border-gray-200 dark:border-gray-700">
+                      {Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i).map((hour) => (
                         <div
-                          key={entry.id}
-                          draggable={entry.source === 'task' && !!entry.task}
-                          onDragStart={(e) => {
-                            if (entry.task) e.dataTransfer.setData('text/plain', entry.task.id);
+                          key={`${dayKey}-${hour}`}
+                          className="h-16 border-t border-gray-100 dark:border-gray-800 hover:bg-gray-50/60 dark:hover:bg-gray-800/40"
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            const taskId = e.dataTransfer.getData('text/plain');
+                            if (taskId) void handleDropTask(taskId, dayKey, hour);
                           }}
-                          onClick={() => {
-                            if (entry.source === 'task' && entry.task) openTaskEditor(entry.task);
-                          }}
-                          className={clsx(
-                            'absolute left-1 right-1 rounded-lg px-2 py-1 text-xs text-white shadow-sm',
-                            entry.source === 'task' ? 'cursor-pointer' : 'cursor-default',
-                            entry.syncState === 'linked' && 'ring-1 ring-emerald-200 dark:ring-emerald-700'
-                          )}
-                          style={{ top, height, backgroundColor: entry.color }}
-                          title={`${entry.title} (${format(entry.start, 'HH:mm')} - ${format(entry.end, 'HH:mm')})`}
-                        >
-                          <div className="font-medium truncate">{entry.title}</div>
-                          <div className="opacity-90">{format(entry.start, 'HH:mm')} - {format(entry.end, 'HH:mm')}</div>
-                          <div className="opacity-90 uppercase tracking-wide">
-                            {entry.syncState === 'task_only' ? 'Task only' : entry.syncState === 'linked' ? 'Linked' : 'Calendar only'}
+                        />
+                      ))}
+
+                      {entries.map((entry) => {
+                        const startHour = getHours(entry.start);
+                        const startMin = getMinutes(entry.start);
+                        const durationMin = Math.max((entry.end.getTime() - entry.start.getTime()) / (60 * 1000), 30);
+                        const top = ((startHour - START_HOUR) + startMin / 60) * ROW_HEIGHT;
+                        const height = Math.max((durationMin / 60) * ROW_HEIGHT, 24);
+                        return (
+                          <div
+                            key={entry.id}
+                            draggable={entry.source === 'task' && !!entry.task}
+                            onDragStart={(e) => {
+                              if (entry.task) e.dataTransfer.setData('text/plain', entry.task.id);
+                            }}
+                            onClick={() => {
+                              if (entry.source === 'task' && entry.task) openTaskEditor(entry.task);
+                            }}
+                            className={clsx(
+                              'absolute left-1 right-1 rounded-lg px-2 py-1 text-xs text-white shadow-sm',
+                              entry.source === 'task' ? 'cursor-pointer' : 'cursor-default',
+                              entry.syncState === 'linked' && 'ring-1 ring-emerald-200 dark:ring-emerald-700'
+                            )}
+                            style={{ top, height, backgroundColor: entry.color }}
+                            title={`${entry.title} (${format(entry.start, 'HH:mm')} - ${format(entry.end, 'HH:mm')})`}
+                          >
+                            <div className="font-medium truncate">{entry.title}</div>
+                            <div className="opacity-90">{format(entry.start, 'HH:mm')} - {format(entry.end, 'HH:mm')}</div>
+                            <div className="opacity-90 uppercase tracking-wide">
+                              {entry.syncState === 'task_only' ? 'Task only' : entry.syncState === 'linked' ? 'Linked' : 'Calendar only'}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {unscheduledTasks.length > 0 && (
