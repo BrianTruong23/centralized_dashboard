@@ -9,9 +9,10 @@ interface FocusSessionModalProps {
   task: Task | null;
   onComplete: (task: Task) => void;
   showFocusPlant?: boolean;
+  autoStart?: boolean;
 }
 
-export function FocusSessionModal({ isOpen, onClose, task, onComplete, showFocusPlant = true }: FocusSessionModalProps) {
+export function FocusSessionModal({ isOpen, onClose, task, onComplete, showFocusPlant = true, autoStart = false }: FocusSessionModalProps) {
   if (!isOpen || !task) return null;
 
   return (
@@ -28,10 +29,12 @@ export function FocusSessionModal({ isOpen, onClose, task, onComplete, showFocus
         </button>
         
         <FocusTimer 
+          key={`${task.id}-${autoStart ? 'auto' : 'manual'}`}
           task={task}
           onComplete={onComplete}
           onStop={onClose}
           showFocusPlant={showFocusPlant}
+          autoStart={autoStart}
         />
       </div>
     </div>

@@ -53,7 +53,7 @@ export async function POST(req: Request) {
               content: `Extract tasks from notes. Today: ${new Date().toISOString().split('T')[0]}
 
 Return JSON only:
-{"summary":"1-2 sentences","actionItems":[{"title":"verb + task","description":"brief","category":"${availableProjects}","priority":1-5,"estimatedMinutes":15-120,"energyLevel":"low|medium|high","deadline":"YYYY-MM-DD or null"}]}
+{"summary":"3-5 concise bullet points (each starts with '- ' and each line is short)","actionItems":[{"title":"verb + task","description":"brief","category":"${availableProjects}","priority":1-5,"estimatedMinutes":15-120,"energyLevel":"low|medium|high","deadline":"YYYY-MM-DD or null"}]}
 
 Priority: 1=urgent, 2=high, 3=normal, 4=low. Deadline: extract dates from notes, convert to YYYY-MM-DD. Max 5 tasks.
 STRICT CATEGORY RULE: You MUST ONLY use the categories provided in the JSON template above (${availableProjects}). DO NOT create new categories.`
@@ -99,8 +99,29 @@ STRICT CATEGORY RULE: You MUST ONLY use the categories provided in the JSON temp
       }
 
       log(`Total time: ${Date.now() - startTime}ms`);
+      const rawSummary = typeof parsed.summary === 'string' ? parsed.summary : '';
+      const summaryLines = rawSummary
+        .replace(/\r\n/g, '\n')
+        .split('\n')
+        .map((line: string) => line.trim())
+        .filter(Boolean)
+        .map((line: string) => line.replace(/^[\-\*\u2022]\s*/, '').trim())
+        .filter(Boolean);
+
+      const condensedPoints = (summaryLines.length > 1
+        ? summaryLines
+        : rawSummary
+            .split(/(?<=[.!?])\s+/)
+            .map((s: string) => s.trim())
+            .filter(Boolean)
+      )
+        .slice(0, 5)
+        .map((line: string) => `- ${line}`);
+
+      const normalizedSummary = condensedPoints.join('\n');
+
       return NextResponse.json({
-        summary: parsed.summary || 'No summary generated.',
+        summary: normalizedSummary || '- No concise summary generated.',
         actionItems: parsed.actionItems || []
       });
     } catch (error: any) {

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { notesDb } from '@/lib/notes';
-import { Loader2, Sparkles, Save, Plus, CheckCircle, ListPlus, Calendar, Pencil, X } from 'lucide-react';
+import { Loader2, Sparkles, Save, Plus, CheckCircle, ListPlus, Calendar, Pencil, WandSparkles, ChevronsUpDown, TextQuote, Briefcase } from 'lucide-react';
 import { Task, TaskCategory, TaskEnergyLevel } from '@/types/task';
 import { Project, CreateProjectInput } from '@/types/project';
 
@@ -23,6 +23,7 @@ interface DailyNotesProps {
   projects?: Project[];
   addProject?: (input: CreateProjectInput) => Promise<Project | undefined>;
   onNoteSaved?: () => void;
+  isPro?: boolean;
 }
 
 type DailyNotesCache = {
@@ -34,7 +35,59 @@ type DailyNotesCache = {
 
 const dailyNotesCache = new Map<string, DailyNotesCache>();
 
-export function DailyNotes({ userId, onAddTask, showHistory = false, projects = [], addProject, onNoteSaved }: DailyNotesProps) {
+function getSelectionAnchorFromTextarea(
+  textarea: HTMLTextAreaElement,
+  container: HTMLElement,
+  selectionEnd: number
+): { x: number; y: number } {
+  const style = window.getComputedStyle(textarea);
+  const mirror = document.createElement('div');
+  const marker = document.createElement('span');
+
+  const mirrorStyles = [
+    'position:absolute',
+    'visibility:hidden',
+    'white-space:pre-wrap',
+    'word-wrap:break-word',
+    'overflow-wrap:break-word',
+    'top:0',
+    'left:-9999px',
+    `width:${textarea.clientWidth}px`,
+    `font-family:${style.fontFamily}`,
+    `font-size:${style.fontSize}`,
+    `font-weight:${style.fontWeight}`,
+    `line-height:${style.lineHeight}`,
+    `letter-spacing:${style.letterSpacing}`,
+    `padding:${style.paddingTop} ${style.paddingRight} ${style.paddingBottom} ${style.paddingLeft}`,
+    `border:${style.border}`,
+    'box-sizing:border-box',
+  ].join(';');
+
+  mirror.setAttribute('style', mirrorStyles);
+  mirror.textContent = textarea.value.slice(0, selectionEnd);
+  marker.textContent = '\u200b';
+  mirror.appendChild(marker);
+  document.body.appendChild(mirror);
+
+  const textareaRect = textarea.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  const markerLeft = marker.offsetLeft;
+  const markerTop = marker.offsetTop;
+
+  document.body.removeChild(mirror);
+
+  const localTextareaX = textareaRect.left - containerRect.left;
+  const localTextareaY = textareaRect.top - containerRect.top;
+  const left = localTextareaX + markerLeft + 10;
+  const top = localTextareaY + markerTop - textarea.scrollTop - 30;
+
+  return {
+    x: Math.max(8, Math.min(left, containerRect.width - 40)),
+    y: Math.max(8, Math.min(top, containerRect.height - 36)),
+  };
+}
+
+export function DailyNotes({ userId, onAddTask, showHistory = false, projects = [], addProject, onNoteSaved, isPro = false }: DailyNotesProps) {
   const MAX_NOTE_WORDS = 500;
   const [noteContent, setNoteContent] = useState('');
   const [summary, setSummary] = useState('');
@@ -47,6 +100,17 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSummaryVisible, setIsSummaryVisible] = useState(false);
+  const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [selectedRange, setSelectedRange] = useState<{ start: number; end: number; text: string } | null>(null);
+  const [selectionActionLoading, setSelectionActionLoading] = useState<'rephrase' | 'shorten' | 'elaborate' | 'more_formal' | 'custom' | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const writingSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const [refineAnchor, setRefineAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [isSelectionMenuOpen, setIsSelectionMenuOpen] = useState(false);
+  const selectionMenuRef = useRef<HTMLDivElement | null>(null);
+  const selectionTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const [selectionPrompt, setSelectionPrompt] = useState('');
 
   // State for missing projects handling
   const [missingProjects, setMissingProjects] = useState<string[]>([]);
@@ -94,6 +158,23 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
     });
   }, [userId, noteContent, summary, currentNoteId, isSummaryVisible]);
 
+  useEffect(() => {
+    const closeOnOutside = (event: MouseEvent) => {
+      if (!isSelectionMenuOpen) return;
+      const target = event.target as Node;
+      if (
+        selectionMenuRef.current?.contains(target) ||
+        selectionTriggerRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setIsSelectionMenuOpen(false);
+    };
+
+    document.addEventListener('mousedown', closeOnOutside);
+    return () => document.removeEventListener('mousedown', closeOnOutside);
+  }, [isSelectionMenuOpen]);
+
   const loadLatestNote = async () => {
     if (!userId) return;
     try {
@@ -115,18 +196,24 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
         if (selected) {
             setNoteContent(selected.content);
             setSummary(selected.summary || '');
+            setIsSummaryExpanded(false);
             setCurrentNoteId(selected.id);
+            setLastSavedAt(selected.updatedAt || selected.createdAt);
         } else {
             // Reset if no note selected
             setNoteContent('');
             setSummary('');
+            setIsSummaryExpanded(false);
             setCurrentNoteId(null);
+            setLastSavedAt(null);
         }
 
       } else {
         setNoteContent('');
         setSummary('');
+        setIsSummaryExpanded(false);
         setCurrentNoteId(null);
+        setLastSavedAt(null);
       }
     } catch (err) {
       console.error('Failed to load notes', err);
@@ -139,7 +226,8 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
     setError(null);
     try {
       if (currentNoteId) {
-        await notesDb.updateNote(currentNoteId, { content: noteContent, summary });
+        const updated = await notesDb.updateNote(currentNoteId, { content: noteContent, summary });
+        setLastSavedAt(updated.updatedAt);
       } else {
         const newNote = await notesDb.addNote({
           user_id: userId,
@@ -147,6 +235,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
           summary
         });
         setCurrentNoteId(newNote.id);
+        setLastSavedAt(newNote.updatedAt || newNote.createdAt);
       }
       await loadLatestNote();
       onNoteSaved?.();
@@ -165,8 +254,11 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
     setActionItems([]);
     setAddedItems(new Set());
     setIsSummaryVisible(false);
+    setIsSummaryExpanded(false);
     setEditingIndex(null);
     setEditForm(null);
+    setLastSavedAt(null);
+    setSelectedRange(null);
   };
 
   const handleSummarize = async () => {
@@ -208,13 +300,15 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
       log(`Action items received: ${data.actionItems?.length || 0}`);
 
       setSummary(data.summary);
+      setIsSummaryExpanded(false);
       setActionItems(data.actionItems || []);
       setAddedItems(new Set()); // Reset added items
 
       // Persist note content + summary together to avoid missing summaries on new notes.
       if (userId) {
         if (currentNoteId) {
-          await notesDb.updateNote(currentNoteId, { content: noteContent, summary: data.summary });
+          const updated = await notesDb.updateNote(currentNoteId, { content: noteContent, summary: data.summary });
+          setLastSavedAt(updated.updatedAt);
           log('Updated existing note with summary');
         } else {
           const created = await notesDb.addNote({
@@ -223,6 +317,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
             summary: data.summary,
           });
           setCurrentNoteId(created.id);
+          setLastSavedAt(created.updatedAt || created.createdAt);
           log(`Created note with summary: ${created.id}`);
         }
         onNoteSaved?.();
@@ -237,6 +332,80 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
       setError(message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const updateSelectionRange = () => {
+    const element = textareaRef.current;
+    const container = writingSurfaceRef.current;
+    if (!element || !container) return;
+    const start = element.selectionStart ?? 0;
+    const end = element.selectionEnd ?? 0;
+    const text = element.value.slice(start, end).trim();
+    if (end - start >= 3 && text.length >= 3) {
+      setSelectedRange({ start, end, text });
+      setRefineAnchor(getSelectionAnchorFromTextarea(element, container, end));
+      return;
+    }
+    setIsSelectionMenuOpen(false);
+    setSelectedRange(null);
+    setRefineAnchor(null);
+  };
+
+  const handleSelectionAction = async (
+    mode: 'rephrase' | 'shorten' | 'elaborate' | 'more_formal' | 'custom'
+  ) => {
+    if (!selectedRange || selectionActionLoading) return;
+    if (!isPro) {
+      setError('Text refinement is a Pro feature.');
+      setIsSelectionMenuOpen(false);
+      return;
+    }
+    if (mode === 'custom' && !selectionPrompt.trim()) return;
+
+    setSelectionActionLoading(mode);
+    setError(null);
+    try {
+      const res = await fetch('/api/refine-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selectedText: selectedRange.text,
+          fullText: noteContent,
+          mode,
+          instruction: selectionPrompt.trim() || undefined,
+        }),
+      });
+
+      const contentType = res.headers.get('content-type') || '';
+      const data = contentType.includes('application/json')
+        ? await res.json()
+        : { error: await res.text() };
+      if (!res.ok) throw new Error(data?.error || 'Failed to refine selection');
+      const refined = String(data?.refinedText || '').trim();
+      if (!refined) throw new Error('No refined text returned');
+
+      setNoteContent((prev) => {
+        const next = `${prev.slice(0, selectedRange.start)}${refined}${prev.slice(selectedRange.end)}`;
+        return clampToMaxWords(next, MAX_NOTE_WORDS);
+      });
+
+      const nextCursor = selectedRange.start + refined.length;
+      setSelectedRange(null);
+      setRefineAnchor(null);
+      setIsSelectionMenuOpen(false);
+      setSelectionPrompt('');
+      requestAnimationFrame(() => {
+        const element = textareaRef.current;
+        if (!element) return;
+        element.focus();
+        element.setSelectionRange(nextCursor, nextCursor);
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to refine selection';
+      setError(message);
+    } finally {
+      setSelectionActionLoading(null);
     }
   };
 
@@ -369,12 +538,41 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
     setEditForm(null);
   };
 
+  const summaryPoints = useMemo(() => {
+    if (!summary.trim()) return [];
+    const normalized = summary.replace(/\r\n/g, '\n').trim();
+    const lines = normalized
+      .split('\n')
+      .map((line) => line.replace(/^[\-\*\u2022]\s*/, '').trim())
+      .filter(Boolean);
+
+    const rawPoints = lines.length > 1
+      ? lines
+      : normalized
+          .split(/(?<=[.!?])\s+/)
+          .map((part) => part.trim())
+          .filter(Boolean);
+
+    const unique: string[] = [];
+    rawPoints.forEach((point) => {
+      if (!unique.includes(point)) unique.push(point);
+    });
+    return unique;
+  }, [summary]);
   if (!userId) return null;
 
   const wordCount = countWords(noteContent);
+  const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  const saveStatusLabel = isSaving
+    ? 'Saving...'
+    : lastSavedAt
+      ? `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+      : 'Not saved yet';
+  const previewSummaryPoints = isSummaryExpanded ? summaryPoints : summaryPoints.slice(0, 5);
+  const hasHiddenSummaryPoints = summaryPoints.length > 5 && !isSummaryExpanded;
 
   return (
-    <div className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
+    <div className="bg-white dark:bg-gray-800 p-5 md:p-7 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
       
       {/* Missing Projects Confirmation Modal */}
       {missingProjects.length > 0 && (
@@ -409,32 +607,43 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold">Daily Notes & Dump</h2>
-        <div className="flex gap-2">
+      <div className="mb-5">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+          <div>
+            <h2 className="text-[28px] md:text-[32px] leading-tight font-semibold tracking-tight text-gray-900 dark:text-gray-100">
+              Daily Notes
+            </h2>
+            <div className="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <span>{todayLabel}</span>
+              <span>•</span>
+              <span>{saveStatusLabel}</span>
+            </div>
+          </div>
+          <div className="flex w-full md:w-auto gap-1.5 flex-wrap md:flex-nowrap md:justify-end">
             <button
                 onClick={handleCreateNewNote}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 bg-transparent border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
             >
-                <Plus size={14} />
-                New note
+                <Plus size={13} />
+                New
             </button>
             <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700/70 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
             >
-                {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                {isSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
                 Save
             </button>
             <button
                 onClick={handleSummarize}
                 disabled={isLoading || !noteContent.trim()}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 accent-solid-btn"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors disabled:opacity-50 border border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] hover:opacity-90"
             >
-                {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                Summarize with AI
+                {isLoading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                Summarize
             </button>
+          </div>
         </div>
       </div>
 
@@ -444,46 +653,153 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
         </div>
       )}
 
-      <div className={`grid grid-cols-1 ${isSummaryVisible ? 'md:grid-cols-2' : ''} gap-6`}>
-        <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold uppercase text-gray-400">Your Thoughts</label>
+      <div className="space-y-6">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Writing</label>
+            <div className="flex items-center gap-2">
               <span className={`text-xs ${wordCount >= MAX_NOTE_WORDS ? 'text-red-500' : 'text-gray-400'}`}>
                 {wordCount}/{MAX_NOTE_WORDS} words
               </span>
             </div>
+          </div>
+          <div ref={writingSurfaceRef} className="relative rounded-2xl bg-gray-50/70 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800 px-5 py-4">
+            {selectedRange && refineAnchor && isPro && (
+              <>
+                <button
+                  ref={selectionTriggerRef}
+                  type="button"
+                  onClick={() => setIsSelectionMenuOpen((prev) => !prev)}
+                  disabled={!!selectionActionLoading}
+                  className="absolute z-10 h-9 w-9 inline-flex items-center justify-center rounded-full border border-[var(--accent-border)] bg-[var(--accent-soft)] text-[var(--accent-soft-foreground)] shadow-sm hover:opacity-90 disabled:opacity-60 transition-opacity"
+                  style={{ left: refineAnchor.x, top: refineAnchor.y }}
+                  title="Text actions"
+                >
+                  {selectionActionLoading ? <Loader2 size={14} className="animate-spin" /> : <WandSparkles size={14} />}
+                </button>
+                {isSelectionMenuOpen && (
+                  <div
+                    ref={selectionMenuRef}
+                    className="absolute z-20 min-w-[280px] rounded-xl border border-gray-200 bg-white p-2 shadow-lg dark:border-gray-700 dark:bg-gray-800"
+                    style={{ left: refineAnchor.x, top: refineAnchor.y + 40 }}
+                  >
+                    <div className="mb-1.5">
+                      <input
+                        type="text"
+                        value={selectionPrompt}
+                        onChange={(e) => setSelectionPrompt(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            void handleSelectionAction('custom');
+                          }
+                        }}
+                        placeholder="Modify with a prompt"
+                        className="w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-700 outline-none focus:border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectionAction('rephrase')}
+                      disabled={!!selectionActionLoading}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-60 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      <WandSparkles size={14} />
+                      Rephrase
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectionAction('shorten')}
+                      disabled={!!selectionActionLoading}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-60 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      <ChevronsUpDown size={14} />
+                      Shorten
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectionAction('elaborate')}
+                      disabled={!!selectionActionLoading}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-60 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      <TextQuote size={14} />
+                      Elaborate
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectionAction('more_formal')}
+                      disabled={!!selectionActionLoading}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-60 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      <Briefcase size={14} />
+                      More formal
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
             <textarea
-                value={noteContent}
-                onChange={(e) => setNoteContent(clampToMaxWords(e.target.value, MAX_NOTE_WORDS))}
-                placeholder="Dump your tasks, ideas, and thoughts here..."
-                className="w-full h-64 p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 resize-none focus:ring-2 focus:outline-none transition-all"
-                style={{ ['--tw-ring-color' as any]: 'var(--accent-ring)' }}
+              ref={textareaRef}
+              value={noteContent}
+              onChange={(e) => setNoteContent(clampToMaxWords(e.target.value, MAX_NOTE_WORDS))}
+              onSelect={updateSelectionRange}
+              onMouseUp={updateSelectionRange}
+              onKeyUp={updateSelectionRange}
+              placeholder="Start writing your notes..."
+              className="w-full min-h-[320px] md:min-h-[360px] bg-transparent border-0 outline-none resize-none text-[17px] leading-8 tracking-[0.01em] text-gray-800 dark:text-gray-200 placeholder:text-gray-400/90 dark:placeholder:text-gray-500"
             />
+          </div>
         </div>
 
         {isSummaryVisible && (
-        <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold uppercase text-gray-400">AI Summary & Action Items</label>
               {actionItems.length > 0 && onAddTask && (
                 <button
                   onClick={handleAddAllTasks}
                   disabled={addedItems.size === actionItems.length}
-                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-[var(--accent-soft-foreground)] bg-[var(--accent-soft)] rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50"
                 >
                   <ListPlus size={12} />
                   Add All ({actionItems.length - addedItems.size})
                 </button>
               )}
             </div>
-            <div className="w-full h-64 p-4 rounded-xl bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/30 overflow-y-auto">
-                {summary || actionItems.length > 0 ? (
-                    <div className="space-y-4">
-                      {summary && (
-                        <p className="text-sm text-gray-600 dark:text-gray-300 pb-3 border-b border-indigo-100 dark:border-indigo-900/30">
-                          {summary}
-                        </p>
-                      )}
+
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-900/60 p-3">
+              {summaryPoints.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    Summary Preview
+                  </p>
+                  <ul className="space-y-1">
+                    {previewSummaryPoints.map((point, idx) => (
+                      <li key={`${point.slice(0, 24)}-${idx}`} className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                        • {point}
+                      </li>
+                    ))}
+                  </ul>
+                  {(hasHiddenSummaryPoints || isSummaryExpanded) && (
+                    <button
+                      type="button"
+                      onClick={() => setIsSummaryExpanded((prev) => !prev)}
+                      className="text-xs font-medium text-[var(--accent-soft-foreground)] hover:opacity-80 transition-opacity"
+                    >
+                      {isSummaryExpanded ? 'Show less' : `Show more (${summaryPoints.length - previewSummaryPoints.length} more)`}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Click &quot;Summarize with AI&quot; to generate a concise plan from your note.
+                </p>
+              )}
+            </div>
+
+            <div className="w-full max-h-[28rem] p-4 rounded-xl bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 overflow-y-auto">
+              {summary || actionItems.length > 0 ? (
+                <div className="space-y-4">
                       {actionItems.length > 0 && (
                         <div className="space-y-2">
                           {actionItems.map((item, index) => (
@@ -647,14 +963,14 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
                           ))}
                         </div>
                       )}
-                    </div>
-                ) : (
-                    <div className="h-full flex items-center justify-center text-gray-400 text-sm italic">
-                        Click "Summarize with AI" to generate a plan from your notes.
-                    </div>
-                )}
+                </div>
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-400 text-sm">
+                  Click &quot;Summarize with AI&quot; to generate action items from your notes.
+                </div>
+              )}
             </div>
-        </div>
+          </div>
         )}
       </div>
 

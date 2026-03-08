@@ -160,7 +160,7 @@ export const Sidebar = ({
       {/* Sidebar Container */}
       <aside 
         className={clsx(
-          "fixed md:static inset-y-0 left-0 z-40 w-64 flex flex-col h-screen bg-gray-50/50 dark:bg-black border-r border-gray-100 dark:border-gray-900 transition-transform duration-300 ease-in-out md:translate-x-0",
+          "fixed md:static inset-y-0 left-0 z-40 w-64 flex flex-col h-screen bg-white dark:bg-gray-950 md:bg-gray-50 md:dark:bg-black border-r border-gray-100 dark:border-gray-900 shadow-xl md:shadow-none transition-transform duration-300 ease-in-out md:translate-x-0",
           isMobileOpen ? "translate-x-0" : "-translate-x-full",
           className
         )}

@@ -9,6 +9,7 @@ interface FocusTimerProps {
   onComplete: (task: Task) => void;
   onStop: () => void;
   showFocusPlant?: boolean;
+  autoStart?: boolean;
 }
 
 function FocusPlant({ elapsedSeconds }: { elapsedSeconds: number }) {
@@ -65,8 +66,8 @@ function FocusPlant({ elapsedSeconds }: { elapsedSeconds: number }) {
   );
 }
 
-export const FocusTimer = ({ task, onComplete, onStop, showFocusPlant = true }: FocusTimerProps) => {
-  const [sessionState, setSessionState] = useState<'idle' | 'running' | 'paused'>('idle');
+export const FocusTimer = ({ task, onComplete, onStop, showFocusPlant = true, autoStart = false }: FocusTimerProps) => {
+  const [sessionState, setSessionState] = useState<'idle' | 'running' | 'paused'>(autoStart ? 'running' : 'idle');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -82,12 +83,6 @@ export const FocusTimer = ({ task, onComplete, onStop, showFocusPlant = true }: 
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [sessionState]);
-
-  // Reset timer when task changes
-  useEffect(() => {
-    setSessionState('idle');
-    setElapsedSeconds(0);
-  }, [task.id]);
 
   const formatTime = (seconds: number) => {
     const mm = Math.floor(seconds / 60).toString().padStart(2, '0');

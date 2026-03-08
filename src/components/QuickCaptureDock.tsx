@@ -321,13 +321,10 @@ export const QuickCaptureDock = ({
     <div
       ref={dockRef}
       className={clsx(
-        "fixed bottom-6 left-1/2 -translate-x-1/2 z-50 transition-all duration-300 ease-out",
+        "fixed bottom-6 left-3 right-[4.75rem] translate-x-0 md:left-1/2 md:right-auto md:-translate-x-1/2 z-50 transition-all duration-300 ease-out",
+        isExpanded ? "w-[calc(100vw-1.5rem)] md:w-[min(600px,90vw)]" : "w-[calc(100vw-6rem)] md:w-auto",
         isVisible ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 translate-y-4 pointer-events-none"
       )}
-      style={{
-        maxWidth: 'calc(100% - 2rem)',
-        width: isExpanded ? 'min(600px, 90vw)' : 'auto',
-      }}
     >
       <div
         className={clsx(
@@ -575,7 +572,7 @@ export const QuickCaptureDock = ({
                                     'h-8 w-8 rounded-full text-sm transition-colors',
                                     !isSameMonth(date, calendarMonth) && 'text-gray-300 dark:text-gray-600',
                                     isSameMonth(date, calendarMonth) && 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800',
-                                    isSelected && 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border-[var(--accent-border)] hover:opacity-95',
+                                    isSelected && 'bg-[var(--accent-solid)] !text-white border-[var(--accent-border)] hover:opacity-95',
                                     !isSelected && isSameDay(date, today) && 'font-semibold text-gray-900 dark:text-gray-100'
                                   )}
                                 >
@@ -666,30 +663,12 @@ export const QuickCaptureDock = ({
                     )}
                   >
                     <Tag size={14} />
-                    {project ? project.name : 'Inbox'}
+                    {project ? project.name : 'Category'}
                     <ChevronDown size={12} className="text-gray-500" />
                   </button>
 
                   {showProjectDropdown && (
                     <div className="absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-900 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 py-2 z-[100] min-w-[240px] max-h-[60vh] overflow-y-auto">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setProjectId('');
-                          setShowProjectDropdown(false);
-                        }}
-                        className={clsx(
-                          "w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left",
-                          !projectId && "bg-gray-100 dark:bg-gray-800"
-                        )}
-                      >
-                        <Tag size={18} className="text-gray-500 dark:text-gray-400" />
-                        <span className="text-gray-700 dark:text-gray-200 font-medium flex-1">Inbox</span>
-                        {!projectId && (
-                          <span className="ml-auto text-sm font-bold text-amber-600 dark:text-amber-400">✓</span>
-                        )}
-                      </button>
                       {projects.map((p) => (
                         <button
                           key={p.id}
