@@ -21,6 +21,29 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
 
   const project = projects.find(p => p.id === task.project_id);
 
+  const toTimeInputValue = (value?: string): string => {
+    if (!value) return '';
+    const timeMatch = value.match(/(\d{2}):(\d{2})/);
+    if (timeMatch) return `${timeMatch[1]}:${timeMatch[2]}`;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
+  };
+
+  const normalizeTimeValue = (value?: string): string | undefined => {
+    if (!value) return undefined;
+    return value.length === 5 ? `${value}:00` : value;
+  };
+
+  const buildTimestamp = (dateKey?: string, timeValue?: string): string | undefined => {
+    const normalizedTime = normalizeTimeValue(timeValue);
+    if (!dateKey || !normalizedTime) return undefined;
+    const [year, month, day] = dateKey.slice(0, 10).split('-').map(Number);
+    const [hours, minutes, seconds] = normalizedTime.split(':').map(Number);
+    if (!year || !month || !day) return undefined;
+    return new Date(year, month - 1, day, hours || 0, minutes || 0, seconds || 0, 0).toISOString();
+  };
+
   const formatTimeLabel = (value?: string): string | null => {
     if (!value) return null;
     const timeMatch = value.match(/(\d{2}):(\d{2})/);
@@ -70,7 +93,27 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
   };
 
   const handleEditSave = () => {
-    onUpdate(editForm);
+    const normalizedScheduledTime = normalizeTimeValue(editForm.scheduled_time || editForm.due_time);
+    const normalizedEndTime = normalizeTimeValue(editForm.end_time);
+    const startTimestamp = buildTimestamp(editForm.deadline || editForm.scheduled_date, normalizedScheduledTime);
+    const endTimestamp = buildTimestamp(editForm.deadline || editForm.scheduled_date, normalizedEndTime);
+    const derivedEstimatedMinutes =
+      startTimestamp && endTimestamp
+        ? Math.max(
+            Math.round((new Date(endTimestamp).getTime() - new Date(startTimestamp).getTime()) / 60000),
+            0
+          ) || editForm.estimatedMinutes
+        : editForm.estimatedMinutes;
+
+    onUpdate({
+      ...editForm,
+      estimatedMinutes: derivedEstimatedMinutes,
+      scheduled_date: editForm.deadline || editForm.scheduled_date,
+      scheduled_time: normalizedScheduledTime,
+      due_time: normalizedScheduledTime,
+      start_time: startTimestamp,
+      end_time: endTimestamp,
+    });
     setIsEditing(false);
   };
 
@@ -157,6 +200,22 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
               />
             </div>
 
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Start Time</label>
+              <input
+                type="time"
+                value={toTimeInputValue(editForm.scheduled_time || editForm.start_time)}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    scheduled_time: e.target.value || undefined,
+                    due_time: e.target.value || undefined,
+                  })
+                }
+                className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none text-gray-500"
+              />
+            </div>
+
             {/* Removed old Category dropdown */}
 
             <div>
@@ -183,6 +242,16 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
                 className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none"
                 min={0}
                 step={5}
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">End Time</label>
+              <input
+                type="time"
+                value={toTimeInputValue(editForm.end_time)}
+                onChange={(e) => setEditForm({ ...editForm, end_time: e.target.value || undefined })}
+                className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none text-gray-500"
               />
             </div>
         </div>
