@@ -114,14 +114,14 @@ function toTimeString(date: Date): string {
 }
 
 function getTaskTimeRange(task: Task): { start: Date; end: Date; dayKey: string } | null {
-  const startFromTimestamp = toDate(task.start_time);
+  const startFromTimestamp = toDate(task.scheduled_start || task.start_time);
   if (startFromTimestamp) {
-    const dayKeyFromDeadline = normalizeDateKey(task.deadline);
+    const dayKeyFromDeadline = normalizeDateKey(task.scheduled_on || task.scheduled_date || task.deadline);
     const anchoredStart = dayKeyFromDeadline
       ? parseLocalDateTime(dayKeyFromDeadline, toTimeString(startFromTimestamp))
       : startFromTimestamp;
 
-    const endFromTimestamp = toDate(task.end_time);
+    const endFromTimestamp = toDate(task.scheduled_end || task.end_time);
     const durationFromTimestamps =
       endFromTimestamp && endFromTimestamp.getTime() > startFromTimestamp.getTime()
         ? Math.round((endFromTimestamp.getTime() - startFromTimestamp.getTime()) / 60000)
@@ -138,7 +138,7 @@ function getTaskTimeRange(task: Task): { start: Date; end: Date; dayKey: string 
     };
   }
 
-  const dateKey = normalizeDateKey(task.scheduled_date) || normalizeDateKey(task.deadline);
+  const dateKey = normalizeDateKey(task.scheduled_on) || normalizeDateKey(task.scheduled_date) || normalizeDateKey(task.deadline);
   if (!dateKey) return null;
   const fallbackStart = parseLocalDateTime(dateKey, task.scheduled_time || task.due_time || '09:00:00');
   const fallbackEnd = new Date(fallbackStart.getTime() + Math.max(task.estimatedMinutes || 60, 30) * 60 * 1000);
@@ -601,7 +601,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
   }, [timelineEntries]);
 
   const unscheduledTasks = useMemo(
-    () => tasks.filter((task) => task.status !== 'done' && !task.scheduled_date && !task.deadline),
+    () => tasks.filter((task) => task.status !== 'done' && !task.scheduled_on && !task.scheduled_date && !task.deadline),
     [tasks]
   );
 
@@ -685,7 +685,9 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
     await Promise.resolve(
       onUpdateTask({
         ...task,
-        deadline: dayKey,
+        scheduled_on: dayKey,
+        scheduled_start: startAt.toISOString(),
+        scheduled_end: endAt.toISOString(),
         start_time: startAt.toISOString(),
         end_time: endAt.toISOString(),
         scheduled_date: dayKey,
@@ -699,7 +701,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
     const range = getTaskTimeRange(task);
     const date = range
       ? formatDateKey(range.start)
-      : normalizeDateKey(task.scheduled_date) || normalizeDateKey(task.deadline) || formatDateKey(new Date());
+      : normalizeDateKey(task.scheduled_on) || normalizeDateKey(task.scheduled_date) || normalizeDateKey(task.deadline) || formatDateKey(new Date());
     const rawTime = range
       ? `${String(range.start.getHours()).padStart(2, '0')}:${String(range.start.getMinutes()).padStart(2, '0')}`
       : (task.scheduled_time || task.due_time || '09:00:00').slice(0, 5);
@@ -740,7 +742,9 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
           status: editDraft.status,
           project_id: editDraft.project_id || undefined,
           category: nextProjectName || editingTask.category,
-          deadline: editDraft.date,
+          scheduled_on: editDraft.date,
+          scheduled_start: nextStartAt.toISOString(),
+          scheduled_end: nextEndAt.toISOString(),
           start_time: nextStartAt.toISOString(),
           end_time: nextEndAt.toISOString(),
           scheduled_date: editDraft.date,
