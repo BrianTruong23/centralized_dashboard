@@ -62,13 +62,39 @@ let _snapshot: AuthBootstrapSnapshot = {
 };
 
 const listeners = new Set<(snapshot: AuthBootstrapSnapshot) => void>();
+let logSequence = 0;
+
+function postDebugLog(message: string, extra?: Record<string, unknown>) {
+  if (typeof window === 'undefined') return;
+
+  const body = JSON.stringify({
+    seq: ++logSequence,
+    at: new Date().toISOString(),
+    message,
+    extra: extra ?? null,
+    href: window.location.href,
+  });
+
+  try {
+    fetch('/api/debug/auth-bootstrap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: true,
+    }).catch(() => undefined);
+  } catch {
+    // ignore debug transport failures
+  }
+}
 
 function log(message: string, extra?: Record<string, unknown>) {
   if (extra) {
     console.log(DEBUG_PREFIX, message, extra);
+    postDebugLog(message, extra);
     return;
   }
   console.log(DEBUG_PREFIX, message);
+  postDebugLog(message);
 }
 
 function emit(snapshot: Partial<AuthBootstrapSnapshot>) {
