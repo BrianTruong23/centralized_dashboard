@@ -114,8 +114,9 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
   );
 
   const scheduledWindowLabel = getScheduledWindowLabel();
+  const deadlineHasExplicitTime = Boolean(task.due_time) || Boolean(task.deadline && /T\d{2}:\d{2}/.test(task.deadline));
   const deadlineTimeLabel = !hasPlannedSchedule
-    ? formatTimeLabel(task.due_time || task.deadline)
+    ? (deadlineHasExplicitTime ? formatTimeLabel(task.due_time || task.deadline) : null)
     : null;
 
   const toggleStatus = () => {
