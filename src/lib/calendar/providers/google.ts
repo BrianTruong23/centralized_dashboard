@@ -44,9 +44,10 @@ function maskValue(value: string): string {
 }
 
 let googleConfigLogged = false;
-function logGoogleConfigOnce() {
-  if (googleConfigLogged) return;
-  googleConfigLogged = true;
+function logGoogleConfigOnce(origin?: string) {
+  const redirectUri = origin ? googleRedirectUri(origin) : null;
+  if (googleConfigLogged && !redirectUri) return;
+  if (!redirectUri) googleConfigLogged = true;
 
   const clientId = process.env.GOOGLE_CALENDAR_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET;
@@ -55,6 +56,7 @@ function logGoogleConfigOnce() {
     hasClientSecret: Boolean(clientSecret),
     clientIdPreview: clientId ? maskValue(clientId) : null,
     clientSecretPreview: clientSecret ? maskValue(clientSecret) : null,
+    redirectUri,
   });
 }
 
@@ -63,7 +65,7 @@ function googleRedirectUri(origin: string): string {
 }
 
 export function buildGoogleAuthUrl(origin: string, state: string): string {
-  logGoogleConfigOnce();
+  logGoogleConfigOnce(origin);
   const params = new URLSearchParams({
     client_id: requireGoogleEnv('GOOGLE_CALENDAR_CLIENT_ID'),
     redirect_uri: googleRedirectUri(origin),
@@ -97,7 +99,7 @@ async function readJson<T>(res: Response): Promise<T> {
 }
 
 export async function exchangeGoogleCode(origin: string, code: string): Promise<GoogleTokenResponse> {
-  logGoogleConfigOnce();
+  logGoogleConfigOnce(origin);
   const params = new URLSearchParams({
     code,
     client_id: requireGoogleEnv('GOOGLE_CALENDAR_CLIENT_ID'),
