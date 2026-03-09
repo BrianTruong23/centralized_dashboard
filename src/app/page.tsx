@@ -95,6 +95,14 @@ function toDateKey(value?: string): string | null {
   return formatDateKey(parsed);
 }
 
+function plannedDateKey(task: Task): string | null {
+  return toDateKey(task.scheduled_on || task.scheduled_date || task.scheduled_start || task.start_time);
+}
+
+function effectiveDateKey(task: Task): string | null {
+  return plannedDateKey(task) || toDateKey(task.deadline);
+}
+
 // Sortable queue item for plan mode
 function SortableQueueItem({
   task,
@@ -706,7 +714,7 @@ export default function Home() {
   useEffect(() => {
     if (currentView !== 'today' || !showPlan) return;
     const todayKey = formatDateKey(new Date());
-    const candidates = tasks.filter((t) => t.status !== 'done' && toDateKey(t.deadline) === todayKey);
+    const candidates = tasks.filter((t) => t.status !== 'done' && effectiveDateKey(t) === todayKey);
     setDayPlan((prev) => {
       const prevIds = new Set(prev.map((t) => t.id));
       const ordered = prev
@@ -779,12 +787,12 @@ export default function Home() {
 
     if (currentView === 'today') {
         const todayStr = formatDateKey(new Date());
-        return result.filter(t => toDateKey(t.deadline) === todayStr);
+        return result.filter(t => effectiveDateKey(t) === todayStr);
     }
     if (currentView === 'upcoming') {
         const todayStr = formatDateKey(new Date());
         return result.filter(t => {
-             const key = toDateKey(t.deadline);
+             const key = effectiveDateKey(t);
              if (!key) return false;
              return key > todayStr;
         });
@@ -1272,9 +1280,10 @@ export default function Home() {
                             {(() => {
                                 const upcomingTasks = tasks.filter(t => {
                                     if (t.status === 'done') return false;
-                                    if (!t.deadline) return false;
+                                    const key = effectiveDateKey(t);
+                                    if (!key) return false;
                                     const todayStr = formatDateKey(new Date());
-                                    return t.deadline > todayStr;
+                                    return key > todayStr;
                                 }).slice(0, 3);
                                 
                                 if (upcomingTasks.length === 0) return null;
@@ -1319,8 +1328,11 @@ export default function Home() {
                             {(() => {
                                 const inboxTasks = tasks.filter(t => t.status !== 'done');
                                 const todayStr = formatDateKey(new Date());
-                                const overdue = inboxTasks.filter(t => t.deadline && t.deadline < todayStr).length;
-                                const noDate = inboxTasks.filter(t => !t.deadline).length;
+                                const overdue = inboxTasks.filter(t => {
+                                  const dueKey = toDateKey(t.deadline);
+                                  return !!dueKey && dueKey < todayStr;
+                                }).length;
+                                const noDate = inboxTasks.filter(t => !effectiveDateKey(t) && !t.deadline).length;
                                 const noPriority = inboxTasks.filter(t => !t.priority || t.priority >= 5).length;
                                 
                                 return (
@@ -1365,15 +1377,17 @@ export default function Home() {
                                 const upcomingTasks = filteredTasks;
                                 const todayStr = formatDateKey(new Date());
                                 const thisWeek = upcomingTasks.filter(t => {
-                                    if (!t.deadline) return false;
-                                    const taskDate = new Date(t.deadline);
+                                    const key = effectiveDateKey(t);
+                                    if (!key) return false;
+                                    const taskDate = new Date(`${key}T00:00:00`);
                                     const weekFromNow = new Date();
                                     weekFromNow.setDate(weekFromNow.getDate() + 7);
                                     return taskDate <= weekFromNow;
                                 }).length;
                                 const thisMonth = upcomingTasks.filter(t => {
-                                    if (!t.deadline) return false;
-                                    const taskDate = new Date(t.deadline);
+                                    const key = effectiveDateKey(t);
+                                    if (!key) return false;
+                                    const taskDate = new Date(`${key}T00:00:00`);
                                     const monthFromNow = new Date();
                                     monthFromNow.setMonth(monthFromNow.getMonth() + 1);
                                     return taskDate <= monthFromNow;

@@ -40,7 +40,15 @@ export const TaskInput = ({ onAddTask, defaultDate, projects = [], defaultProjec
   const buildTaskFromParsed = (parsed: ParsedTemporal, taskTitle: string): Task => {
     const project = projects.find(p => p.id === projectId);
     const categoryName = project ? project.name : 'Inbox';
-    const finalDeadline = parsed.due_date || parsed.scheduled_date || deadline || undefined;
+    const isScheduled = parsed.interpretation_type === 'scheduled';
+    const scheduledOn = parsed.scheduled_date || undefined;
+    const scheduledStart = parsed.scheduled_date && (parsed.start_time || parsed.scheduled_time)
+      ? new Date(`${parsed.scheduled_date}T${(parsed.start_time || parsed.scheduled_time || '09:00:00').slice(0, 8)}`).toISOString()
+      : undefined;
+    const scheduledEnd = parsed.scheduled_date && parsed.end_time
+      ? new Date(`${parsed.scheduled_date}T${parsed.end_time.slice(0, 8)}`).toISOString()
+      : undefined;
+    const finalDeadline = isScheduled ? (deadline || undefined) : (parsed.due_date || deadline || undefined);
 
     return {
       id: generateId(),
@@ -54,6 +62,9 @@ export const TaskInput = ({ onAddTask, defaultDate, projects = [], defaultProjec
       tags: [],
       createdAt: Date.now(),
       deadline: finalDeadline,
+      scheduled_on: isScheduled ? scheduledOn : undefined,
+      scheduled_start: isScheduled ? scheduledStart : undefined,
+      scheduled_end: isScheduled ? scheduledEnd : undefined,
       due_time: parsed.due_time,
       scheduled_date: parsed.scheduled_date,
       scheduled_time: parsed.scheduled_time,
@@ -172,7 +183,7 @@ export const TaskInput = ({ onAddTask, defaultDate, projects = [], defaultProjec
     }
 
     const phrases = temporalParsed.detectedPhrases.sort((a, b) => a.start - b.start);
-    const parts: Array<{ text: string; highlight: boolean; type?: 'date' | 'time' | 'datetime' }> = [];
+    const parts: Array<{ text: string; highlight: boolean; type?: string }> = [];
     let lastIndex = 0;
 
     phrases.forEach((phrase) => {

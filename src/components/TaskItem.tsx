@@ -64,14 +64,18 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
   };
 
   const getScheduledWindowLabel = (): string | null => {
-    const explicitStart = formatTimeLabel(task.start_time || task.scheduled_time || task.due_time);
-    const explicitEnd = formatTimeLabel(task.end_time);
+    const explicitStart = formatTimeLabel(task.scheduled_start || task.start_time || task.scheduled_time || task.due_time);
+    const explicitEnd = formatTimeLabel(task.scheduled_end || task.end_time);
     if (explicitStart && explicitEnd) return `${explicitStart} - ${explicitEnd}`;
     if (explicitStart && task.estimatedMinutes > 0) {
-      const startSource = task.start_time
-        ? new Date(task.start_time)
-        : task.deadline
-          ? new Date(`${task.deadline.slice(0, 10)}T${(task.scheduled_time || task.due_time || '09:00:00').slice(0, 8)}`)
+      const startSource = task.scheduled_start
+        ? new Date(task.scheduled_start)
+        : task.start_time
+          ? new Date(task.start_time)
+          : (task.scheduled_on || task.scheduled_date)
+            ? new Date(`${(task.scheduled_on || task.scheduled_date)!.slice(0, 10)}T${(task.scheduled_time || task.due_time || '09:00:00').slice(0, 8)}`)
+            : task.deadline
+              ? new Date(`${task.deadline.slice(0, 10)}T${(task.scheduled_time || task.due_time || '09:00:00').slice(0, 8)}`)
           : null;
       if (startSource && !Number.isNaN(startSource.getTime())) {
         const computedEnd = new Date(startSource.getTime() + task.estimatedMinutes * 60 * 1000);
@@ -95,8 +99,9 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
   const handleEditSave = () => {
     const normalizedScheduledTime = normalizeTimeValue(editForm.scheduled_time || editForm.due_time);
     const normalizedEndTime = normalizeTimeValue(editForm.end_time);
-    const startTimestamp = buildTimestamp(editForm.deadline || editForm.scheduled_date, normalizedScheduledTime);
-    const endTimestamp = buildTimestamp(editForm.deadline || editForm.scheduled_date, normalizedEndTime);
+    const scheduleDate = editForm.scheduled_on || editForm.scheduled_date || editForm.deadline;
+    const startTimestamp = buildTimestamp(scheduleDate, normalizedScheduledTime);
+    const endTimestamp = buildTimestamp(scheduleDate, normalizedEndTime);
     const derivedEstimatedMinutes =
       startTimestamp && endTimestamp
         ? Math.max(
@@ -108,9 +113,12 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
     onUpdate({
       ...editForm,
       estimatedMinutes: derivedEstimatedMinutes,
-      scheduled_date: editForm.deadline || editForm.scheduled_date,
+      scheduled_on: scheduleDate,
+      scheduled_date: scheduleDate,
       scheduled_time: normalizedScheduledTime,
       due_time: normalizedScheduledTime,
+      scheduled_start: startTimestamp,
+      scheduled_end: endTimestamp,
       start_time: startTimestamp,
       end_time: endTimestamp,
     });
@@ -201,10 +209,20 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
             </div>
 
             <div>
+              <label className="text-xs text-gray-500 block mb-1">Planned Day</label>
+              <input
+                type="date"
+                value={editForm.scheduled_on || editForm.scheduled_date || ''}
+                onChange={(e) => setEditForm({ ...editForm, scheduled_on: e.target.value || undefined, scheduled_date: e.target.value || undefined })}
+                className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none text-gray-500"
+              />
+            </div>
+
+            <div>
               <label className="text-xs text-gray-500 block mb-1">Start Time</label>
               <input
                 type="time"
-                value={toTimeInputValue(editForm.scheduled_time || editForm.start_time)}
+                value={toTimeInputValue(editForm.scheduled_time || editForm.scheduled_start || editForm.start_time)}
                 onChange={(e) =>
                   setEditForm({
                     ...editForm,
@@ -249,8 +267,8 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
               <label className="text-xs text-gray-500 block mb-1">End Time</label>
               <input
                 type="time"
-                value={toTimeInputValue(editForm.end_time)}
-                onChange={(e) => setEditForm({ ...editForm, end_time: e.target.value || undefined })}
+                value={toTimeInputValue(editForm.scheduled_end || editForm.end_time)}
+                onChange={(e) => setEditForm({ ...editForm, scheduled_end: e.target.value || undefined, end_time: e.target.value || undefined })}
                 className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none text-gray-500"
               />
             </div>
