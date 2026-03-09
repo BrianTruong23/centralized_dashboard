@@ -59,6 +59,12 @@ interface TimelineEntry {
   isAllDay?: boolean;
 }
 
+interface TimedEntryLayout {
+  entry: TimelineEntry;
+  laneIndex: number;
+  laneCount: number;
+}
+
 interface TaskEditDraft {
   title: string;
   priority: 1 | 2 | 3 | 4 | 5;
@@ -202,6 +208,71 @@ function hexToRgba(hex: string, alpha: number): string {
 function formatEntryTime(entry: TimelineEntry): string {
   if (entry.isAllDay) return 'All day';
   return `${format(entry.start, 'HH:mm')} - ${format(entry.end, 'HH:mm')}`;
+}
+
+function buildTimedEntryLayouts(entries: TimelineEntry[]): TimedEntryLayout[] {
+  const timedEntries = entries
+    .filter((entry) => !entry.isAllDay)
+    .sort((a, b) => {
+      const startDiff = a.start.getTime() - b.start.getTime();
+      if (startDiff !== 0) return startDiff;
+      return a.end.getTime() - b.end.getTime();
+    });
+
+  const layouts: TimedEntryLayout[] = [];
+  let groupEntries: TimelineEntry[] = [];
+  let groupEnd = -Infinity;
+
+  const flushGroup = () => {
+    if (groupEntries.length === 0) return;
+    const laneEndTimes: number[] = [];
+    const groupLayouts: TimedEntryLayout[] = [];
+
+    groupEntries.forEach((entry) => {
+      let laneIndex = laneEndTimes.findIndex((laneEnd) => laneEnd <= entry.start.getTime());
+      if (laneIndex === -1) {
+        laneIndex = laneEndTimes.length;
+        laneEndTimes.push(entry.end.getTime());
+      } else {
+        laneEndTimes[laneIndex] = entry.end.getTime();
+      }
+      groupLayouts.push({
+        entry,
+        laneIndex,
+        laneCount: 0,
+      });
+    });
+
+    const laneCount = Math.max(laneEndTimes.length, 1);
+    groupLayouts.forEach((layout) => {
+      layout.laneCount = laneCount;
+      layouts.push(layout);
+    });
+
+    groupEntries = [];
+    groupEnd = -Infinity;
+  };
+
+  timedEntries.forEach((entry) => {
+    if (groupEntries.length === 0) {
+      groupEntries = [entry];
+      groupEnd = entry.end.getTime();
+      return;
+    }
+
+    if (entry.start.getTime() < groupEnd) {
+      groupEntries.push(entry);
+      groupEnd = Math.max(groupEnd, entry.end.getTime());
+      return;
+    }
+
+    flushGroup();
+    groupEntries = [entry];
+    groupEnd = entry.end.getTime();
+  });
+
+  flushGroup();
+  return layouts;
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -972,6 +1043,8 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                 {days.map((day) => {
                   const dayKey = formatDateKey(day);
                   const entries = entriesByDay.get(dayKey) || [];
+                  const timedEntryLayouts = buildTimedEntryLayouts(entries);
+                  const timedLayoutById = new Map(timedEntryLayouts.map((layout) => [layout.entry.id, layout]));
                   return (
                     <div key={dayKey} className="relative flex-1 min-w-[160px] border-l border-gray-200 dark:border-gray-700">
                       {Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i).map((hour) => (
@@ -995,6 +1068,15 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                           : Math.max((entry.end.getTime() - entry.start.getTime()) / (60 * 1000), 30);
                         const top = ((startHour - START_HOUR) + startMin / 60) * ROW_HEIGHT;
                         const height = Math.max((durationMin / 60) * ROW_HEIGHT, 28);
+                        const timedLayout = timedLayoutById.get(entry.id);
+                        const laneCount = timedLayout?.laneCount || 1;
+                        const laneIndex = timedLayout?.laneIndex || 0;
+                        const horizontalGap = laneCount > 1 ? 4 : 0;
+                        const baseInset = 6;
+                        const usableWidth = `calc((100% - ${baseInset * 2}px - ${horizontalGap * (laneCount - 1)}px) / ${laneCount})`;
+                        const left = timedLayout
+                          ? `calc(${baseInset}px + (${usableWidth} + ${horizontalGap}px) * ${laneIndex})`
+                          : `${baseInset}px`;
                         return (
                           <div
                             key={entry.id}
@@ -1006,7 +1088,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                               if (entry.source === 'task' && entry.task) openTaskEditor(entry.task);
                             }}
                             className={clsx(
-                              'absolute left-1.5 right-1.5 overflow-hidden rounded-2xl px-2.5 py-2 text-xs shadow-sm',
+                              'absolute overflow-hidden rounded-2xl px-2.5 py-2 text-xs shadow-sm',
                               entry.source === 'task'
                                 ? 'cursor-pointer bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
                                 : 'cursor-default border bg-white text-gray-700 dark:bg-gray-900 dark:text-gray-200'
@@ -1014,13 +1096,17 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                             style={
                               entry.source === 'task'
                                 ? {
-                                    top,
-                                    height,
+                                  top,
+                                  height,
+                                  left,
+                                  width: usableWidth,
                                     boxShadow: `inset 3px 0 0 ${entry.color}`,
                                   }
                                 : {
                                     top,
                                     height,
+                                    left,
+                                    width: usableWidth,
                                     borderColor: hexToRgba(entry.color, 0.28),
                                     backgroundColor: hexToRgba(entry.color, 0.14),
                                   }
