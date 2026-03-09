@@ -48,7 +48,6 @@ import {
   awaitAuthBootstrap,
   getAccessToken,
   getAuthBootstrapSnapshot,
-  SESSION_KEY,
   subscribeAuthBootstrap,
   supabase,
   type AuthBootstrapSnapshot,
@@ -222,19 +221,7 @@ export default function Home() {
   const [showPlan, setShowPlan] = useState(false);
   const [dayPlan, setDayPlan] = useState<Task[]>([]);
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
-  const [user, setUser] = useState<any>(() => {
-    // Optimistic load from cache to speed up dashboard display
-    if (typeof window !== 'undefined') {
-        try {
-            const raw = localStorage.getItem(SESSION_KEY);
-            if (raw) {
-                const cached = JSON.parse(raw);
-                if (cached?.user) return cached.user;
-            }
-        } catch { /* ignore */ }
-    }
-    return null;
-  });
+  const [user, setUser] = useState<any>(null);
 
   const [currentView, setCurrentView] = useState('today');
   const [inboxDisplayView, setInboxDisplayView] = useState<'inbox' | 'kanban' | 'calendar'>(() => {
@@ -449,25 +436,19 @@ export default function Home() {
     const fetchUser = async () => {
         if (!supabase) return;
         const snapshot = await awaitAuthBootstrap();
-        if (snapshot.user) {
+        if (snapshot.state === 'authenticated' && snapshot.user) {
           setUser(snapshot.user);
           return;
         }
-        try {
-          const raw = localStorage.getItem(SESSION_KEY);
-          if (raw) {
-            const cached = JSON.parse(raw);
-            if (cached?.user) setUser(cached.user);
-          }
-        } catch { /* ignore */ }
+        setUser(null);
     };
     fetchUser();
     return subscribeAuthBootstrap((snapshot) => {
-      if (snapshot.state === 'signed_out') {
+      if (snapshot.state === 'signed_out' || snapshot.state === 'restore_failed') {
         setUser(null);
         return;
       }
-      if (snapshot.user) {
+      if (snapshot.state === 'authenticated' && snapshot.user) {
         setUser(snapshot.user);
       }
     });
@@ -849,7 +830,11 @@ export default function Home() {
     }
   };
 
-  if (!isLoaded) {
+  const isAuthBootstrapping = authSnapshot.state === 'booting' || authSnapshot.state === 'restoring_session';
+  const isAuthenticated = authSnapshot.state === 'authenticated' && !!user;
+  const shouldShowAuthModal = !isAuthBootstrapping && !isAuthenticated;
+
+  if (!isLoaded || isAuthBootstrapping) {
     return <LoadingScreen />;
   }
 
@@ -863,7 +848,7 @@ export default function Home() {
     <div className="flex h-screen bg-[#fafafa] dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans overflow-hidden">
       
       {/* Auth Modal Blocking */}
-      {!user && (
+      {shouldShowAuthModal && (
          <AuthModal 
             isOpen={true} 
             onAuthSuccess={(u) => setUser(u)} 
@@ -899,7 +884,7 @@ export default function Home() {
 
        {/* CreateTaskModal rendered once at the bottom of the component */}
 
-      <main className={`flex-1 overflow-y-auto p-4 md:p-8 ${!user ? 'blur-sm pointer-events-none select-none' : ''}`}>
+      <main className={`flex-1 overflow-y-auto p-4 md:p-8 ${shouldShowAuthModal ? 'blur-sm pointer-events-none select-none' : ''}`}>
         <header className={clsx(
           "flex flex-col md:flex-row md:items-start justify-between gap-4 md:gap-0 mx-auto relative",
           currentView === 'calendar' ? "max-w-[1400px]" : "max-w-4xl",
