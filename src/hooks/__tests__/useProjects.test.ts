@@ -27,15 +27,11 @@ let authChangeCallbacks: Array<(event: string, session: any) => void> = [];
 const mockGetSession = jest.fn();
 const mockOnAuthStateChange = jest.fn();
 const mockUnsubscribe = jest.fn();
+const mockAwaitAuthBootstrap = jest.fn();
+const mockAwaitAuthenticatedSession = jest.fn();
 
 // Mock supabase module
 jest.mock('@/lib/supabase', () => {
-  // authReady resolves immediately in tests
-  let _resolve: () => void;
-  const authReady = new Promise<void>((r) => { _resolve = r; });
-  // Resolve immediately
-  _resolve!();
-
   return {
     supabase: {
       auth: {
@@ -45,7 +41,8 @@ jest.mock('@/lib/supabase', () => {
       },
       from: jest.fn(),
     },
-    authReady,
+    awaitAuthBootstrap: (...args: any[]) => mockAwaitAuthBootstrap(...args),
+    awaitAuthenticatedSession: (...args: any[]) => mockAwaitAuthenticatedSession(...args),
   };
 });
 
@@ -75,6 +72,15 @@ beforeEach(() => {
   mockGetSession.mockResolvedValue({
     data: { session: { user: mockUser, access_token: 'tok' } },
   });
+  mockAwaitAuthBootstrap.mockResolvedValue({
+    state: 'authenticated',
+    user: mockUser,
+    accessToken: 'tok',
+    error: null,
+    lastEvent: 'INITIAL_SESSION',
+    updatedAt: Date.now(),
+  });
+  mockAwaitAuthenticatedSession.mockResolvedValue({ user: mockUser, access_token: 'tok' });
 
   // Default: onAuthStateChange captures the callback but does NOT fire INITIAL_SESSION
   mockOnAuthStateChange.mockImplementation((cb: any) => {
@@ -143,9 +149,15 @@ describe('useProjects', () => {
 
   test('handles reload with expired token then TOKEN_REFRESHED', async () => {
     // Simulate: getSession returns expired/null session initially
-    mockGetSession.mockResolvedValueOnce({
-      data: { session: null },
+    mockAwaitAuthBootstrap.mockResolvedValueOnce({
+      state: 'signed_out',
+      user: null,
+      accessToken: null,
+      error: null,
+      lastEvent: 'INITIAL_SESSION',
+      updatedAt: Date.now(),
     });
+    mockAwaitAuthenticatedSession.mockResolvedValueOnce(null);
 
     const { result } = renderHook(() => useProjects());
 
@@ -172,9 +184,15 @@ describe('useProjects', () => {
 
   test('handles SIGNED_IN after initial no-session', async () => {
     // Start with no session
-    mockGetSession.mockResolvedValueOnce({
-      data: { session: null },
+    mockAwaitAuthBootstrap.mockResolvedValueOnce({
+      state: 'signed_out',
+      user: null,
+      accessToken: null,
+      error: null,
+      lastEvent: 'INITIAL_SESSION',
+      updatedAt: Date.now(),
     });
+    mockAwaitAuthenticatedSession.mockResolvedValueOnce(null);
 
     const { result } = renderHook(() => useProjects());
 

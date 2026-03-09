@@ -57,7 +57,11 @@ export const QuickCaptureDock = ({
     const scheduledEnd = parsed.scheduled_date && parsed.end_time
       ? new Date(`${parsed.scheduled_date}T${parsed.end_time.slice(0, 8)}`).toISOString()
       : undefined;
-    const finalDeadline = isScheduled ? (deadline || undefined) : (parsed.due_date || deadline || undefined);
+    const finalDeadline = isScheduled
+      ? (deadline || undefined)
+      : parsed.due_date && parsed.due_time
+        ? new Date(`${parsed.due_date}T${parsed.due_time.slice(0, 8)}`).toISOString()
+        : (parsed.due_date || deadline || undefined);
 
     return {
       id: generateId(),

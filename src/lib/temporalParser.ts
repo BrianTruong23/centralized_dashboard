@@ -243,8 +243,37 @@ function removePhrases(text: string, phrases: TemporalPhrase[]): string {
 
   return cleaned
     .replace(/\b(by|before|until|at|from|between|for|on|this|next)\s+(?=\s|$)/gi, ' ')
+    .replace(/\s*,\s*/g, ' ')
     .replace(/\s+/g, ' ')
+    .replace(/^[,.;:]+|[,.;:]+$/g, '')
     .trim();
+}
+
+function mergeDisplayPhrases(phrases: TemporalPhrase[], text: string): TemporalPhrase[] {
+  if (phrases.length <= 1) return dedupePhrases(phrases);
+
+  const sorted = dedupePhrases(phrases).sort((a, b) => a.start - b.start || a.end - b.end);
+  const merged: TemporalPhrase[] = [];
+
+  for (const phrase of sorted) {
+    const prev = merged[merged.length - 1];
+    if (!prev) {
+      merged.push({ ...phrase });
+      continue;
+    }
+
+    const gap = text.slice(prev.end, phrase.start);
+    if (/^\s+$/.test(gap)) {
+      prev.end = phrase.end;
+      prev.phrase = text.slice(prev.start, prev.end);
+      prev.type = prev.type === phrase.type ? prev.type : 'datetime';
+      continue;
+    }
+
+    merged.push({ ...phrase });
+  }
+
+  return merged;
 }
 
 function toConfidence(value: number): Exclude<TemporalConfidence, 'ambiguous'> {
@@ -326,13 +355,14 @@ export class TemporalParser {
       const scheduledAlternative = this.buildInterpretation(context, { interpretation: 'scheduled', forceAmbiguous: true });
       const cleanedText = removePhrases(originalText, context.phrases);
 
+      const displayPhrases = mergeDisplayPhrases(context.phrases, originalText);
       return {
         cleanedText,
         confidence: 'ambiguous',
         interpretation_type: 'ambiguous',
         ambiguous: ['due', 'scheduled'],
-        detectedPhrases: context.phrases,
-        extractedTemporalSpans: context.phrases,
+        detectedPhrases: displayPhrases,
+        extractedTemporalSpans: displayPhrases,
         alternatives: [dueAlternative, scheduledAlternative],
       };
     }
@@ -440,11 +470,11 @@ export class TemporalParser {
       };
     }
 
-    const weekdayRegex = /\b(?:(this|next)\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi;
+    const weekdayRegex = /\b(?:(by|before|until|on)\s+)?(?:(this|next)\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/gi;
     const weekdayMatch = weekdayRegex.exec(text);
     if (weekdayMatch) {
-      const qualifier = (weekdayMatch[1]?.toLowerCase() as 'this' | 'next' | undefined);
-      const weekdayIndex = WEEKDAYS.indexOf(weekdayMatch[2].toLowerCase() as (typeof WEEKDAYS)[number]);
+      const qualifier = (weekdayMatch[2]?.toLowerCase() as 'this' | 'next' | undefined);
+      const weekdayIndex = WEEKDAYS.indexOf(weekdayMatch[3].toLowerCase() as (typeof WEEKDAYS)[number]);
       const date = getNextWeekday(this.now, weekdayIndex, qualifier);
       phrases.push({ phrase: weekdayMatch[0], start: weekdayMatch.index, end: weekdayMatch.index + weekdayMatch[0].length, type: 'date' });
       return {
@@ -679,6 +709,7 @@ export class TemporalParser {
 
   private buildInterpretation(context: ParseContext, options: BuildOptions): ParsedTemporal {
     const cleanedText = removePhrases(context.originalText, context.phrases);
+    const displayPhrases = mergeDisplayPhrases(context.phrases, context.originalText);
     const baseDate = cloneDate(context.dateSpec?.date || this.now);
     baseDate.setHours(0, 0, 0, 0);
 
@@ -688,8 +719,8 @@ export class TemporalParser {
         ? 'medium'
         : toConfidence(this.getConfidence(context, options.interpretation)),
       interpretation_type: options.interpretation,
-      detectedPhrases: context.phrases,
-      extractedTemporalSpans: context.phrases,
+      detectedPhrases: displayPhrases,
+      extractedTemporalSpans: displayPhrases,
       is_all_day: false,
     };
 
