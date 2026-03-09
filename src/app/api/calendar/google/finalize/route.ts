@@ -1,16 +1,26 @@
 import { NextResponse } from 'next/server';
 import { getUserFromAccessToken } from '@/lib/server/auth';
 import { saveGoogleConnectionFromOAuth } from '@/lib/calendar/context';
+import { writeDebugLog } from '@/lib/server/debugLog';
 
 export async function POST(req: Request) {
   try {
     const authHeader = req.headers.get('authorization') || '';
     const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    await writeDebugLog('calendar-finalize.log', 'route.finalize.start', {
+      hasAuthorizationHeader: Boolean(authHeader),
+      hasAccessToken: Boolean(accessToken),
+    });
     if (!accessToken) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const user = await getUserFromAccessToken(accessToken);
     const body = await req.json().catch(() => ({}));
     const code = typeof body?.code === 'string' ? body.code.trim() : '';
+    await writeDebugLog('calendar-finalize.log', 'route.finalize.user-resolved', {
+      userId: user.id,
+      email: user.email ?? null,
+      hasCode: Boolean(code),
+    });
     if (!code) {
       return NextResponse.json({ error: 'Missing authorization code.' }, { status: 400 });
     }
@@ -22,9 +32,16 @@ export async function POST(req: Request) {
       code,
     });
 
+    await writeDebugLog('calendar-finalize.log', 'route.finalize.success', {
+      userId: user.id,
+    });
+
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {
     const rawMessage = error instanceof Error ? error.message : 'Failed to finalize calendar connection';
+    await writeDebugLog('calendar-finalize.log', 'route.finalize.error', {
+      error: rawMessage,
+    });
     const message = rawMessage === 'Unauthorized'
       ? 'Google returned successfully, but Minismo could not find your active Supabase session after the reload. Your account UI may still appear from cached data, but the access token needed to save the calendar connection was unavailable. Refresh once, confirm you are still signed in, then click Connect Google Calendar again.'
       : rawMessage;

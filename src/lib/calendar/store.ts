@@ -1,5 +1,6 @@
 import { getSupabaseServerClient } from '@/lib/server/supabaseAdmin';
 import { CalendarConnectionRecord, CalendarConnectionSummary, CalendarProvider } from './types';
+import { writeDebugLog } from '@/lib/server/debugLog';
 
 type UpsertConnectionInput = {
   user_id: string;
@@ -50,7 +51,20 @@ export async function upsertCalendarConnection(accessToken: string, input: Upser
     { onConflict: 'user_id,provider' }
   );
 
-  if (error) throw new Error(`Failed to save calendar connection: ${error.message}`);
+  if (error) {
+    await writeDebugLog('calendar-finalize.log', 'calendar.upsertCalendarConnection.error', {
+      userId: input.user_id,
+      provider: input.provider,
+      error: error.message,
+    });
+    throw new Error(`Failed to save calendar connection: ${error.message}`);
+  }
+
+  await writeDebugLog('calendar-finalize.log', 'calendar.upsertCalendarConnection.success', {
+    userId: input.user_id,
+    provider: input.provider,
+    status: input.status,
+  });
 }
 
 export async function updateCalendarConnection(
