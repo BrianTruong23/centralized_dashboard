@@ -1533,12 +1533,16 @@ export default function Home() {
           setActiveFocusTask(null);
         }}
       />
-      <AiAssistant
-        userId={user?.id}
-        tasks={tasks}
-        onUpdateTask={updateTask}
-      />
-      <AmbientSound />
+      {isAuthenticated && (
+        <>
+          <AiAssistant
+            userId={user?.id}
+            tasks={tasks}
+            onUpdateTask={updateTask}
+          />
+          <AmbientSound />
+        </>
+      )}
       
       <SettingsModal 
          isOpen={isSettingsOpen}
