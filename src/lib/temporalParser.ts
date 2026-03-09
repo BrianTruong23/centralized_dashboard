@@ -250,9 +250,24 @@ function removePhrases(text: string, phrases: TemporalPhrase[]): string {
 }
 
 function mergeDisplayPhrases(phrases: TemporalPhrase[], text: string): TemporalPhrase[] {
-  if (phrases.length <= 1) return dedupePhrases(phrases);
+  const sorted = dedupePhrases(phrases)
+    .map((phrase) => {
+      const prefix = text.slice(0, phrase.start);
+      const cueMatch = prefix.match(/(^|\s+)(at|by|before|until|from|between|on|this|next)\s*$/i);
+      if (!cueMatch) return { ...phrase };
+      const cueText = cueMatch[0];
+      const cueOffset = cueText.search(/\S/);
+      const cueStart = phrase.start - cueText.length + Math.max(cueOffset, 0);
+      return {
+        ...phrase,
+        start: cueStart,
+        phrase: text.slice(cueStart, phrase.end),
+      };
+    })
+    .sort((a, b) => a.start - b.start || a.end - b.end);
 
-  const sorted = dedupePhrases(phrases).sort((a, b) => a.start - b.start || a.end - b.end);
+  if (sorted.length <= 1) return sorted;
+
   const merged: TemporalPhrase[] = [];
 
   for (const phrase of sorted) {

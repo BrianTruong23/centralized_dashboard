@@ -26,6 +26,18 @@ describe('temporalParser', () => {
     expect(parsed.detectedPhrases?.[0]?.phrase.toLowerCase()).toBe('by friday 5pm');
   });
 
+  test('includes leading schedule cue in highlighted span', () => {
+    const parsed = parseTemporal('finish report at 5 pm by monday', undefined, undefined, now);
+
+    expect(parsed.detectedPhrases?.[0]?.phrase.toLowerCase()).toBe('at 5 pm by monday');
+  });
+
+  test('includes leading at cue when date comes before time', () => {
+    const parsed = parseTemporal('at monday by 5pm, do data science homework', undefined, undefined, now);
+
+    expect(parsed.detectedPhrases?.[0]?.phrase.toLowerCase()).toBe('at monday by 5pm');
+  });
+
   test('treats explicit planned-work phrasing as scheduled time', () => {
     const parsed = parseTemporal('work on report tomorrow at 5pm', undefined, undefined, now);
 
