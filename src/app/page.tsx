@@ -321,11 +321,12 @@ export default function Home() {
     const requestedView = url.searchParams.get('view');
     const calendarCode = url.searchParams.get('calendar_code');
 
-    const moveToInbox = () => {
-      setInboxDisplayView('inbox');
-      setCurrentView('inbox');
+    const moveToRequestedInboxView = () => {
+      const nextView = requestedView === 'calendar' ? 'calendar' : 'inbox';
+      setInboxDisplayView(nextView);
+      setCurrentView(nextView);
       try {
-        localStorage.setItem('inbox_display_view', 'inbox');
+        localStorage.setItem('inbox_display_view', nextView);
       } catch {
         // ignore storage errors
       }
@@ -340,7 +341,7 @@ export default function Home() {
     };
 
     const finalizeCalendarConnect = async () => {
-      moveToInbox();
+      moveToRequestedInboxView();
 
       if (status === 'error') {
         setCalendarSetupMessage(message || 'Google Calendar connection failed.');
@@ -378,7 +379,7 @@ export default function Home() {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error || 'Failed to finish Google Calendar connection.');
 
-        setCalendarSetupMessage('Google Calendar connected. Open Calendar mode from Inbox to view your events.');
+        setCalendarSetupMessage('Google Calendar connected.');
       } catch (error: unknown) {
         setCalendarSetupMessage(error instanceof Error ? error.message : 'Google Calendar connection failed.');
       } finally {

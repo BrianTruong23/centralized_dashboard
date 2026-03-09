@@ -450,7 +450,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
     try {
       setConnectionActionLoading(true);
       const token = await fetchSessionToken();
-      const returnTo = '/?view=inbox';
+      const returnTo = '/?view=calendar';
       const res = await fetch('/api/calendar/google/connect', {
         method: 'POST',
         headers: {
