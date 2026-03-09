@@ -21,6 +21,47 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
 
   const project = projects.find(p => p.id === task.project_id);
 
+  const formatTimeLabel = (value?: string): string | null => {
+    if (!value) return null;
+    const timeMatch = value.match(/(\d{2}):(\d{2})/);
+    if (timeMatch) {
+      const hours = Number(timeMatch[1]);
+      const minutes = timeMatch[2];
+      const period = hours >= 12 ? 'PM' : 'AM';
+      const twelveHour = hours % 12 || 12;
+      return `${twelveHour}:${minutes} ${period}`;
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
+
+  const getScheduledWindowLabel = (): string | null => {
+    const explicitStart = formatTimeLabel(task.start_time || task.scheduled_time || task.due_time);
+    const explicitEnd = formatTimeLabel(task.end_time);
+    if (explicitStart && explicitEnd) return `${explicitStart} - ${explicitEnd}`;
+    if (explicitStart && task.estimatedMinutes > 0) {
+      const startSource = task.start_time
+        ? new Date(task.start_time)
+        : task.deadline
+          ? new Date(`${task.deadline.slice(0, 10)}T${(task.scheduled_time || task.due_time || '09:00:00').slice(0, 8)}`)
+          : null;
+      if (startSource && !Number.isNaN(startSource.getTime())) {
+        const computedEnd = new Date(startSource.getTime() + task.estimatedMinutes * 60 * 1000);
+        const computedEndLabel = formatTimeLabel(computedEnd.toISOString());
+        if (computedEndLabel) return `${explicitStart} - ${computedEndLabel}`;
+      }
+      return explicitStart;
+    }
+    return explicitStart;
+  };
+
+  const scheduledWindowLabel = getScheduledWindowLabel();
+
   const toggleStatus = () => {
     onUpdate({
       ...task,
@@ -224,6 +265,15 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
             <span className="flex items-center gap-1 text-red-400">
                  {formatDateDisplay(task.deadline)}
             </span>
+             </>
+          )}
+
+          {scheduledWindowLabel && (
+             <>
+               <span className="w-0.5 h-0.5 rounded-full bg-gray-300" />
+               <span className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                 {scheduledWindowLabel}
+               </span>
              </>
           )}
         </div>
