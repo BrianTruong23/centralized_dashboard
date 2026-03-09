@@ -350,6 +350,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
   const [selectedDetailEntryId, setSelectedDetailEntryId] = useState<string | null>(null);
   const [showUnscheduledTasks, setShowUnscheduledTasks] = useState(false);
+  const [isDisconnectConfirmOpen, setIsDisconnectConfirmOpen] = useState(false);
 
   const days = useMemo(() => {
     if (viewMode === 'day') return [startOfDay(anchorDate)];
@@ -639,8 +640,6 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
   };
 
   const disconnectCalendar = async () => {
-    if (!window.confirm('Disconnect Google Calendar and revoke stored access for this app?')) return;
-
     try {
       setConnectionActionLoading(true);
       const token = await fetchSessionToken();
@@ -671,6 +670,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
       }));
     } finally {
       setConnectionActionLoading(false);
+      setIsDisconnectConfirmOpen(false);
     }
   };
 
@@ -860,7 +860,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
 
               {connection.status === 'connected' ? (
                 <button
-                  onClick={() => void disconnectCalendar()}
+                  onClick={() => setIsDisconnectConfirmOpen(true)}
                   disabled={connectionActionLoading}
                   className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white/85 px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900/75 dark:text-gray-300 dark:hover:bg-gray-800"
                 >
@@ -1379,6 +1379,65 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isDisconnectConfirmOpen && (
+        <div
+          className="fixed inset-0 z-[255] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm"
+          onClick={() => {
+            if (!connectionActionLoading) setIsDisconnectConfirmOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-[24px] border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-700 dark:bg-gray-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                  Disconnect calendar
+                </div>
+                <h3 className="mt-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  Remove Google Calendar access?
+                </h3>
+                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                  This disconnects Google Calendar from Minismo and revokes the stored read-only access for this app.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDisconnectConfirmOpen(false)}
+                disabled={connectionActionLoading}
+                className="rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-500 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-400">
+              Your Minismo tasks stay intact. Only the Google Calendar connection is removed.
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsDisconnectConfirmOpen(false)}
+                disabled={connectionActionLoading}
+                className="rounded-full border border-gray-200 px-4 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void disconnectCalendar()}
+                disabled={connectionActionLoading}
+                className="rounded-full border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 disabled:opacity-50 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/30"
+              >
+                {connectionActionLoading ? 'Disconnecting...' : 'Disconnect'}
+              </button>
             </div>
           </div>
         </div>
