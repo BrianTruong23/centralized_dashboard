@@ -72,6 +72,7 @@ interface TaskEditDraft {
 const START_HOUR = 7;
 const END_HOUR = 21;
 const ROW_HEIGHT = 64;
+const GOOGLE_EVENT_COLORS = ['#d97706', '#2563eb', '#0891b2', '#16a34a', '#9333ea', '#dc2626'];
 
 function parseLocalDateTime(dateKey: string, time?: string): Date {
   const [year, month, day] = dateKey.split('-').map(Number);
@@ -176,6 +177,14 @@ function clampEventToDisplay(event: NormalizedCalendarEvent, dayKey: string): { 
     start: actualStart > dayStart ? actualStart : dayStart,
     end: actualEnd < dayEnd ? actualEnd : dayEnd,
   };
+}
+
+function getStableColor(value: string, palette: string[]): string {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return palette[hash % palette.length];
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -374,6 +383,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
     const entries: TimelineEntry[] = [];
 
     calendarEvents.forEach((event) => {
+      const eventColor = getStableColor(event.id, GOOGLE_EVENT_COLORS);
       if (event.isAllDay && event.startDate && event.endDateExclusive) {
         let current = event.startDate;
         while (current < event.endDateExclusive) {
@@ -388,7 +398,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                 dayKey: current,
                 source: 'calendar',
                 syncState: 'calendar_only',
-                color: '#d97706',
+                color: eventColor,
                 isAllDay: true,
               });
             }
@@ -414,7 +424,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
           dayKey,
           source: 'calendar',
           syncState: 'calendar_only',
-          color: '#d97706',
+          color: eventColor,
         });
       });
     });
