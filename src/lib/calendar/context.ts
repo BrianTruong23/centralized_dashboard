@@ -4,6 +4,7 @@ import { buildGoogleAuthUrl, exchangeGoogleCode, fetchGoogleCalendarList, fetchG
 import { filterVisibleNormalizedEvents, normalizeGoogleEvent } from './normalize';
 import { deleteCalendarConnection, getCalendarConnection, summarizeCalendarConnection, updateCalendarConnection, upsertCalendarConnection } from './store';
 import { CalendarConnectionRecord, CalendarConnectionSummary, CalendarFetchWindow, CalendarPlanningContext, NormalizedCalendarEvent } from './types';
+import { writeDebugLog } from '@/lib/server/debugLog';
 
 function addDays(dateKey: string, delta: number): string {
   const cursor = new Date(`${dateKey}T00:00:00Z`);
@@ -56,10 +57,31 @@ export async function saveGoogleConnectionFromOAuth(params: {
   origin: string;
   code: string;
 }): Promise<void> {
+  await writeDebugLog('calendar-finalize.log', 'calendar.saveGoogleConnectionFromOAuth.start', {
+    userId: params.userId,
+    origin: params.origin,
+    hasAccessToken: Boolean(params.accessToken),
+    codePreview: params.code ? `${params.code.slice(0, 12)}...` : null,
+  });
+
   const token = await exchangeGoogleCode(params.origin, params.code);
+  await writeDebugLog('calendar-finalize.log', 'calendar.exchangeGoogleCode.success', {
+    hasRefreshToken: Boolean(token.refresh_token),
+    scope: token.scope ?? null,
+    tokenType: token.token_type ?? null,
+  });
   const profile = await fetchGoogleProfile(token.access_token);
+  await writeDebugLog('calendar-finalize.log', 'calendar.fetchGoogleProfile.success', {
+    profileId: profile.id ?? null,
+    email: profile.email ?? null,
+  });
   const calendars = await fetchGoogleCalendarList(token.access_token);
   const primary = calendars.find((calendar) => calendar.primary) || calendars[0];
+  await writeDebugLog('calendar-finalize.log', 'calendar.fetchGoogleCalendarList.success', {
+    calendarCount: calendars.length,
+    primaryCalendarId: primary?.id ?? null,
+    primaryCalendarTimezone: primary?.timeZone ?? null,
+  });
 
   await upsertCalendarConnection(params.accessToken, {
     user_id: params.userId,
@@ -76,6 +98,12 @@ export async function saveGoogleConnectionFromOAuth(params: {
     last_synced_at: new Date().toISOString(),
     last_error_code: null,
     last_error_message: null,
+  });
+
+  await writeDebugLog('calendar-finalize.log', 'calendar.saveGoogleConnectionFromOAuth.success', {
+    userId: params.userId,
+    provider: GOOGLE_CALENDAR_PROVIDER,
+    accountEmail: profile.email ?? null,
   });
 }
 

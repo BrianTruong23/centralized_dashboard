@@ -1,0 +1,15 @@
+import { appendFile, mkdir } from 'fs/promises';
+import path from 'path';
+
+const LOG_DIR = path.join(process.cwd(), '.debug');
+
+export async function writeDebugLog(fileName: string, event: string, details?: Record<string, unknown>) {
+  const line = JSON.stringify({
+    at: new Date().toISOString(),
+    event,
+    details: details ?? null,
+  });
+
+  await mkdir(LOG_DIR, { recursive: true });
+  await appendFile(path.join(LOG_DIR, fileName), `${line}\n`, 'utf8');
+}
