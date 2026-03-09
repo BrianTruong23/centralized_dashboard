@@ -64,18 +64,42 @@ export async function saveGoogleConnectionFromOAuth(params: {
     codePreview: params.code ? `${params.code.slice(0, 12)}...` : null,
   });
 
-  const token = await exchangeGoogleCode(params.origin, params.code);
+  let token;
+  try {
+    token = await exchangeGoogleCode(params.origin, params.code);
+  } catch (error: unknown) {
+    await writeDebugLog('calendar-finalize.log', 'calendar.exchangeGoogleCode.error', {
+      error: error instanceof Error ? error.message : 'Unknown exchangeGoogleCode error',
+    });
+    throw error;
+  }
   await writeDebugLog('calendar-finalize.log', 'calendar.exchangeGoogleCode.success', {
     hasRefreshToken: Boolean(token.refresh_token),
     scope: token.scope ?? null,
     tokenType: token.token_type ?? null,
   });
-  const profile = await fetchGoogleProfile(token.access_token);
+  let profile;
+  try {
+    profile = await fetchGoogleProfile(token.access_token);
+  } catch (error: unknown) {
+    await writeDebugLog('calendar-finalize.log', 'calendar.fetchGoogleProfile.error', {
+      error: error instanceof Error ? error.message : 'Unknown fetchGoogleProfile error',
+    });
+    throw error;
+  }
   await writeDebugLog('calendar-finalize.log', 'calendar.fetchGoogleProfile.success', {
     profileId: profile.id ?? null,
     email: profile.email ?? null,
   });
-  const calendars = await fetchGoogleCalendarList(token.access_token);
+  let calendars;
+  try {
+    calendars = await fetchGoogleCalendarList(token.access_token);
+  } catch (error: unknown) {
+    await writeDebugLog('calendar-finalize.log', 'calendar.fetchGoogleCalendarList.error', {
+      error: error instanceof Error ? error.message : 'Unknown fetchGoogleCalendarList error',
+    });
+    throw error;
+  }
   const primary = calendars.find((calendar) => calendar.primary) || calendars[0];
   await writeDebugLog('calendar-finalize.log', 'calendar.fetchGoogleCalendarList.success', {
     calendarCount: calendars.length,
