@@ -40,6 +40,12 @@ export function TemporalClarificationModal({
     return `${displayHour}:${minutes} ${ampm}`;
   };
 
+  const formatInterpretation = (alt: ParsedTemporal) => {
+    if (alt.interpretation_type === 'due') return 'Deadline';
+    if (alt.interpretation_type === 'scheduled') return 'Scheduled time';
+    return 'Interpretation';
+  };
+
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700">
@@ -87,8 +93,13 @@ export function TemporalClarificationModal({
                     className="mt-1"
                   />
                   <div className="flex-1">
-                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
-                      {alt.cleanedText || originalText}
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        {alt.cleanedText || originalText}
+                      </div>
+                      <span className="text-[10px] uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">
+                        {formatInterpretation(alt)}
+                      </span>
                     </div>
                     <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
                       {alt.due_date && (
@@ -103,11 +114,21 @@ export function TemporalClarificationModal({
                           {formatDate(alt.scheduled_date)}
                         </span>
                       )}
-                      {alt.scheduled_time && (
+                      {(alt.start_time || alt.scheduled_time) && (
                         <span className="flex items-center gap-1">
                           <Clock size={12} />
-                          {formatTime(alt.scheduled_time)}
+                          {formatTime(alt.start_time || alt.scheduled_time)}
+                          {alt.end_time ? ` - ${formatTime(alt.end_time)}` : ''}
                         </span>
+                      )}
+                      {alt.due_time && !alt.scheduled_time && !alt.start_time && (
+                        <span className="flex items-center gap-1">
+                          <Clock size={12} />
+                          {formatTime(alt.due_time)}
+                        </span>
+                      )}
+                      {alt.duration_minutes && (
+                        <span>{alt.duration_minutes} min</span>
                       )}
                       {alt.is_all_day && (
                         <span className="text-gray-400">All day</span>

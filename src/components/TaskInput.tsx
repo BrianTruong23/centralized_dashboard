@@ -37,6 +37,33 @@ export const TaskInput = ({ onAddTask, defaultDate, projects = [], defaultProjec
   const priorityRef = useRef<HTMLDivElement>(null);
   const projectRef = useRef<HTMLDivElement>(null);
 
+  const buildTaskFromParsed = (parsed: ParsedTemporal, taskTitle: string): Task => {
+    const project = projects.find(p => p.id === projectId);
+    const categoryName = project ? project.name : 'Inbox';
+    const finalDeadline = parsed.due_date || parsed.scheduled_date || deadline || undefined;
+
+    return {
+      id: generateId(),
+      title: taskTitle,
+      description,
+      category: categoryName,
+      priority,
+      estimatedMinutes: parsed.duration_minutes || estimatedMinutes,
+      energyLevel,
+      status: 'todo',
+      tags: [],
+      createdAt: Date.now(),
+      deadline: finalDeadline,
+      due_time: parsed.due_time,
+      scheduled_date: parsed.scheduled_date,
+      scheduled_time: parsed.scheduled_time,
+      start_time: parsed.start_time,
+      end_time: parsed.end_time,
+      is_all_day: parsed.is_all_day,
+      project_id: projectId || undefined,
+    };
+  };
+
   // Update deadline when defaultDate changes
   useEffect(() => {
     setDeadline(defaultDate || '');
@@ -82,30 +109,7 @@ export const TaskInput = ({ onAddTask, defaultDate, projects = [], defaultProjec
     const finalTitle = temporalParsed?.cleanedText || title.trim();
     if (!finalTitle) return;
 
-    const project = projects.find(p => p.id === projectId);
-    const categoryName = project ? project.name : 'Inbox';
-    const finalDeadline = temporalParsed?.due_date || temporalParsed?.scheduled_date || deadline || undefined;
-
-    const newTask: Task = {
-      id: generateId(),
-      title: finalTitle,
-      description,
-      category: categoryName,
-      priority,
-      estimatedMinutes,
-      energyLevel,
-      status: 'todo',
-      tags: [],
-      createdAt: Date.now(),
-      deadline: finalDeadline,
-      due_time: temporalParsed?.due_time,
-      scheduled_date: temporalParsed?.scheduled_date,
-      scheduled_time: temporalParsed?.scheduled_time,
-      is_all_day: temporalParsed?.is_all_day,
-      project_id: projectId || undefined,
-    };
-
-    onAddTask(newTask);
+    onAddTask(buildTaskFromParsed(temporalParsed || { cleanedText: finalTitle, confidence: 'high', interpretation_type: 'none' }, finalTitle));
 
     // Reset form
     setTitle('');
@@ -130,9 +134,9 @@ export const TaskInput = ({ onAddTask, defaultDate, projects = [], defaultProjec
 
     const parsed = parseTemporal(title);
     
-    if (parsed.confidence === 'ambiguous' && parsed.ambiguous && parsed.ambiguous.length > 0) {
+    if (parsed.confidence === 'ambiguous' && parsed.alternatives && parsed.alternatives.length > 0) {
       setTemporalParsed(parsed);
-      setAmbiguousAlternatives([parsed]);
+      setAmbiguousAlternatives(parsed.alternatives);
     } else if (parsed.confidence === 'high' || parsed.confidence === 'medium') {
       setTemporalParsed(parsed);
       if (parsed.due_date || parsed.scheduled_date) {
@@ -537,30 +541,7 @@ export const TaskInput = ({ onAddTask, defaultDate, projects = [], defaultProjec
           setShowClarification(false);
           const finalTitle = selected.cleanedText || title.trim();
           if (finalTitle) {
-            const project = projects.find(p => p.id === projectId);
-            const categoryName = project ? project.name : 'Inbox';
-            const finalDeadline = selected.due_date || selected.scheduled_date || deadline || undefined;
-
-            const newTask: Task = {
-              id: generateId(),
-              title: finalTitle,
-              description,
-              category: categoryName,
-              priority,
-              estimatedMinutes,
-              energyLevel,
-              status: 'todo',
-              tags: [],
-              createdAt: Date.now(),
-              deadline: finalDeadline,
-              due_time: selected.due_time,
-              scheduled_date: selected.scheduled_date,
-              scheduled_time: selected.scheduled_time,
-              is_all_day: selected.is_all_day,
-              project_id: projectId || undefined,
-            };
-
-            onAddTask(newTask);
+            onAddTask(buildTaskFromParsed(selected, finalTitle));
             setTitle('');
             setDescription('');
             setPriority(3);
