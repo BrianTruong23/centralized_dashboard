@@ -8,8 +8,12 @@ const LOG_FILE = path.join(LOG_DIR, 'auth-bootstrap.log');
 export async function POST(req: Request) {
   try {
     const body = await req.text();
-    await mkdir(LOG_DIR, { recursive: true });
-    await appendFile(LOG_FILE, `${body}\n`, 'utf8');
+    try {
+      await mkdir(LOG_DIR, { recursive: true });
+      await appendFile(LOG_FILE, `${body}\n`, 'utf8');
+    } catch {
+      // Keep this endpoint non-fatal when the runtime filesystem is read-only.
+    }
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to write debug log';
