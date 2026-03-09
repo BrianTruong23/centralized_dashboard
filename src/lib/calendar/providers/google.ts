@@ -38,11 +38,32 @@ function requireGoogleEnv(name: string): string {
   return value;
 }
 
+function maskValue(value: string): string {
+  if (value.length <= 8) return `${value.slice(0, 2)}...`;
+  return `${value.slice(0, 6)}...${value.slice(-4)}`;
+}
+
+let googleConfigLogged = false;
+function logGoogleConfigOnce() {
+  if (googleConfigLogged) return;
+  googleConfigLogged = true;
+
+  const clientId = process.env.GOOGLE_CALENDAR_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET;
+  console.log('[google-calendar-config]', {
+    hasClientId: Boolean(clientId),
+    hasClientSecret: Boolean(clientSecret),
+    clientIdPreview: clientId ? maskValue(clientId) : null,
+    clientSecretPreview: clientSecret ? maskValue(clientSecret) : null,
+  });
+}
+
 function googleRedirectUri(origin: string): string {
   return `${origin}/api/calendar/google/callback`;
 }
 
 export function buildGoogleAuthUrl(origin: string, state: string): string {
+  logGoogleConfigOnce();
   const params = new URLSearchParams({
     client_id: requireGoogleEnv('GOOGLE_CALENDAR_CLIENT_ID'),
     redirect_uri: googleRedirectUri(origin),
@@ -61,17 +82,22 @@ async function readJson<T>(res: Response): Promise<T> {
   const text = await res.text();
   const body = text ? JSON.parse(text) : {};
   if (!res.ok) {
-    const message = typeof body?.error_description === 'string'
-      ? body.error_description
-      : typeof body?.error === 'string'
-        ? body.error
-        : `Google API request failed (${res.status})`;
+    const errorCode = typeof body?.error === 'string' ? body.error : null;
+    const errorDescription = typeof body?.error_description === 'string' ? body.error_description : null;
+    const message = errorCode && errorDescription
+      ? `${errorCode}: ${errorDescription}`
+      : errorDescription
+        ? errorDescription
+        : errorCode
+          ? errorCode
+          : `Google API request failed (${res.status})`;
     throw new Error(message);
   }
   return body as T;
 }
 
 export async function exchangeGoogleCode(origin: string, code: string): Promise<GoogleTokenResponse> {
+  logGoogleConfigOnce();
   const params = new URLSearchParams({
     code,
     client_id: requireGoogleEnv('GOOGLE_CALENDAR_CLIENT_ID'),
@@ -90,6 +116,7 @@ export async function exchangeGoogleCode(origin: string, code: string): Promise<
 }
 
 export async function refreshGoogleAccessToken(refreshToken: string): Promise<GoogleTokenResponse> {
+  logGoogleConfigOnce();
   const params = new URLSearchParams({
     refresh_token: refreshToken,
     client_id: requireGoogleEnv('GOOGLE_CALENDAR_CLIENT_ID'),
