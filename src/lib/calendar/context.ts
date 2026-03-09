@@ -78,19 +78,19 @@ export async function saveGoogleConnectionFromOAuth(params: {
     scope: token.scope ?? null,
     tokenType: token.token_type ?? null,
   });
-  let profile;
+  let profile: { id?: string; email?: string } = {};
   try {
     profile = await fetchGoogleProfile(token.access_token);
+    await writeDebugLog('calendar-finalize.log', 'calendar.fetchGoogleProfile.success', {
+      profileId: profile.id ?? null,
+      email: profile.email ?? null,
+    });
   } catch (error: unknown) {
     await writeDebugLog('calendar-finalize.log', 'calendar.fetchGoogleProfile.error', {
       error: error instanceof Error ? error.message : 'Unknown fetchGoogleProfile error',
     });
-    throw error;
+    profile = {};
   }
-  await writeDebugLog('calendar-finalize.log', 'calendar.fetchGoogleProfile.success', {
-    profileId: profile.id ?? null,
-    email: profile.email ?? null,
-  });
   let calendars;
   try {
     calendars = await fetchGoogleCalendarList(token.access_token);
@@ -101,6 +101,9 @@ export async function saveGoogleConnectionFromOAuth(params: {
     throw error;
   }
   const primary = calendars.find((calendar) => calendar.primary) || calendars[0];
+  const providerAccountEmail =
+    profile.email ||
+    (primary?.id && primary.id.includes('@') ? primary.id : null);
   await writeDebugLog('calendar-finalize.log', 'calendar.fetchGoogleCalendarList.success', {
     calendarCount: calendars.length,
     primaryCalendarId: primary?.id ?? null,
@@ -116,7 +119,7 @@ export async function saveGoogleConnectionFromOAuth(params: {
     refresh_token_encrypted: token.refresh_token ? encryptSecret(token.refresh_token) : null,
     token_type: token.token_type || null,
     access_token_expires_at: tokenExpiryFromNow(token.expires_in),
-    provider_account_email: profile.email || null,
+    provider_account_email: providerAccountEmail,
     provider_account_id: profile.id || null,
     calendar_timezone: primary?.timeZone || null,
     last_synced_at: new Date().toISOString(),
@@ -127,7 +130,7 @@ export async function saveGoogleConnectionFromOAuth(params: {
   await writeDebugLog('calendar-finalize.log', 'calendar.saveGoogleConnectionFromOAuth.success', {
     userId: params.userId,
     provider: GOOGLE_CALENDAR_PROVIDER,
-    accountEmail: profile.email ?? null,
+    accountEmail: providerAccountEmail,
   });
 }
 
