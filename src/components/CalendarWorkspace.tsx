@@ -60,9 +60,14 @@ interface TimelineEntry {
 }
 
 interface TimedEntryLayout {
-  entry: TimelineEntry;
+  kind: 'entry' | 'overflow';
+  id: string;
+  start: Date;
+  end: Date;
   laneIndex: number;
   laneCount: number;
+  entry?: TimelineEntry;
+  hiddenEntries?: TimelineEntry[];
 }
 
 interface TaskEditDraft {
@@ -226,7 +231,9 @@ function buildTimedEntryLayouts(entries: TimelineEntry[]): TimedEntryLayout[] {
   const flushGroup = () => {
     if (groupEntries.length === 0) return;
     const laneEndTimes: number[] = [];
-    const groupLayouts: TimedEntryLayout[] = [];
+    const groupAssignments: Array<{ entry: TimelineEntry; laneIndex: number }> = [];
+    let groupStart = Infinity;
+    let groupMaxEnd = -Infinity;
 
     groupEntries.forEach((entry) => {
       let laneIndex = laneEndTimes.findIndex((laneEnd) => laneEnd <= entry.start.getTime());
@@ -236,18 +243,54 @@ function buildTimedEntryLayouts(entries: TimelineEntry[]): TimedEntryLayout[] {
       } else {
         laneEndTimes[laneIndex] = entry.end.getTime();
       }
-      groupLayouts.push({
-        entry,
-        laneIndex,
-        laneCount: 0,
-      });
+      groupAssignments.push({ entry, laneIndex });
+      groupStart = Math.min(groupStart, entry.start.getTime());
+      groupMaxEnd = Math.max(groupMaxEnd, entry.end.getTime());
     });
 
     const laneCount = Math.max(laneEndTimes.length, 1);
-    groupLayouts.forEach((layout) => {
-      layout.laneCount = laneCount;
-      layouts.push(layout);
-    });
+    if (laneCount <= 3) {
+      groupAssignments.forEach(({ entry, laneIndex }) => {
+        layouts.push({
+          kind: 'entry',
+          id: entry.id,
+          entry,
+          start: entry.start,
+          end: entry.end,
+          laneIndex,
+          laneCount,
+        });
+      });
+    } else {
+      groupAssignments
+        .filter(({ laneIndex }) => laneIndex < 2)
+        .forEach(({ entry, laneIndex }) => {
+          layouts.push({
+            kind: 'entry',
+            id: entry.id,
+            entry,
+            start: entry.start,
+            end: entry.end,
+            laneIndex,
+            laneCount: 3,
+          });
+        });
+
+      const hiddenEntries = groupAssignments
+        .filter(({ laneIndex }) => laneIndex >= 2)
+        .map(({ entry }) => entry)
+        .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+      layouts.push({
+        kind: 'overflow',
+        id: `overflow-${groupEntries[0]?.dayKey}-${groupStart}`,
+        start: new Date(groupStart),
+        end: new Date(groupMaxEnd),
+        laneIndex: 2,
+        laneCount: 3,
+        hiddenEntries,
+      });
+    }
 
     groupEntries = [];
     groupEnd = -Infinity;
@@ -1049,7 +1092,13 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                   const dayKey = formatDateKey(day);
                   const entries = entriesByDay.get(dayKey) || [];
                   const timedEntryLayouts = buildTimedEntryLayouts(entries);
-                  const timedLayoutById = new Map(timedEntryLayouts.map((layout) => [layout.entry.id, layout]));
+                  const timedLayoutById = new Map(
+                    timedEntryLayouts
+                      .filter((layout) => layout.kind === 'entry' && layout.entry)
+                      .map((layout) => [layout.entry!.id, layout])
+                  );
+                  const overflowLayouts = timedEntryLayouts.filter((layout) => layout.kind === 'overflow');
+                  const renderEntries = entries.filter((entry) => entry.isAllDay || timedLayoutById.has(entry.id));
                   return (
                     <div key={dayKey} className="relative flex-1 min-w-[160px] border-l border-gray-200 dark:border-gray-700">
                       {Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i).map((hour) => (
@@ -1065,7 +1114,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                         />
                       ))}
 
-                      {entries.map((entry) => {
+                      {renderEntries.map((entry) => {
                         const startHour = entry.isAllDay ? START_HOUR : getHours(entry.start);
                         const startMin = entry.isAllDay ? 0 : getMinutes(entry.start);
                         const durationMin = entry.isAllDay
@@ -1078,10 +1127,14 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                         const laneIndex = timedLayout?.laneIndex || 0;
                         const horizontalGap = laneCount > 1 ? 4 : 0;
                         const baseInset = 6;
-                        const usableWidth = `calc((100% - ${baseInset * 2}px - ${horizontalGap * (laneCount - 1)}px) / ${laneCount})`;
-                        const left = timedLayout
-                          ? `calc(${baseInset}px + (${usableWidth} + ${horizontalGap}px) * ${laneIndex})`
-                          : `${baseInset}px`;
+                        const usableWidth = entry.isAllDay
+                          ? `calc(100% - ${baseInset * 2}px)`
+                          : `calc((100% - ${baseInset * 2}px - ${horizontalGap * (laneCount - 1)}px) / ${laneCount})`;
+                        const left = !timedLayout
+                          ? `${baseInset}px`
+                          : `calc(${baseInset}px + (${usableWidth} + ${horizontalGap}px) * ${laneIndex})`;
+                        const isCompact = laneCount >= 3;
+                        const isMedium = laneCount === 2;
                         return (
                           <div
                             key={entry.id}
@@ -1098,7 +1151,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                               setSelectedDetailEntryId(entry.id);
                             }}
                             className={clsx(
-                              'absolute overflow-hidden rounded-2xl px-2.5 py-2 text-xs shadow-sm',
+                              'absolute overflow-hidden shadow-sm',
                               entry.source === 'task'
                                 ? 'cursor-pointer bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
                                 : 'cursor-default border bg-white text-gray-700 dark:bg-gray-900 dark:text-gray-200'
@@ -1106,10 +1159,11 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                             style={
                               entry.source === 'task'
                                 ? {
-                                  top,
-                                  height,
-                                  left,
-                                  width: usableWidth,
+                                    top,
+                                    height,
+                                    left,
+                                    width: usableWidth,
+                                    borderRadius: isCompact ? 14 : 18,
                                     boxShadow: `inset 3px 0 0 ${entry.color}`,
                                   }
                                 : {
@@ -1117,25 +1171,77 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                                     height,
                                     left,
                                     width: usableWidth,
+                                    borderRadius: isCompact ? 14 : 18,
                                     borderColor: hexToRgba(entry.color, 0.28),
                                     backgroundColor: hexToRgba(entry.color, 0.14),
                                   }
                             }
                             title={entry.isAllDay ? `${entry.title} (all day)` : `${entry.title} (${format(entry.start, 'HH:mm')} - ${format(entry.end, 'HH:mm')})`}
                           >
-                            <div className="flex items-center gap-2">
+                            <div className={clsx('flex items-start gap-2', isCompact && 'gap-1.5')}>
                               <span
-                                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                className={clsx('shrink-0 rounded-full', isCompact ? 'mt-1 h-2 w-2' : 'mt-1 h-2.5 w-2.5')}
                                 style={{ backgroundColor: entry.source === 'task' ? '#ffffff' : entry.color }}
                               />
-                              <div className="min-w-0">
-                                <div className="truncate font-medium">{entry.title}</div>
-                                <div className={clsx('truncate text-[11px]', entry.source === 'task' ? 'text-white/70 dark:text-gray-600' : 'text-gray-500 dark:text-gray-400')}>
-                                  {formatEntryTime(entry)} • {entry.source === 'task' ? 'Task' : 'Google Calendar'}
+                              <div className="min-w-0 flex-1">
+                                <div className={clsx('truncate font-medium leading-tight', isCompact ? 'text-[11px]' : 'text-xs')}>
+                                  {entry.title}
+                                </div>
+                                <div
+                                  className={clsx(
+                                    'truncate leading-tight',
+                                    isCompact ? 'mt-1 text-[10px]' : 'mt-1 text-[11px]',
+                                    entry.source === 'task' ? 'text-white/70 dark:text-gray-600' : 'text-gray-500 dark:text-gray-400'
+                                  )}
+                                >
+                                  {isCompact
+                                    ? `${entry.isAllDay ? 'All day' : format(entry.start, 'HH:mm')}`
+                                    : isMedium
+                                      ? `${formatEntryTime(entry)}`
+                                      : `${formatEntryTime(entry)} • ${entry.source === 'task' ? 'Task' : 'Google Calendar'}`}
                                 </div>
                               </div>
                             </div>
                           </div>
+                        );
+                      })}
+
+                      {overflowLayouts.map((layout) => {
+                        const startHour = getHours(layout.start);
+                        const startMin = getMinutes(layout.start);
+                        const durationMin = Math.max((layout.end.getTime() - layout.start.getTime()) / (60 * 1000), 30);
+                        const top = ((startHour - START_HOUR) + startMin / 60) * ROW_HEIGHT;
+                        const height = Math.max((durationMin / 60) * ROW_HEIGHT, 32);
+                        const horizontalGap = 4;
+                        const baseInset = 6;
+                        const usableWidth = `calc((100% - ${baseInset * 2}px - ${horizontalGap * (layout.laneCount - 1)}px) / ${layout.laneCount})`;
+                        const left = `calc(${baseInset}px + (${usableWidth} + ${horizontalGap}px) * ${layout.laneIndex})`;
+                        const hiddenCount = layout.hiddenEntries?.length || 0;
+                        const earliestHidden = layout.hiddenEntries?.[0];
+                        return (
+                          <button
+                            key={layout.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedDayKey(dayKey);
+                              setSelectedDetailEntryId(null);
+                            }}
+                            className="absolute overflow-hidden rounded-[16px] border border-dashed border-gray-300 bg-white/92 px-2 py-2 text-left text-gray-600 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-900/92 dark:text-gray-300 dark:hover:bg-gray-800"
+                            style={{
+                              top,
+                              height,
+                              left,
+                              width: usableWidth,
+                            }}
+                            title={`${hiddenCount} overlapping events`}
+                          >
+                            <div className="truncate text-[11px] font-semibold">
+                              +{hiddenCount} more
+                            </div>
+                            <div className="mt-1 truncate text-[10px] text-gray-500 dark:text-gray-400">
+                              {earliestHidden ? formatEntryTime(earliestHidden) : 'Open details'}
+                            </div>
+                          </button>
                         );
                       })}
                     </div>
