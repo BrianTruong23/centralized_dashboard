@@ -14,6 +14,9 @@ export interface Task {
   priority: TaskPriority;
   estimatedMinutes: number;
   deadline?: string; // ISO date string (YYYY-MM-DD)
+  scheduled_on?: string; // ISO date string (YYYY-MM-DD)
+  scheduled_start?: string; // ISO timestamp for planned start
+  scheduled_end?: string; // ISO timestamp for planned end
   start_time?: string; // ISO date string or full timestamp
   end_time?: string; // ISO date string or full timestamp
   due_time?: string; // ISO time string (HH:MM:SS)

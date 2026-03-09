@@ -94,13 +94,14 @@ export const Sidebar = ({
   // Basic filtering for "Today" - this should ideally match page.tsx logic
   const todayCount = tasks.filter(t => {
       if (t.status === 'done') return false;
-      if (!t.deadline) return false;
+      const dateValue = t.scheduled_on || t.scheduled_date || t.scheduled_start || t.start_time || t.deadline;
+      if (!dateValue) return false;
       const today = formatDateKey(new Date());
-      const direct = t.deadline.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      const direct = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})/);
       if (direct) {
         return `${direct[1]}-${direct[2]}-${direct[3]}` === today;
       }
-      const parsed = new Date(t.deadline);
+      const parsed = new Date(dateValue);
       if (Number.isNaN(parsed.getTime())) return false;
       return formatDateKey(parsed) === today;
   }).length;

@@ -20,15 +20,13 @@ const mockGetSession = jest.fn();
 const mockGetUser = jest.fn();
 const mockOnAuthStateChange = jest.fn();
 const mockUnsubscribe = jest.fn();
+const mockAwaitAuthBootstrap = jest.fn();
+const mockAwaitAuthenticatedSession = jest.fn();
 const mockDbAddProject = jest.fn();
 const mockDbFetchProjects = jest.fn();
 const mockDbEnsureDefaultProjects = jest.fn();
 
 jest.mock('@/lib/supabase', () => {
-  let _resolve: () => void;
-  const authReady = new Promise<void>((r) => { _resolve = r; });
-  _resolve!();
-
   return {
     supabase: {
       auth: {
@@ -37,7 +35,8 @@ jest.mock('@/lib/supabase', () => {
         onAuthStateChange: (...args: any[]) => mockOnAuthStateChange(...args),
       },
     },
-    authReady,
+    awaitAuthBootstrap: (...args: any[]) => mockAwaitAuthBootstrap(...args),
+    awaitAuthenticatedSession: (...args: any[]) => mockAwaitAuthenticatedSession(...args),
   };
 });
 
@@ -60,6 +59,15 @@ beforeEach(() => {
 
   mockGetSession.mockResolvedValue({ data: { session: mockSession }, error: null });
   mockGetUser.mockResolvedValue({ data: { user: mockUser } });
+  mockAwaitAuthBootstrap.mockResolvedValue({
+    state: 'authenticated',
+    user: mockUser,
+    accessToken: 'tok',
+    error: null,
+    lastEvent: 'INITIAL_SESSION',
+    updatedAt: Date.now(),
+  });
+  mockAwaitAuthenticatedSession.mockResolvedValue(mockSession);
   mockOnAuthStateChange.mockImplementation((cb: any) => {
     return { data: { subscription: { unsubscribe: mockUnsubscribe } } };
   });
@@ -189,15 +197,20 @@ describe('useProjects.addProject', () => {
 
   test('recovers user from getUser() when userRef is null', async () => {
     // Start with no session so userRef stays null during eager load
-    mockGetSession.mockResolvedValueOnce({ data: { session: null }, error: null });
+    mockAwaitAuthBootstrap.mockResolvedValueOnce({
+      state: 'signed_out',
+      user: null,
+      accessToken: null,
+      error: null,
+      lastEvent: 'INITIAL_SESSION',
+      updatedAt: Date.now(),
+    });
+    mockAwaitAuthenticatedSession.mockResolvedValueOnce(null);
     mockDbFetchProjects.mockResolvedValue([]);
     mockDbEnsureDefaultProjects.mockResolvedValue([]);
 
     // But getUser() returns a user (auth just refreshed)
     mockGetUser.mockResolvedValue({ data: { user: mockUser } });
-
-    // Restore getSession for the db.addProject call
-    mockGetSession.mockResolvedValue({ data: { session: mockSession }, error: null });
 
     const { result } = await renderAndWaitForLoad();
 
@@ -216,6 +229,15 @@ describe('useProjects.addProject', () => {
 
   test('does nothing when no user is available', async () => {
     mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
+    mockAwaitAuthBootstrap.mockResolvedValue({
+      state: 'signed_out',
+      user: null,
+      accessToken: null,
+      error: null,
+      lastEvent: 'INITIAL_SESSION',
+      updatedAt: Date.now(),
+    });
+    mockAwaitAuthenticatedSession.mockResolvedValue(null);
     mockGetUser.mockResolvedValue({ data: { user: null } });
 
     const { result } = await renderAndWaitForLoad();

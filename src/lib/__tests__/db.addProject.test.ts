@@ -85,7 +85,7 @@ describe('db.addProject', () => {
   test('throws when no token', async () => {
     mockToken = null;
     await expect(db.addProject({ user_id: 'u1', name: 'X', color: '#000' }))
-      .rejects.toThrow('Not authenticated');
+      .rejects.toThrow('session is still restoring');
   });
 });
 

@@ -19,6 +19,10 @@ function deadlineDateKey(deadline?: string): string | null {
   return `${y}-${m}-${d}`;
 }
 
+function plannedDateKey(task: Task): string | null {
+  return deadlineDateKey(task.scheduled_on || task.scheduled_date || task.scheduled_start || task.start_time);
+}
+
 export const filterTasksDueToday = (tasks: Task[], now: Date): Task[] => {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -26,7 +30,7 @@ export const filterTasksDueToday = (tasks: Task[], now: Date): Task[] => {
   const todayKey = `${year}-${month}-${day}`;
   return tasks.filter((task) => {
     if (task.status === 'done') return false;
-    const taskDate = deadlineDateKey(task.deadline);
+    const taskDate = plannedDateKey(task) || deadlineDateKey(task.deadline);
     return taskDate === todayKey;
   });
 };

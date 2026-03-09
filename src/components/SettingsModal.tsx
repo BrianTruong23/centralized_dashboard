@@ -14,7 +14,7 @@ import { formatDateKey } from '@/lib/dateKey';
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  user: User;
+  user: User | null;
   onLogout: () => void;
   focusPlantEnabled: boolean;
   onToggleFocusPlant: (enabled: boolean) => void;
@@ -80,6 +80,10 @@ export function SettingsModal({
   
   if (!isOpen) return null;
 
+  const userEmail = user?.email ?? 'Not signed in';
+  const userId = user?.id ?? 'Unavailable';
+  const hasAuthenticatedUser = !!user?.id;
+
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -117,6 +121,10 @@ export function SettingsModal({
   };
 
   const runDiagnostics = async () => {
+      if (!user?.id) {
+          setDiagnostics(['[ERR] No authenticated user is available for diagnostics.']);
+          return;
+      }
       setDiagnostics([]);
       setLoading(true);
       const logs: string[] = [];
@@ -468,17 +476,18 @@ export function SettingsModal({
                     <div className="space-y-4">
                         <div>
                             <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Email</label>
-                            <input type="text" value={user.email} disabled className="w-full p-2 bg-gray-100 dark:bg-gray-800 rounded-md text-sm text-gray-500 cursor-not-allowed" />
+                            <input type="text" value={userEmail} disabled className="w-full p-2 bg-gray-100 dark:bg-gray-800 rounded-md text-sm text-gray-500 cursor-not-allowed" />
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">User ID</label>
-                            <code className="block w-full p-2 bg-gray-100 dark:bg-gray-800 rounded-md text-xs font-mono text-gray-500 overflow-hidden text-ellipsis">{user.id}</code>
+                            <code className="block w-full p-2 bg-gray-100 dark:bg-gray-800 rounded-md text-xs font-mono text-gray-500 overflow-hidden text-ellipsis">{userId}</code>
                         </div>
                     </div>
                     <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
                          <button 
                             onClick={onLogout}
-                            className="flex items-center gap-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/10 px-3 py-2 rounded-lg transition-colors w-full"
+                            disabled={!hasAuthenticatedUser}
+                            className="flex items-center gap-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/10 px-3 py-2 rounded-lg transition-colors w-full disabled:opacity-50 disabled:hover:bg-transparent"
                          >
                              <LogOut size={16} />
                              Log Out
@@ -830,7 +839,7 @@ export function SettingsModal({
                         </div>
                         <button 
                             type="submit" 
-                            disabled={loading || !newPassword}
+                            disabled={loading || !newPassword || !hasAuthenticatedUser}
                             className="px-4 py-2 accent-solid-btn rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors"
                         >
                             {loading ? 'Updating...' : 'Update Password'}
@@ -857,7 +866,8 @@ export function SettingsModal({
                         </div>
                         <button 
                             onClick={handleDeleteAccount}
-                            className="w-full py-2 bg-white dark:bg-red-950 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 font-bold rounded-lg text-sm hover:bg-red-50 dark:hover:bg-red-900/40 transition-colors"
+                            disabled={!hasAuthenticatedUser}
+                            className="w-full py-2 bg-white dark:bg-red-950 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 font-bold rounded-lg text-sm hover:bg-red-50 dark:hover:bg-red-900/40 transition-colors disabled:opacity-50 disabled:hover:bg-white dark:disabled:hover:bg-red-950"
                         >
                             Delete Personal Account
                         </button>
@@ -873,11 +883,16 @@ export function SettingsModal({
                     </div>
                     <button 
                         onClick={runDiagnostics}
-                        disabled={loading}
+                        disabled={loading || !hasAuthenticatedUser}
                         className="px-4 py-2 accent-solid-btn rounded-lg text-sm font-bold hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-50 transition-colors"
                     >
                         {loading ? 'Running...' : 'Run Diagnostics'}
                     </button>
+                    {!hasAuthenticatedUser && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                            Sign in again to run authenticated diagnostics or account actions.
+                        </p>
+                    )}
                     {diagnostics.length > 0 && (
                         <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded-lg font-mono text-xs overflow-x-auto whitespace-pre-wrap space-y-1">
                              {diagnostics.map((log, i) => (
