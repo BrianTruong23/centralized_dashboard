@@ -23,8 +23,11 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
 
   const toTimeInputValue = (value?: string): string => {
     if (!value) return '';
-    const timeMatch = value.match(/(\d{2}):(\d{2})/);
-    if (timeMatch) return `${timeMatch[1]}:${timeMatch[2]}`;
+    const looksLikeTimestamp = value.includes('T') || value.endsWith('Z');
+    if (!looksLikeTimestamp) {
+      const timeMatch = value.match(/(\d{2}):(\d{2})/);
+      if (timeMatch) return `${timeMatch[1]}:${timeMatch[2]}`;
+    }
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) return '';
     return `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
@@ -46,13 +49,16 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
 
   const formatTimeLabel = (value?: string): string | null => {
     if (!value) return null;
-    const timeMatch = value.match(/(\d{2}):(\d{2})/);
-    if (timeMatch) {
-      const hours = Number(timeMatch[1]);
-      const minutes = timeMatch[2];
-      const period = hours >= 12 ? 'PM' : 'AM';
-      const twelveHour = hours % 12 || 12;
-      return `${twelveHour}:${minutes} ${period}`;
+    const looksLikeTimestamp = value.includes('T') || value.endsWith('Z');
+    if (!looksLikeTimestamp) {
+      const timeMatch = value.match(/(\d{2}):(\d{2})/);
+      if (timeMatch) {
+        const hours = Number(timeMatch[1]);
+        const minutes = timeMatch[2];
+        const period = hours >= 12 ? 'PM' : 'AM';
+        const twelveHour = hours % 12 || 12;
+        return `${twelveHour}:${minutes} ${period}`;
+      }
     }
 
     const parsed = new Date(value);
@@ -63,15 +69,15 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
     });
   };
 
-  const hasPlannedSchedule = Boolean(
-    task.scheduled_on ||
-    task.scheduled_date ||
-    task.scheduled_start ||
-    task.scheduled_end ||
-    task.start_time ||
-    task.end_time ||
-    task.scheduled_time
-  );
+  const formatTimeRangeFromDate = (value?: string): string | null => {
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
 
   const getScheduledWindowLabel = (): string | null => {
     if (!hasPlannedSchedule) return null;
@@ -89,13 +95,23 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
           : null;
       if (startSource && !Number.isNaN(startSource.getTime())) {
         const computedEnd = new Date(startSource.getTime() + task.estimatedMinutes * 60 * 1000);
-        const computedEndLabel = formatTimeLabel(computedEnd.toISOString());
+        const computedEndLabel = formatTimeRangeFromDate(computedEnd.toISOString());
         if (computedEndLabel) return `${explicitStart} - ${computedEndLabel}`;
       }
       return explicitStart;
     }
     return explicitStart;
   };
+
+  const hasPlannedSchedule = Boolean(
+    task.scheduled_on ||
+    task.scheduled_date ||
+    task.scheduled_start ||
+    task.scheduled_end ||
+    task.start_time ||
+    task.end_time ||
+    task.scheduled_time
+  );
 
   const scheduledWindowLabel = getScheduledWindowLabel();
   const deadlineTimeLabel = !hasPlannedSchedule
