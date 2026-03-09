@@ -178,12 +178,6 @@ function clampEventToDisplay(event: NormalizedCalendarEvent, dayKey: string): { 
   };
 }
 
-function formatMinuteBlock(minute: number): string {
-  const hour = Math.floor(minute / 60);
-  const min = minute % 60;
-  return `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
-}
-
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
@@ -394,7 +388,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                 dayKey: current,
                 source: 'calendar',
                 syncState: 'calendar_only',
-                color: '#1d4ed8',
+                color: '#d97706',
                 isAllDay: true,
               });
             }
@@ -420,7 +414,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
           dayKey,
           source: 'calendar',
           syncState: 'calendar_only',
-          color: '#1d4ed8',
+          color: '#d97706',
         });
       });
     });
@@ -670,7 +664,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
           </div>
           <div className="flex items-center gap-2 text-xs">
             <span className="px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">Task</span>
-            <span className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">Calendar</span>
+            <span className="px-2 py-1 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">Calendar</span>
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
               <ShieldCheck size={12} />
               Write disabled
@@ -705,14 +699,16 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                     .filter((entry) => entry.dayKey === dayKey)
                     .sort((a, b) => a.start.getTime() - b.start.getTime());
                   const isCurrentMonth = day.getMonth() === anchorDate.getMonth();
+                  const monthCellMinHeight = Math.max(132, 36 + entries.length * 30);
                   return (
                     <div
                       key={dayKey}
                       className={clsx(
-                        'min-h-[132px] p-2 border-t border-l first:border-l-0 border-gray-200 dark:border-gray-700',
+                        'p-2 border-t border-l first:border-l-0 border-gray-200 dark:border-gray-700',
                         !isCurrentMonth && 'bg-gray-50/40 dark:bg-gray-800/30',
                         isSameDay(day, new Date()) && 'bg-[var(--accent-soft)]/25'
                       )}
+                      style={{ minHeight: monthCellMinHeight }}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => {
                         e.preventDefault();
@@ -724,7 +720,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                         {format(day, 'd')}
                       </div>
                       <div className="space-y-1">
-                        {entries.slice(0, 3).map((entry) => (
+                        {entries.map((entry) => (
                           <button
                             key={entry.id}
                             type="button"
@@ -742,9 +738,6 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                             {entry.title}
                           </button>
                         ))}
-                        {entries.length > 3 && (
-                          <div className="text-[11px] text-gray-500 dark:text-gray-400">+{entries.length - 3} more</div>
-                        )}
                       </div>
                     </div>
                   );
@@ -846,42 +839,6 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                   <p>No events are created, edited, moved, or deleted from here. Disconnect removes stored access and keeps task planning functional.</p>
                   {connection.accountEmail && <p>Connected account: {connection.accountEmail}</p>}
                   {connection.calendarTimezone && <p>Calendar timezone: {connection.calendarTimezone}</p>}
-                </div>
-              </section>
-            )}
-
-            {availability && (
-              <section className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-gray-900">
-                <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-                  Availability
-                </h3>
-                <div className="space-y-2">
-                  {availability.days.map((day) => (
-                    <div key={day.date} className="rounded-lg border border-gray-100 dark:border-gray-800 p-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium text-gray-800 dark:text-gray-100">{day.date}</span>
-                        <span
-                          className={clsx(
-                            'text-[11px] px-2 py-0.5 rounded-full',
-                            day.status === 'free'
-                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                              : day.status === 'limited'
-                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-                                : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                          )}
-                        >
-                          {day.status}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        {day.isAllDayBusy
-                          ? 'Busy all day'
-                          : day.freeBlocks.length > 0
-                            ? `Free: ${day.freeBlocks.slice(0, 2).map((block) => `${formatMinuteBlock(block.startMinute)}-${formatMinuteBlock(block.endMinute)}`).join(', ')}`
-                            : 'No free work blocks'}
-                      </p>
-                    </div>
-                  ))}
                 </div>
               </section>
             )}
