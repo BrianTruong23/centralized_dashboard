@@ -72,6 +72,7 @@ interface TaskEditDraft {
 const START_HOUR = 7;
 const END_HOUR = 21;
 const ROW_HEIGHT = 64;
+const MONTH_EVENT_PREVIEW_LIMIT = 3;
 const GOOGLE_EVENT_COLORS = ['#d97706', '#2563eb', '#0891b2', '#16a34a', '#9333ea', '#dc2626'];
 
 function parseLocalDateTime(dateKey: string, time?: string): Date {
@@ -187,6 +188,22 @@ function getStableColor(value: string, palette: string[]): string {
   return palette[hash % palette.length];
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = hex.replace('#', '');
+  const safeHex = normalized.length === 3
+    ? normalized.split('').map((char) => `${char}${char}`).join('')
+    : normalized;
+  const red = parseInt(safeHex.slice(0, 2), 16);
+  const green = parseInt(safeHex.slice(2, 4), 16);
+  const blue = parseInt(safeHex.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function formatEntryTime(entry: TimelineEntry): string {
+  if (entry.isAllDay) return 'All day';
+  return `${format(entry.start, 'HH:mm')} - ${format(entry.end, 'HH:mm')}`;
+}
+
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
@@ -209,6 +226,8 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editDraft, setEditDraft] = useState<TaskEditDraft | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+  const [showUnscheduledTasks, setShowUnscheduledTasks] = useState(false);
 
   const days = useMemo(() => {
     if (viewMode === 'day') return [startOfDay(anchorDate)];
@@ -241,7 +260,9 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
 
   const fetchSessionToken = useCallback(async (): Promise<string> => {
     if (!supabase) throw new Error('Supabase not configured');
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error('Please sign in to use calendar integration');
     return session.access_token;
   }, []);
@@ -437,6 +458,25 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
     [scheduledTaskEntries, calendarOnlyEntries]
   );
 
+  const entriesByDay = useMemo(() => {
+    const map = new Map<string, TimelineEntry[]>();
+    timelineEntries.forEach((entry) => {
+      const current = map.get(entry.dayKey) || [];
+      current.push(entry);
+      map.set(entry.dayKey, current);
+    });
+    map.forEach((entries, dayKey) => {
+      map.set(
+        dayKey,
+        [...entries].sort((a, b) => {
+          if (a.source !== b.source) return a.source === 'task' ? -1 : 1;
+          return a.start.getTime() - b.start.getTime();
+        })
+      );
+    });
+    return map;
+  }, [timelineEntries]);
+
   const unscheduledTasks = useMemo(
     () => tasks.filter((task) => task.status !== 'done' && !task.scheduled_date && !task.deadline),
     [tasks]
@@ -496,7 +536,11 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
       });
       setCalendarEvents([]);
       setAvailability(null);
-      setCalendarWarning(data?.revoked ? null : 'Local connection removed. Remote revoke may need to be completed in Google account settings.');
+      setCalendarWarning(
+        data?.revoked
+          ? null
+          : 'Local connection removed. Remote revoke may need to be completed in Google account settings.'
+      );
     } catch (error: unknown) {
       setConnection((prev) => ({
         ...prev,
@@ -596,108 +640,201 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
         ? format(anchorDate, 'EEEE, MMM d, yyyy')
         : `${format(days[0], 'MMM d')} - ${format(days[days.length - 1], 'MMM d, yyyy')}`;
 
-  const showSidePanel = unscheduledTasks.length > 0 || connection.status !== 'disconnected' || !!calendarWarning;
+  const selectedDayEntries = selectedDayKey ? entriesByDay.get(selectedDayKey) || [] : [];
+  const selectedDayTaskCount = selectedDayEntries.filter((entry) => entry.source === 'task').length;
+  const selectedDayCalendarCount = selectedDayEntries.length - selectedDayTaskCount;
+  const connectionSummary = connection.status === 'connected'
+    ? [connection.accountEmail || null, connection.calendarTimezone || null].filter(Boolean).join(' • ')
+    : 'Read-only calendar hints';
 
   return (
-    <section className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-      <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <div className="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-0.5">
-              <button
-                onClick={() => setViewMode('month')}
-                className={clsx('px-3 py-1.5 text-sm rounded-md', viewMode === 'month' ? 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border border-[var(--accent-border)]' : 'text-gray-600 dark:text-gray-300')}
-              >
-                Month
-              </button>
-              <button
-                onClick={() => setViewMode('week')}
-                className={clsx('px-3 py-1.5 text-sm rounded-md', viewMode === 'week' ? 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border border-[var(--accent-border)]' : 'text-gray-600 dark:text-gray-300')}
-              >
-                Week
-              </button>
-              <button
-                onClick={() => setViewMode('day')}
-                className={clsx('px-3 py-1.5 text-sm rounded-md', viewMode === 'day' ? 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)] border border-[var(--accent-border)]' : 'text-gray-600 dark:text-gray-300')}
-              >
-                Day
-              </button>
+    <section className="overflow-hidden rounded-[28px] border border-gray-200 dark:border-gray-700 bg-[linear-gradient(180deg,rgba(248,248,247,0.96),rgba(255,255,255,1))] dark:bg-[linear-gradient(180deg,rgba(17,24,39,0.96),rgba(17,24,39,1))] shadow-[0_24px_60px_-36px_rgba(15,23,42,0.35)]">
+      <div className="border-b border-gray-200/80 dark:border-gray-700/80 px-5 py-4 md:px-6">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                <span>Calendar</span>
+                <span className="h-1 w-1 rounded-full bg-gray-300 dark:bg-gray-600" />
+                <span>{viewMode}</span>
+              </div>
+              <div>
+                <h2 className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">{headerLabel}</h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  Overview first. Tasks are editable here, external calendar events stay read-only.
+                </p>
+              </div>
             </div>
-            <button onClick={() => handleNavigate('prev')} className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300">
-              <ChevronLeft size={16} />
-            </button>
-            <button onClick={() => handleNavigate('next')} className="p-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300">
-              <ChevronRight size={16} />
-            </button>
-          </div>
 
-          <div className="flex items-center gap-2">
-            {connection.status === 'connected' ? (
-              <>
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-sm">
-                  <CalendarCheck size={14} />
-                  Google Calendar connected
-                </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="inline-flex rounded-full border border-gray-200 dark:border-gray-700 bg-white/85 dark:bg-gray-900/75 p-1 shadow-sm">
+                <button
+                  onClick={() => setViewMode('month')}
+                  className={clsx(
+                    'rounded-full px-3 py-1.5 text-sm transition-colors',
+                    viewMode === 'month'
+                      ? 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)]'
+                      : 'text-gray-500 dark:text-gray-400'
+                  )}
+                >
+                  Month
+                </button>
+                <button
+                  onClick={() => setViewMode('week')}
+                  className={clsx(
+                    'rounded-full px-3 py-1.5 text-sm transition-colors',
+                    viewMode === 'week'
+                      ? 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)]'
+                      : 'text-gray-500 dark:text-gray-400'
+                  )}
+                >
+                  Week
+                </button>
+                <button
+                  onClick={() => setViewMode('day')}
+                  className={clsx(
+                    'rounded-full px-3 py-1.5 text-sm transition-colors',
+                    viewMode === 'day'
+                      ? 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)]'
+                      : 'text-gray-500 dark:text-gray-400'
+                  )}
+                >
+                  Day
+                </button>
+              </div>
+
+              <div className="inline-flex items-center gap-1 rounded-full border border-gray-200 dark:border-gray-700 bg-white/85 dark:bg-gray-900/75 p-1 shadow-sm">
+                <button
+                  onClick={() => handleNavigate('prev')}
+                  className="rounded-full p-2 text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  onClick={() => handleNavigate('next')}
+                  className="rounded-full p-2 text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+
+              {unscheduledTasks.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowUnscheduledTasks((current) => !current)}
+                  className={clsx(
+                    'inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition-colors',
+                    showUnscheduledTasks
+                      ? 'border-gray-900 bg-gray-900 text-white dark:border-white dark:bg-white dark:text-gray-900'
+                      : 'border-gray-200 bg-white/85 text-gray-600 dark:border-gray-700 dark:bg-gray-900/75 dark:text-gray-300'
+                  )}
+                >
+                  Unscheduled
+                  <span className={clsx('rounded-full px-2 py-0.5 text-xs', showUnscheduledTasks ? 'bg-white/15 dark:bg-black/10' : 'bg-gray-100 dark:bg-gray-800')}>
+                    {unscheduledTasks.length}
+                  </span>
+                </button>
+              )}
+
+              {connection.status === 'connected' ? (
                 <button
                   onClick={() => void disconnectCalendar()}
                   disabled={connectionActionLoading}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white/85 px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900/75 dark:text-gray-300 dark:hover:bg-gray-800"
                 >
                   <Unlink2 size={14} />
                   Disconnect
                 </button>
-              </>
-            ) : (
-              <button
-                onClick={() => void connectGoogleCalendar()}
-                disabled={connectionActionLoading}
-                className={clsx(
-                  'inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm disabled:opacity-60',
-                  connection.status === 'error'
-                    ? 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
-                    : 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                )}
-              >
-                <CalendarSync size={14} />
-                {connection.status === 'error' ? 'Reconnect Google Calendar' : 'Connect Google Calendar'}
-              </button>
+              ) : (
+                <button
+                  onClick={() => void connectGoogleCalendar()}
+                  disabled={connectionActionLoading}
+                  className={clsx(
+                    'inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm disabled:opacity-60',
+                    connection.status === 'error'
+                      ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                      : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                  )}
+                >
+                  <CalendarSync size={14} />
+                  {connection.status === 'error' ? 'Reconnect Google' : 'Connect Google'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+              <span className="h-2 w-2 rounded-full bg-gray-900 dark:bg-gray-100" />
+              Tasks
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+              <span className="h-2 w-2 rounded-full bg-amber-500" />
+              Google Calendar
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1.5 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+              <ShieldCheck size={12} />
+              Read-only
+            </span>
+            {connection.status === 'connected' && (
+              <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-300">
+                <CalendarCheck size={12} />
+                {connectionSummary}
+              </span>
             )}
           </div>
-        </div>
 
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{headerLabel}</h2>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Calendar data is read-only and advisory. Tasks stay unchanged unless you explicitly edit them.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 text-xs">
-            <span className="px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">Task</span>
-            <span className="px-2 py-1 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">Calendar</span>
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
-              <ShieldCheck size={12} />
-              Write disabled
-            </span>
-          </div>
-        </div>
+          {showUnscheduledTasks && unscheduledTasks.length > 0 && (
+            <div className="rounded-2xl border border-gray-200/90 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/65">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Unscheduled tasks</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Drag these into the calendar when you want to place them.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowUnscheduledTasks(false)}
+                  className="rounded-full p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="grid max-h-44 gap-2 overflow-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
+                {unscheduledTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    draggable
+                    onDragStart={(e) => e.dataTransfer.setData('text/plain', task.id)}
+                    className="rounded-2xl border border-gray-200 bg-white px-3 py-2.5 text-left shadow-sm transition-colors hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:hover:border-gray-600"
+                  >
+                    <div className="truncate text-sm font-medium text-gray-800 dark:text-gray-100">{task.title}</div>
+                    <div className="mt-2 flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 dark:bg-gray-800">P{task.priority}</span>
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 dark:bg-gray-800">Task</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-        {(connection.lastError || calendarWarning) && (
-          <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
-            {(connection.lastError || calendarWarning)}
-          </div>
-        )}
+          {(connection.lastError || calendarWarning) && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+              {connection.lastError || calendarWarning}
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className={clsx('p-4 grid grid-cols-1 gap-4', showSidePanel && 'xl:grid-cols-[1fr_320px]')}>
-        <div className="overflow-auto rounded-xl border border-gray-200 dark:border-gray-700">
+      <div className="px-5 pb-5 md:px-6 md:pb-6">
+        <div className="overflow-auto rounded-[24px] border border-gray-200/80 bg-white/80 shadow-inner shadow-gray-100/80 dark:border-gray-700 dark:bg-gray-900/75 dark:shadow-none">
           {isStatusLoading || isEventsLoading ? (
-            <div className="p-6 text-sm text-gray-500 dark:text-gray-400">Loading calendar view...</div>
+            <div className="p-10 text-sm text-gray-500 dark:text-gray-400">Loading calendar view...</div>
           ) : viewMode === 'month' ? (
-            <div className="min-w-[760px]">
-              <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/50">
+            <div className="min-w-[860px]">
+              <div className="grid grid-cols-7 border-b border-gray-200/80 bg-gray-50/80 dark:border-gray-700 dark:bg-gray-800/40">
                 {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((label) => (
-                  <div key={label} className="px-2 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 border-l first:border-l-0 border-gray-200 dark:border-gray-700">
+                  <div key={label} className="border-l border-gray-200/70 px-3 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 first:border-l-0 dark:border-gray-700 dark:text-gray-500">
                     {label}
                   </div>
                 ))}
@@ -705,20 +842,18 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
               <div className="grid grid-cols-7">
                 {monthDays.map((day) => {
                   const dayKey = formatDateKey(day);
-                  const entries = timelineEntries
-                    .filter((entry) => entry.dayKey === dayKey)
-                    .sort((a, b) => a.start.getTime() - b.start.getTime());
+                  const entries = entriesByDay.get(dayKey) || [];
+                  const visibleEntries = entries.slice(0, MONTH_EVENT_PREVIEW_LIMIT);
+                  const hiddenCount = Math.max(entries.length - visibleEntries.length, 0);
                   const isCurrentMonth = day.getMonth() === anchorDate.getMonth();
-                  const monthCellMinHeight = Math.max(132, 36 + entries.length * 30);
                   return (
                     <div
                       key={dayKey}
                       className={clsx(
-                        'p-2 border-t border-l first:border-l-0 border-gray-200 dark:border-gray-700',
-                        !isCurrentMonth && 'bg-gray-50/40 dark:bg-gray-800/30',
-                        isSameDay(day, new Date()) && 'bg-[var(--accent-soft)]/25'
+                        'min-h-[152px] border-t border-l border-gray-200/80 px-3 py-2.5 first:border-l-0 dark:border-gray-700',
+                        !isCurrentMonth && 'bg-gray-50/40 dark:bg-gray-800/20',
+                        isSameDay(day, new Date()) && 'bg-[var(--accent-soft)]/20'
                       )}
-                      style={{ minHeight: monthCellMinHeight }}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={(e) => {
                         e.preventDefault();
@@ -726,28 +861,83 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                         if (taskId) void handleDropTask(taskId, dayKey, 9);
                       }}
                     >
-                      <div className={clsx('text-xs font-semibold mb-1.5', isCurrentMonth ? 'text-gray-700 dark:text-gray-200' : 'text-gray-400 dark:text-gray-500')}>
-                        {format(day, 'd')}
+                      <div className="mb-3 flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDayKey(dayKey)}
+                          className={clsx(
+                            'flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold transition-colors',
+                            isSameDay(day, new Date())
+                              ? 'bg-[var(--accent-solid)] text-[var(--accent-solid-foreground)]'
+                              : isCurrentMonth
+                                ? 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800'
+                                : 'text-gray-400 hover:bg-gray-100 dark:text-gray-500 dark:hover:bg-gray-800'
+                          )}
+                        >
+                          {format(day, 'd')}
+                        </button>
+                        {entries.length > 0 && (
+                          <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500">{entries.length}</span>
+                        )}
                       </div>
-                      <div className="space-y-1">
-                        {entries.map((entry) => (
+                      <div className="space-y-1.5">
+                        {visibleEntries.map((entry) => (
                           <button
                             key={entry.id}
                             type="button"
                             onClick={() => {
-                              if (entry.source === 'task' && entry.task) openTaskEditor(entry.task);
+                              if (entry.source === 'task' && entry.task) {
+                                openTaskEditor(entry.task);
+                                return;
+                              }
+                              setSelectedDayKey(dayKey);
                             }}
                             className={clsx(
-                              'w-full text-left rounded-md px-1.5 py-1 text-[11px] truncate text-white',
-                              entry.source === 'task' ? 'cursor-pointer' : 'cursor-default'
+                              'flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors',
+                              entry.source === 'task'
+                                ? 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white'
+                                : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800'
                             )}
-                            style={{ backgroundColor: entry.color }}
+                            style={
+                              entry.source === 'calendar'
+                                ? {
+                                    borderColor: hexToRgba(entry.color, 0.28),
+                                    backgroundColor: hexToRgba(entry.color, 0.12),
+                                  }
+                                : {
+                                    boxShadow: `inset 3px 0 0 ${entry.color}`,
+                                  }
+                            }
                             title={entry.isAllDay ? `${entry.title} (all day)` : `${entry.title} (${format(entry.start, 'HH:mm')})`}
                           >
-                            <span className="opacity-90 mr-1">{entry.isAllDay ? 'All day' : format(entry.start, 'HH:mm')}</span>
-                            {entry.title}
+                            <span
+                              className="h-2.5 w-2.5 shrink-0 rounded-full"
+                              style={{ backgroundColor: entry.source === 'task' ? '#ffffff' : entry.color }}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-[11px] font-semibold">
+                                {entry.isAllDay ? entry.title : `${format(entry.start, 'HH:mm')} ${entry.title}`}
+                              </div>
+                              <div
+                                className={clsx(
+                                  'mt-0.5 text-[10px]',
+                                  entry.source === 'task' ? 'text-white/70 dark:text-gray-600' : 'text-gray-500 dark:text-gray-400'
+                                )}
+                              >
+                                {entry.source === 'task' ? 'Task' : 'Google Calendar'}
+                              </div>
+                            </div>
                           </button>
                         ))}
+                        {hiddenCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDayKey(dayKey)}
+                            className="w-full rounded-xl border border-dashed border-gray-200 px-2.5 py-2 text-left text-[11px] font-medium text-gray-500 transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800"
+                          >
+                            +{hiddenCount} more
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -756,12 +946,12 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
             </div>
           ) : (
             <div className={clsx('min-w-[640px]', viewMode === 'week' && 'min-w-[1180px]')}>
-              <div className="flex border-b border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/50">
+              <div className="flex border-b border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/40">
                 <div className="w-16 p-2 text-xs text-gray-400" />
                 {days.map((day) => (
-                  <div key={day.toISOString()} className="flex-1 min-w-[160px] p-2 text-xs font-semibold text-gray-600 dark:text-gray-300 border-l border-gray-200 dark:border-gray-700">
-                    <div>{format(day, 'EEE')}</div>
-                    <div className={clsx('text-sm', isSameDay(day, new Date()) && 'text-black dark:text-white')}>{format(day, 'MMM d')}</div>
+                  <div key={day.toISOString()} className="flex-1 min-w-[160px] border-l border-gray-200 p-3 text-xs font-semibold text-gray-600 dark:border-gray-700 dark:text-gray-300">
+                    <div className="uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">{format(day, 'EEE')}</div>
+                    <div className={clsx('mt-1 text-sm', isSameDay(day, new Date()) && 'text-black dark:text-white')}>{format(day, 'MMM d')}</div>
                   </div>
                 ))}
               </div>
@@ -769,7 +959,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
               <div className="flex">
                 <div className="w-16 shrink-0">
                   {Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i).map((hour) => (
-                    <div key={hour} className="h-16 pr-2 text-right text-xs text-gray-400 border-t border-gray-100 dark:border-gray-800">
+                    <div key={hour} className="h-16 border-t border-gray-100 pr-2 text-right text-xs text-gray-400 dark:border-gray-800">
                       {format(new Date(2026, 0, 1, hour, 0, 0), 'HH:mm')}
                     </div>
                   ))}
@@ -777,13 +967,13 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
 
                 {days.map((day) => {
                   const dayKey = formatDateKey(day);
-                  const entries = timelineEntries.filter((entry) => entry.dayKey === dayKey);
+                  const entries = entriesByDay.get(dayKey) || [];
                   return (
                     <div key={dayKey} className="relative flex-1 min-w-[160px] border-l border-gray-200 dark:border-gray-700">
                       {Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i).map((hour) => (
                         <div
                           key={`${dayKey}-${hour}`}
-                          className="h-16 border-t border-gray-100 dark:border-gray-800 hover:bg-gray-50/60 dark:hover:bg-gray-800/40"
+                          className="h-16 border-t border-gray-100 hover:bg-gray-50/60 dark:border-gray-800 dark:hover:bg-gray-800/40"
                           onDragOver={(e) => e.preventDefault()}
                           onDrop={(e) => {
                             e.preventDefault();
@@ -800,7 +990,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                           ? (END_HOUR - START_HOUR) * 60
                           : Math.max((entry.end.getTime() - entry.start.getTime()) / (60 * 1000), 30);
                         const top = ((startHour - START_HOUR) + startMin / 60) * ROW_HEIGHT;
-                        const height = Math.max((durationMin / 60) * ROW_HEIGHT, 24);
+                        const height = Math.max((durationMin / 60) * ROW_HEIGHT, 28);
                         return (
                           <div
                             key={entry.id}
@@ -812,16 +1002,38 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                               if (entry.source === 'task' && entry.task) openTaskEditor(entry.task);
                             }}
                             className={clsx(
-                              'absolute left-1 right-1 rounded-lg px-2 py-1 text-xs text-white shadow-sm',
-                              entry.source === 'task' ? 'cursor-pointer' : 'cursor-default'
+                              'absolute left-1.5 right-1.5 overflow-hidden rounded-2xl px-2.5 py-2 text-xs shadow-sm',
+                              entry.source === 'task'
+                                ? 'cursor-pointer bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
+                                : 'cursor-default border bg-white text-gray-700 dark:bg-gray-900 dark:text-gray-200'
                             )}
-                            style={{ top, height, backgroundColor: entry.color }}
+                            style={
+                              entry.source === 'task'
+                                ? {
+                                    top,
+                                    height,
+                                    boxShadow: `inset 3px 0 0 ${entry.color}`,
+                                  }
+                                : {
+                                    top,
+                                    height,
+                                    borderColor: hexToRgba(entry.color, 0.28),
+                                    backgroundColor: hexToRgba(entry.color, 0.14),
+                                  }
+                            }
                             title={entry.isAllDay ? `${entry.title} (all day)` : `${entry.title} (${format(entry.start, 'HH:mm')} - ${format(entry.end, 'HH:mm')})`}
                           >
-                            <div className="font-medium truncate">{entry.title}</div>
-                            <div className="opacity-90">{entry.isAllDay ? 'All day' : `${format(entry.start, 'HH:mm')} - ${format(entry.end, 'HH:mm')}`}</div>
-                            <div className="opacity-90 uppercase tracking-wide">
-                              {entry.syncState === 'task_only' ? 'Task' : 'Calendar'}
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                style={{ backgroundColor: entry.source === 'task' ? '#ffffff' : entry.color }}
+                              />
+                              <div className="min-w-0">
+                                <div className="truncate font-medium">{entry.title}</div>
+                                <div className={clsx('truncate text-[11px]', entry.source === 'task' ? 'text-white/70 dark:text-gray-600' : 'text-gray-500 dark:text-gray-400')}>
+                                  {formatEntryTime(entry)} • {entry.source === 'task' ? 'Task' : 'Google Calendar'}
+                                </div>
+                              </div>
                             </div>
                           </div>
                         );
@@ -833,55 +1045,106 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
             </div>
           )}
         </div>
+      </div>
 
-        {showSidePanel && (
-          <aside className="space-y-4">
-            {(connection.status !== 'disconnected' || calendarWarning) && (
-              <section className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-gray-50/60 dark:bg-gray-800/40">
-                <div className="flex items-center gap-2 mb-2">
-                  <ShieldCheck size={14} className="text-gray-500 dark:text-gray-400" />
-                  <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Calendar Guardrails
-                  </h3>
-                </div>
-                <div className="space-y-2 text-xs text-gray-600 dark:text-gray-300">
-                  <p>Read-only access only. The app and AI use calendar data for availability hints, not as an authority to change tasks or events.</p>
-                  <p>No events are created, edited, moved, or deleted from here. Disconnect removes stored access and keeps task planning functional.</p>
-                  {connection.accountEmail && <p>Connected account: {connection.accountEmail}</p>}
-                  {connection.calendarTimezone && <p>Calendar timezone: {connection.calendarTimezone}</p>}
-                </div>
-              </section>
-            )}
-
-            {unscheduledTasks.length > 0 && (
-              <section className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-gray-50/60 dark:bg-gray-800/40">
-                <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-                  Unscheduled Tasks
+      {selectedDayKey && (
+        <div
+          className="fixed inset-0 z-[250] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm"
+          onClick={() => setSelectedDayKey(null)}
+        >
+          <div
+            className="flex h-[min(78vh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">Day detail</div>
+                <h3 className="mt-1 text-xl font-semibold text-gray-900 dark:text-gray-100">
+                  {format(parseLocalDateTime(selectedDayKey), 'EEEE, MMMM d')}
                 </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                  Drag tasks into a time slot to schedule work. Calendar events stay read-only.
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  {selectedDayEntries.length} items • {selectedDayTaskCount} tasks • {selectedDayCalendarCount} Google Calendar
                 </p>
-                <div className="space-y-2 max-h-[420px] overflow-auto pr-1">
-                  {unscheduledTasks.map((task) => (
-                    <div
-                      key={task.id}
-                      draggable
-                      onDragStart={(e) => e.dataTransfer.setData('text/plain', task.id)}
-                      className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 cursor-grab active:cursor-grabbing"
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedDayKey(null)}
+                className="rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="border-b border-gray-200 px-5 py-3 dark:border-gray-700">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                  <span className="h-2 w-2 rounded-full bg-gray-900 dark:bg-gray-100" />
+                  Task
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-3 py-1.5 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                  <span className="h-2 w-2 rounded-full bg-amber-500" />
+                  Google Calendar
+                </span>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto px-5 py-4">
+              {selectedDayEntries.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-gray-200 px-4 py-10 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                  Nothing scheduled for this date.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {selectedDayEntries.map((entry) => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      onClick={() => {
+                        if (entry.source === 'task' && entry.task) {
+                          setSelectedDayKey(null);
+                          openTaskEditor(entry.task);
+                        }
+                      }}
+                      className={clsx(
+                        'w-full rounded-2xl border px-4 py-3 text-left transition-colors',
+                        entry.source === 'task'
+                          ? 'border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-950 dark:hover:border-gray-600'
+                          : 'dark:border-gray-700'
+                      )}
+                      style={
+                        entry.source === 'task'
+                          ? {
+                              boxShadow: `inset 4px 0 0 ${entry.color}`,
+                            }
+                          : {
+                              borderColor: hexToRgba(entry.color, 0.28),
+                              backgroundColor: hexToRgba(entry.color, 0.12),
+                            }
+                      }
                     >
-                      <div className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{task.title}</div>
-                      <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
-                        <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800">P{task.priority}</span>
-                        <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800">Task only</span>
+                      <div className="flex items-start gap-3">
+                        <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: entry.color }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                              {entry.source === 'task' ? 'Task' : 'Google Calendar'}
+                            </span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">{formatEntryTime(entry)}</span>
+                          </div>
+                          <div className="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{entry.title}</div>
+                          {entry.source === 'task' && (
+                            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">Click to edit this task.</div>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
-              </section>
-            )}
-          </aside>
-        )}
-      </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {editingTask && editDraft && (
         <div className="fixed inset-0 z-[260] bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
