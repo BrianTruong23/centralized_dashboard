@@ -175,7 +175,7 @@ export function readStoredSession(): StoredSession | null {
 }
 
 function isAuthApiError(error: unknown): error is { message: string; status?: number; code?: string } {
-  return Boolean(error) && typeof error === 'object' && 'message' in error;
+  return error != null && typeof error === 'object' && 'message' in error;
 }
 
 async function recoverSession(reason: string): Promise<Session | null> {
