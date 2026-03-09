@@ -77,7 +77,9 @@ export function buildGoogleAuthUrl(origin: string, state: string): string {
     state,
   });
 
-  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  console.log('[google-calendar-auth-url]', authUrl);
+  return authUrl;
 }
 
 async function readJson<T>(res: Response): Promise<T> {
