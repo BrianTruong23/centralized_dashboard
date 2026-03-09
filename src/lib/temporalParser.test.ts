@@ -19,6 +19,13 @@ describe('temporalParser', () => {
     expect(parsed.due_time).toBe('17:00:00');
   });
 
+  test('removes deadline cue punctuation cleanly from task text', () => {
+    const parsed = parseTemporal('by friday 5pm, i need to finish work', undefined, undefined, now);
+
+    expect(parsed.cleanedText).toBe('i need to finish work');
+    expect(parsed.detectedPhrases?.[0]?.phrase.toLowerCase()).toBe('by friday 5pm');
+  });
+
   test('treats explicit planned-work phrasing as scheduled time', () => {
     const parsed = parseTemporal('work on report tomorrow at 5pm', undefined, undefined, now);
 

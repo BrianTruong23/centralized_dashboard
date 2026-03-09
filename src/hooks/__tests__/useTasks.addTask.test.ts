@@ -52,10 +52,6 @@ const mockLoadTasks = jest.fn();
 const mockSaveTasks = jest.fn();
 
 jest.mock('@/lib/supabase', () => {
-  let _resolve: () => void;
-  const authReady = new Promise<void>((r) => { _resolve = r; });
-  _resolve!();
-
   return {
     supabase: {
       auth: {
@@ -64,7 +60,21 @@ jest.mock('@/lib/supabase', () => {
         onAuthStateChange: (...args: any[]) => mockOnAuthStateChange(...args),
       },
     },
-    authReady,
+    awaitAuthBootstrap: jest.fn(async () => {
+      const result = await mockGetSession();
+      return {
+        state: result?.data?.session ? 'authenticated' : 'signed_out',
+        user: result?.data?.session?.user ?? null,
+        accessToken: result?.data?.session?.access_token ?? null,
+        error: null,
+        lastEvent: 'INITIAL_SESSION',
+        updatedAt: Date.now(),
+      };
+    }),
+    awaitAuthenticatedSession: jest.fn(async () => {
+      const result = await mockGetSession();
+      return result?.data?.session ?? null;
+    }),
     SESSION_KEY: 'app_auth_session',
   };
 });
