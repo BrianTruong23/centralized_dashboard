@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   addDays,
   addMonths,
@@ -11,7 +11,6 @@ import {
   getHours,
   getMinutes,
   isSameDay,
-  parseISO,
   startOfDay,
   startOfMonth,
   startOfWeek,
@@ -19,22 +18,27 @@ import {
   subWeeks,
 } from 'date-fns';
 import clsx from 'clsx';
-import { CalendarCheck, CalendarSync, ChevronLeft, ChevronRight, Link2, Unlink2, X } from 'lucide-react';
+import {
+  CalendarCheck,
+  CalendarSync,
+  ChevronLeft,
+  ChevronRight,
+  ShieldCheck,
+  Unlink2,
+  X,
+} from 'lucide-react';
 import { Task } from '@/types/task';
 import { Project } from '@/types/project';
 import { formatDateKey } from '@/lib/dateKey';
-import { generateId } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
+import type {
+  AvailabilitySummary,
+  CalendarConnectionSummary,
+  NormalizedCalendarEvent,
+} from '@/lib/calendar/types';
 
 type CalendarViewMode = 'month' | 'day' | 'week';
-type SyncState = 'task_only' | 'calendar_only' | 'linked';
-
-interface GoogleCalendarEvent {
-  id: string;
-  title: string;
-  start: string;
-  end: string;
-  linkedTaskId?: string;
-}
+type SyncState = 'task_only' | 'calendar_only';
 
 interface CalendarWorkspaceProps {
   tasks: Task[];
@@ -52,6 +56,7 @@ interface TimelineEntry {
   task?: Task;
   syncState: SyncState;
   color: string;
+  isAllDay?: boolean;
 }
 
 interface TaskEditDraft {
@@ -62,12 +67,8 @@ interface TaskEditDraft {
   date: string;
   time: string;
   duration: number;
-  linkGoogleEvent: boolean;
 }
 
-const CONNECTED_KEY = 'google_calendar_connected';
-const SYNC_KEY = 'google_calendar_sync_enabled';
-const EVENTS_KEY = 'google_calendar_events';
 const START_HOUR = 7;
 const END_HOUR = 21;
 const ROW_HEIGHT = 64;
@@ -131,56 +132,80 @@ function getTaskTimeRange(task: Task): { start: Date; end: Date; dayKey: string 
   return { start: fallbackStart, end: fallbackEnd, dayKey: formatDateKey(fallbackStart) };
 }
 
-function seedEvents(baseDate: Date): GoogleCalendarEvent[] {
-  const day = formatDateKey(baseDate);
-  const next = formatDateKey(addDays(baseDate, 1));
-  return [
-    {
-      id: `gcal-${generateId()}`,
-      title: 'Customer support',
-      start: parseLocalDateTime(day, '09:30:00').toISOString(),
-      end: parseLocalDateTime(day, '10:30:00').toISOString(),
-    },
-    {
-      id: `gcal-${generateId()}`,
-      title: 'Design meeting',
-      start: parseLocalDateTime(next, '10:30:00').toISOString(),
-      end: parseLocalDateTime(next, '11:30:00').toISOString(),
-    },
-  ];
+function addUtcDays(dateKey: string, delta: number): string {
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + delta);
+  return date.toISOString().slice(0, 10);
+}
+
+function listDateKeys(from: string, to: string): string[] {
+  const result: string[] = [];
+  let current = from;
+  while (current <= to) {
+    result.push(current);
+    current = addUtcDays(current, 1);
+  }
+  return result;
+}
+
+function eventLocalDate(date: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const value = (type: string) => parts.find((part) => part.type === type)?.value || '00';
+  return `${value('year')}-${value('month')}-${value('day')}`;
+}
+
+function clampEventToDisplay(event: NormalizedCalendarEvent, dayKey: string): { start: Date; end: Date } | null {
+  if (event.isAllDay) {
+    return {
+      start: parseLocalDateTime(dayKey, `${START_HOUR}:00:00`),
+      end: parseLocalDateTime(dayKey, `${END_HOUR}:00:00`),
+    };
+  }
+
+  if (!event.startAt || !event.endAt) return null;
+  const actualStart = new Date(event.startAt);
+  const actualEnd = new Date(event.endAt);
+  const dayStart = parseLocalDateTime(dayKey, `${START_HOUR}:00:00`);
+  const dayEnd = parseLocalDateTime(dayKey, `${END_HOUR}:00:00`);
+  return {
+    start: actualStart > dayStart ? actualStart : dayStart,
+    end: actualEnd < dayEnd ? actualEnd : dayEnd,
+  };
+}
+
+function formatMinuteBlock(minute: number): string {
+  const hour = Math.floor(minute / 60);
+  const min = minute % 60;
+  return `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
 }
 
 export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWorkspaceProps) => {
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const [anchorDate, setAnchorDate] = useState<Date>(new Date());
-  const [googleConnected, setGoogleConnected] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem(CONNECTED_KEY) === 'true';
+  const [connection, setConnection] = useState<CalendarConnectionSummary>({
+    provider: 'google',
+    status: 'disconnected',
+    readOnly: true,
+    writeEnabled: false,
   });
-  const [syncEnabled, setSyncEnabled] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    const storedSync = localStorage.getItem(SYNC_KEY);
-    return storedSync === null ? true : storedSync === 'true';
-  });
-  const [googleEvents, setGoogleEvents] = useState<GoogleCalendarEvent[]>(() => {
-    if (typeof window === 'undefined') return [];
-    try {
-      const raw = localStorage.getItem(EVENTS_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [calendarEvents, setCalendarEvents] = useState<NormalizedCalendarEvent[]>([]);
+  const [availability, setAvailability] = useState<AvailabilitySummary | null>(null);
+  const [calendarWarning, setCalendarWarning] = useState<string | null>(null);
+  const [isStatusLoading, setIsStatusLoading] = useState(true);
+  const [isEventsLoading, setIsEventsLoading] = useState(false);
+  const [connectionActionLoading, setConnectionActionLoading] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editDraft, setEditDraft] = useState<TaskEditDraft | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(CONNECTED_KEY, String(googleConnected));
-    localStorage.setItem(SYNC_KEY, String(syncEnabled));
-    localStorage.setItem(EVENTS_KEY, JSON.stringify(googleEvents));
-  }, [googleConnected, syncEnabled, googleEvents]);
 
   const days = useMemo(() => {
     if (viewMode === 'day') return [startOfDay(anchorDate)];
@@ -208,15 +233,132 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
     () => (viewMode === 'month' ? monthDays.map((d) => formatDateKey(d)) : days.map((d) => formatDateKey(d))),
     [viewMode, monthDays, days]
   );
-  const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+  const dayKeySet = useMemo(() => new Set(dayKeys), [dayKeys]);
   const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
+
+  const fetchSessionToken = useCallback(async (): Promise<string> => {
+    if (!supabase) throw new Error('Supabase not configured');
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Please sign in to use calendar integration');
+    return session.access_token;
+  }, []);
+
+  const fetchConnectionStatus = useCallback(async () => {
+    try {
+      setIsStatusLoading(true);
+      const token = await fetchSessionToken();
+      const res = await fetch('/api/calendar/status', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to load calendar status');
+      setConnection(data.connection);
+    } catch (error: unknown) {
+      setConnection({
+        provider: 'google',
+        status: 'error',
+        readOnly: true,
+        writeEnabled: false,
+        lastError: getErrorMessage(error, 'Calendar status is unavailable.'),
+      });
+    } finally {
+      setIsStatusLoading(false);
+    }
+  }, [fetchSessionToken]);
+
+  useEffect(() => {
+    void fetchConnectionStatus();
+  }, [fetchConnectionStatus]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const status = url.searchParams.get('calendar_status');
+    const message = url.searchParams.get('calendar_message');
+    if (!status) return;
+
+    if (status === 'connected') {
+      void fetchConnectionStatus();
+    } else if (status === 'error') {
+      setConnection((prev) => ({
+        ...prev,
+        status: 'error',
+        lastError: message || 'Calendar connection failed.',
+      }));
+    }
+
+    url.searchParams.delete('calendar_status');
+    url.searchParams.delete('calendar_message');
+    window.history.replaceState({}, '', url.toString());
+  }, [fetchConnectionStatus]);
+
+  const fetchWindow = useMemo(() => {
+    if (viewMode === 'month') {
+      return {
+        from: formatDateKey(startOfWeek(startOfMonth(anchorDate), { weekStartsOn: 1 })),
+        to: formatDateKey(endOfWeek(endOfMonth(anchorDate), { weekStartsOn: 1 })),
+      };
+    }
+    if (viewMode === 'day') {
+      const date = formatDateKey(anchorDate);
+      return { from: date, to: date };
+    }
+    return {
+      from: formatDateKey(days[0]),
+      to: formatDateKey(days[days.length - 1]),
+    };
+  }, [viewMode, anchorDate, days]);
+
+  useEffect(() => {
+    if (connection.status !== 'connected') {
+      setCalendarEvents([]);
+      setAvailability(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadEvents = async () => {
+      try {
+        setIsEventsLoading(true);
+        setCalendarWarning(null);
+        const token = await fetchSessionToken();
+        const params = new URLSearchParams({
+          from: fetchWindow.from,
+          to: fetchWindow.to,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+        });
+        const res = await fetch(`/api/calendar/events?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || 'Failed to load calendar events');
+        if (cancelled) return;
+        setConnection(data.connection);
+        setCalendarEvents(Array.isArray(data.events) ? data.events : []);
+        setAvailability(data.availability || null);
+        setCalendarWarning(data.warning || null);
+      } catch (error: unknown) {
+        if (cancelled) return;
+        setCalendarEvents([]);
+        setAvailability(null);
+        setCalendarWarning(getErrorMessage(error, 'Calendar availability is unavailable.'));
+      } finally {
+        if (!cancelled) setIsEventsLoading(false);
+      }
+    };
+
+    void loadEvents();
+    return () => {
+      cancelled = true;
+    };
+  }, [connection.status, fetchSessionToken, fetchWindow.from, fetchWindow.to]);
 
   const scheduledTaskEntries = useMemo<TimelineEntry[]>(() => {
     return tasks
       .filter((task) => task.status !== 'done' && !!getTaskTimeRange(task))
       .map((task) => {
         const range = getTaskTimeRange(task)!;
-        const linked = !!task.planningMetadata?.googleEventId;
         const projectColor = task.project_id ? projectById.get(task.project_id)?.color : undefined;
         return {
           id: `task-${task.id}`,
@@ -226,35 +368,70 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
           dayKey: range.dayKey,
           source: 'task' as const,
           task,
-          syncState: (linked ? 'linked' : 'task_only') as SyncState,
-          color: linked ? '#047857' : projectColor || '#111827',
+          syncState: 'task_only' as const,
+          color: projectColor || '#111827',
         };
       })
-      .filter((entry) => dayKeys.includes(entry.dayKey));
-  }, [tasks, dayKeys, projectById]);
+      .filter((entry) => dayKeySet.has(entry.dayKey));
+  }, [tasks, dayKeySet, projectById]);
 
   const calendarOnlyEntries = useMemo<TimelineEntry[]>(() => {
-    if (!googleConnected) return [];
-    return googleEvents
-      .filter((evt) => !evt.linkedTaskId || !taskById.has(evt.linkedTaskId))
-      .map((evt) => {
-        const start = parseISO(evt.start);
-        const end = parseISO(evt.end);
-        return {
-          id: `g-${evt.id}`,
-          title: evt.title,
-          start,
-          end,
-          dayKey: formatDateKey(start),
-          source: 'calendar' as const,
-          syncState: 'calendar_only' as SyncState,
-          color: '#1d4ed8',
-        };
-      })
-      .filter((entry) => dayKeys.includes(entry.dayKey));
-  }, [googleConnected, googleEvents, taskById, dayKeys]);
+    const timeZone = availability?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const entries: TimelineEntry[] = [];
 
-  const timelineEntries = useMemo(() => [...scheduledTaskEntries, ...calendarOnlyEntries], [scheduledTaskEntries, calendarOnlyEntries]);
+    calendarEvents.forEach((event) => {
+      if (event.isAllDay && event.startDate && event.endDateExclusive) {
+        let current = event.startDate;
+        while (current < event.endDateExclusive) {
+          if (dayKeySet.has(current)) {
+            const range = clampEventToDisplay(event, current);
+            if (range) {
+              entries.push({
+                id: `${event.id}-${current}`,
+                title: event.title,
+                start: range.start,
+                end: range.end,
+                dayKey: current,
+                source: 'calendar',
+                syncState: 'calendar_only',
+                color: '#1d4ed8',
+                isAllDay: true,
+              });
+            }
+          }
+          current = addUtcDays(current, 1);
+        }
+        return;
+      }
+
+      if (!event.startAt || !event.endAt) return;
+      const startDate = eventLocalDate(new Date(event.startAt), timeZone);
+      const endDate = eventLocalDate(new Date(event.endAt), timeZone);
+
+      listDateKeys(startDate, endDate).forEach((dayKey) => {
+        if (!dayKeySet.has(dayKey)) return;
+        const range = clampEventToDisplay(event, dayKey);
+        if (!range) return;
+        entries.push({
+          id: `${event.id}-${dayKey}`,
+          title: event.title,
+          start: range.start,
+          end: range.end,
+          dayKey,
+          source: 'calendar',
+          syncState: 'calendar_only',
+          color: '#1d4ed8',
+        });
+      });
+    });
+
+    return entries;
+  }, [calendarEvents, dayKeySet, availability?.timeZone]);
+
+  const timelineEntries = useMemo(
+    () => [...scheduledTaskEntries, ...calendarOnlyEntries],
+    [scheduledTaskEntries, calendarOnlyEntries]
+  );
 
   const unscheduledTasks = useMemo(
     () => tasks.filter((task) => task.status !== 'done' && !task.scheduled_date && !task.deadline),
@@ -269,9 +446,62 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
     });
   };
 
-  const connectGoogleCalendar = () => {
-    setGoogleConnected(true);
-    if (googleEvents.length === 0) setGoogleEvents(seedEvents(anchorDate));
+  const connectGoogleCalendar = async () => {
+    try {
+      setConnectionActionLoading(true);
+      const token = await fetchSessionToken();
+      const returnTo = '/?view=inbox';
+      const res = await fetch('/api/calendar/google/connect', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ returnTo }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.authUrl) throw new Error(data?.error || 'Failed to start calendar connection');
+      window.location.assign(data.authUrl);
+    } catch (error: unknown) {
+      setConnection((prev) => ({
+        ...prev,
+        status: 'error',
+        lastError: getErrorMessage(error, 'Failed to start calendar connection.'),
+      }));
+      setConnectionActionLoading(false);
+    }
+  };
+
+  const disconnectCalendar = async () => {
+    if (!window.confirm('Disconnect Google Calendar and revoke stored access for this app?')) return;
+
+    try {
+      setConnectionActionLoading(true);
+      const token = await fetchSessionToken();
+      const res = await fetch('/api/calendar/disconnect', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to disconnect calendar');
+      setConnection({
+        provider: 'google',
+        status: 'disconnected',
+        readOnly: true,
+        writeEnabled: false,
+      });
+      setCalendarEvents([]);
+      setAvailability(null);
+      setCalendarWarning(data?.revoked ? null : 'Local connection removed. Remote revoke may need to be completed in Google account settings.');
+    } catch (error: unknown) {
+      setConnection((prev) => ({
+        ...prev,
+        status: 'error',
+        lastError: getErrorMessage(error, 'Failed to disconnect calendar.'),
+      }));
+    } finally {
+      setConnectionActionLoading(false);
+    }
   };
 
   const handleDropTask = async (taskId: string, dayKey: string, hour: number) => {
@@ -281,37 +511,6 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
     const newTime = `${String(hour).padStart(2, '0')}:00:00`;
     const startAt = parseLocalDateTime(dayKey, newTime);
     const endAt = new Date(startAt.getTime() + Math.max(task.estimatedMinutes || 60, 30) * 60 * 1000);
-    let nextMetadata = { ...(task.planningMetadata || {}) };
-    let nextEvents = [...googleEvents];
-
-    if (googleConnected && syncEnabled) {
-      const linkedId = task.planningMetadata?.googleEventId as string | undefined;
-      const shouldSync = window.confirm(
-        linkedId
-          ? 'This task is linked to Google Calendar. Update the external event too?'
-          : 'Create a linked Google Calendar event for this scheduled task?'
-      );
-
-      if (shouldSync) {
-        const start = startAt;
-        const end = endAt;
-        if (linkedId) {
-          nextEvents = nextEvents.map((evt) =>
-            evt.id === linkedId ? { ...evt, title: task.title, start: start.toISOString(), end: end.toISOString() } : evt
-          );
-        } else {
-          const newEvent: GoogleCalendarEvent = {
-            id: `gcal-${generateId()}`,
-            title: task.title,
-            start: start.toISOString(),
-            end: end.toISOString(),
-            linkedTaskId: task.id,
-          };
-          nextEvents.push(newEvent);
-          nextMetadata = { ...nextMetadata, googleEventId: newEvent.id };
-        }
-      }
-    }
 
     await Promise.resolve(
       onUpdateTask({
@@ -322,15 +521,15 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
         scheduled_date: dayKey,
         scheduled_time: newTime,
         due_time: newTime,
-        planningMetadata: nextMetadata,
       })
     );
-    setGoogleEvents(nextEvents);
   };
 
   const openTaskEditor = (task: Task) => {
     const range = getTaskTimeRange(task);
-    const date = range ? formatDateKey(range.start) : normalizeDateKey(task.scheduled_date) || normalizeDateKey(task.deadline) || formatDateKey(new Date());
+    const date = range
+      ? formatDateKey(range.start)
+      : normalizeDateKey(task.scheduled_date) || normalizeDateKey(task.deadline) || formatDateKey(new Date());
     const rawTime = range
       ? `${String(range.start.getHours()).padStart(2, '0')}:${String(range.start.getMinutes()).padStart(2, '0')}`
       : (task.scheduled_time || task.due_time || '09:00:00').slice(0, 5);
@@ -346,7 +545,6 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
       date,
       time: rawTime,
       duration,
-      linkGoogleEvent: !!task.planningMetadata?.googleEventId,
     });
   };
 
@@ -363,41 +561,6 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
       const normalizedTime = editDraft.time.length === 5 ? `${editDraft.time}:00` : editDraft.time;
       const nextStartAt = parseLocalDateTime(editDraft.date, normalizedTime);
       const nextEndAt = new Date(nextStartAt.getTime() + Math.max(editDraft.duration, 30) * 60 * 1000);
-      let nextMetadata = { ...(editingTask.planningMetadata || {}) };
-      let nextEvents = [...googleEvents];
-      const linkedId = (editingTask.planningMetadata?.googleEventId as string | undefined) || '';
-      const shouldCreateLink = !linkedId && editDraft.linkGoogleEvent;
-
-      if (googleConnected && syncEnabled && (linkedId || shouldCreateLink)) {
-        const confirmed = window.confirm(
-          linkedId
-            ? 'This task is linked to Google Calendar. Apply these edits to the external event too?'
-            : 'Create a linked Google Calendar event for this task when saving?'
-        );
-
-        if (confirmed) {
-          const start = nextStartAt;
-          const end = nextEndAt;
-          if (linkedId) {
-            nextEvents = nextEvents.map((evt) =>
-              evt.id === linkedId
-                ? { ...evt, title: editDraft.title, start: start.toISOString(), end: end.toISOString() }
-                : evt
-            );
-          } else {
-            const newEvent: GoogleCalendarEvent = {
-              id: `gcal-${generateId()}`,
-              title: editDraft.title,
-              start: start.toISOString(),
-              end: end.toISOString(),
-              linkedTaskId: editingTask.id,
-            };
-            nextEvents.push(newEvent);
-            nextMetadata = { ...nextMetadata, googleEventId: newEvent.id };
-          }
-        }
-      }
-
       const nextProjectName = editDraft.project_id ? projectById.get(editDraft.project_id)?.name : undefined;
       await Promise.resolve(
         onUpdateTask({
@@ -414,10 +577,8 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
           due_time: normalizedTime,
           scheduled_time: normalizedTime,
           estimatedMinutes: Math.max(editDraft.duration, 30),
-          planningMetadata: nextMetadata,
         })
       );
-      setGoogleEvents(nextEvents);
       closeTaskEditor();
     } finally {
       setSavingEdit(false);
@@ -428,8 +589,10 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
     viewMode === 'month'
       ? format(anchorDate, 'MMMM yyyy')
       : viewMode === 'day'
-      ? format(anchorDate, 'EEEE, MMM d, yyyy')
-      : `${format(days[0], 'MMM d')} - ${format(days[days.length - 1], 'MMM d, yyyy')}`;
+        ? format(anchorDate, 'EEEE, MMM d, yyyy')
+        : `${format(days[0], 'MMM d')} - ${format(days[days.length - 1], 'MMM d, yyyy')}`;
+
+  const showSidePanel = unscheduledTasks.length > 0 || connection.status !== 'disconnected' || !!calendarWarning;
 
   return (
     <section className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
@@ -465,56 +628,68 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
           </div>
 
           <div className="flex items-center gap-2">
-            {!googleConnected ? (
-              <button
-                onClick={connectGoogleCalendar}
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-sm"
-              >
-                <CalendarSync size={14} />
-                Connect Google Calendar
-              </button>
-            ) : (
+            {connection.status === 'connected' ? (
               <>
-                <button
-                  onClick={() => setSyncEnabled((prev) => !prev)}
-                  className={clsx(
-                    'inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm',
-                    syncEnabled
-                      ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
-                      : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'
-                  )}
-                >
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-sm">
                   <CalendarCheck size={14} />
-                  {syncEnabled ? 'Sync enabled' : 'Sync paused'}
-                </button>
+                  Google Calendar connected
+                </div>
                 <button
-                  onClick={() => setGoogleConnected(false)}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm"
+                  onClick={() => void disconnectCalendar()}
+                  disabled={connectionActionLoading}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm disabled:opacity-60"
                 >
                   <Unlink2 size={14} />
                   Disconnect
                 </button>
               </>
+            ) : (
+              <button
+                onClick={() => void connectGoogleCalendar()}
+                disabled={connectionActionLoading}
+                className={clsx(
+                  'inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm disabled:opacity-60',
+                  connection.status === 'error'
+                    ? 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
+                    : 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                )}
+              >
+                <CalendarSync size={14} />
+                {connection.status === 'error' ? 'Reconnect Google Calendar' : 'Connect Google Calendar'}
+              </button>
             )}
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{headerLabel}</h2>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{headerLabel}</h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Calendar data is read-only and advisory. Tasks stay unchanged unless you explicitly edit them.
+            </p>
+          </div>
           <div className="flex items-center gap-2 text-xs">
-            <span className="px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">Task only</span>
-            <span className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">Calendar only</span>
-            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
-              <Link2 size={12} />
-              Linked
+            <span className="px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">Task</span>
+            <span className="px-2 py-1 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">Calendar</span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+              <ShieldCheck size={12} />
+              Write disabled
             </span>
           </div>
         </div>
+
+        {(connection.lastError || calendarWarning) && (
+          <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+            {(connection.lastError || calendarWarning)}
+          </div>
+        )}
       </div>
 
-      <div className={clsx("p-4 grid grid-cols-1 gap-4", unscheduledTasks.length > 0 && "xl:grid-cols-[1fr_280px]")}>
+      <div className={clsx('p-4 grid grid-cols-1 gap-4', showSidePanel && 'xl:grid-cols-[1fr_320px]')}>
         <div className="overflow-auto rounded-xl border border-gray-200 dark:border-gray-700">
-          {viewMode === 'month' ? (
+          {isStatusLoading || isEventsLoading ? (
+            <div className="p-6 text-sm text-gray-500 dark:text-gray-400">Loading calendar view...</div>
+          ) : viewMode === 'month' ? (
             <div className="min-w-[760px]">
               <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/50">
                 {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((label) => (
@@ -558,13 +733,12 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                             }}
                             className={clsx(
                               'w-full text-left rounded-md px-1.5 py-1 text-[11px] truncate text-white',
-                              entry.source === 'task' ? 'cursor-pointer' : 'cursor-default',
-                              entry.syncState === 'linked' && 'ring-1 ring-emerald-200 dark:ring-emerald-700'
+                              entry.source === 'task' ? 'cursor-pointer' : 'cursor-default'
                             )}
                             style={{ backgroundColor: entry.color }}
-                            title={`${entry.title} (${format(entry.start, 'HH:mm')})`}
+                            title={entry.isAllDay ? `${entry.title} (all day)` : `${entry.title} (${format(entry.start, 'HH:mm')})`}
                           >
-                            <span className="opacity-90 mr-1">{format(entry.start, 'HH:mm')}</span>
+                            <span className="opacity-90 mr-1">{entry.isAllDay ? 'All day' : format(entry.start, 'HH:mm')}</span>
                             {entry.title}
                           </button>
                         ))}
@@ -617,9 +791,11 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                       ))}
 
                       {entries.map((entry) => {
-                        const startHour = getHours(entry.start);
-                        const startMin = getMinutes(entry.start);
-                        const durationMin = Math.max((entry.end.getTime() - entry.start.getTime()) / (60 * 1000), 30);
+                        const startHour = entry.isAllDay ? START_HOUR : getHours(entry.start);
+                        const startMin = entry.isAllDay ? 0 : getMinutes(entry.start);
+                        const durationMin = entry.isAllDay
+                          ? (END_HOUR - START_HOUR) * 60
+                          : Math.max((entry.end.getTime() - entry.start.getTime()) / (60 * 1000), 30);
                         const top = ((startHour - START_HOUR) + startMin / 60) * ROW_HEIGHT;
                         const height = Math.max((durationMin / 60) * ROW_HEIGHT, 24);
                         return (
@@ -634,16 +810,15 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                             }}
                             className={clsx(
                               'absolute left-1 right-1 rounded-lg px-2 py-1 text-xs text-white shadow-sm',
-                              entry.source === 'task' ? 'cursor-pointer' : 'cursor-default',
-                              entry.syncState === 'linked' && 'ring-1 ring-emerald-200 dark:ring-emerald-700'
+                              entry.source === 'task' ? 'cursor-pointer' : 'cursor-default'
                             )}
                             style={{ top, height, backgroundColor: entry.color }}
-                            title={`${entry.title} (${format(entry.start, 'HH:mm')} - ${format(entry.end, 'HH:mm')})`}
+                            title={entry.isAllDay ? `${entry.title} (all day)` : `${entry.title} (${format(entry.start, 'HH:mm')} - ${format(entry.end, 'HH:mm')})`}
                           >
                             <div className="font-medium truncate">{entry.title}</div>
-                            <div className="opacity-90">{format(entry.start, 'HH:mm')} - {format(entry.end, 'HH:mm')}</div>
+                            <div className="opacity-90">{entry.isAllDay ? 'All day' : `${format(entry.start, 'HH:mm')} - ${format(entry.end, 'HH:mm')}`}</div>
                             <div className="opacity-90 uppercase tracking-wide">
-                              {entry.syncState === 'task_only' ? 'Task only' : entry.syncState === 'linked' ? 'Linked' : 'Calendar only'}
+                              {entry.syncState === 'task_only' ? 'Task' : 'Calendar'}
                             </div>
                           </div>
                         );
@@ -656,39 +831,88 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
           )}
         </div>
 
-        {unscheduledTasks.length > 0 && (
-        <aside className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-gray-50/60 dark:bg-gray-800/40">
-          <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
-            Unscheduled tasks
-          </h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-            Drag tasks into a time slot to schedule work.
-          </p>
-          <div className="space-y-2 max-h-[540px] overflow-auto pr-1">
-            {unscheduledTasks.map((task) => {
-              const linked = !!task.planningMetadata?.googleEventId;
-              return (
-                <div
-                  key={task.id}
-                  draggable
-                  onDragStart={(e) => e.dataTransfer.setData('text/plain', task.id)}
-                  className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 cursor-grab active:cursor-grabbing"
-                >
-                  <div className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{task.title}</div>
-                  <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
-                    <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800">P{task.priority}</span>
-                    <span className={clsx('px-1.5 py-0.5 rounded', linked ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' : 'bg-gray-100 dark:bg-gray-800')}>
-                      {linked ? 'Linked' : 'Task only'}
-                    </span>
-                  </div>
+        {showSidePanel && (
+          <aside className="space-y-4">
+            {(connection.status !== 'disconnected' || calendarWarning) && (
+              <section className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-gray-50/60 dark:bg-gray-800/40">
+                <div className="flex items-center gap-2 mb-2">
+                  <ShieldCheck size={14} className="text-gray-500 dark:text-gray-400" />
+                  <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Calendar Guardrails
+                  </h3>
                 </div>
-              );
-            })}
-            {unscheduledTasks.length === 0 && (
-              <div className="text-xs text-gray-500 dark:text-gray-400 italic">No unscheduled tasks.</div>
+                <div className="space-y-2 text-xs text-gray-600 dark:text-gray-300">
+                  <p>Read-only access only. The app and AI use calendar data for availability hints, not as an authority to change tasks or events.</p>
+                  <p>No events are created, edited, moved, or deleted from here. Disconnect removes stored access and keeps task planning functional.</p>
+                  {connection.accountEmail && <p>Connected account: {connection.accountEmail}</p>}
+                  {connection.calendarTimezone && <p>Calendar timezone: {connection.calendarTimezone}</p>}
+                </div>
+              </section>
             )}
-          </div>
-        </aside>
+
+            {availability && (
+              <section className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-white dark:bg-gray-900">
+                <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                  Availability
+                </h3>
+                <div className="space-y-2">
+                  {availability.days.map((day) => (
+                    <div key={day.date} className="rounded-lg border border-gray-100 dark:border-gray-800 p-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-gray-800 dark:text-gray-100">{day.date}</span>
+                        <span
+                          className={clsx(
+                            'text-[11px] px-2 py-0.5 rounded-full',
+                            day.status === 'free'
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                              : day.status === 'limited'
+                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                                : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                          )}
+                        >
+                          {day.status}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        {day.isAllDayBusy
+                          ? 'Busy all day'
+                          : day.freeBlocks.length > 0
+                            ? `Free: ${day.freeBlocks.slice(0, 2).map((block) => `${formatMinuteBlock(block.startMinute)}-${formatMinuteBlock(block.endMinute)}`).join(', ')}`
+                            : 'No free work blocks'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {unscheduledTasks.length > 0 && (
+              <section className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 bg-gray-50/60 dark:bg-gray-800/40">
+                <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                  Unscheduled Tasks
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                  Drag tasks into a time slot to schedule work. Calendar events stay read-only.
+                </p>
+                <div className="space-y-2 max-h-[420px] overflow-auto pr-1">
+                  {unscheduledTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      draggable
+                      onDragStart={(e) => e.dataTransfer.setData('text/plain', task.id)}
+                      className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-2 cursor-grab active:cursor-grabbing"
+                    >
+                      <div className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{task.title}</div>
+                      <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400">
+                        <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800">P{task.priority}</span>
+                        <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800">Task only</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+          </aside>
         )}
       </div>
 
@@ -803,17 +1027,9 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                 </div>
               </div>
 
-              {googleConnected && syncEnabled && (
-                <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
-                  <input
-                    type="checkbox"
-                    checked={editDraft.linkGoogleEvent}
-                    onChange={(e) => setEditDraft((prev) => (prev ? { ...prev, linkGoogleEvent: e.target.checked } : prev))}
-                    className="rounded border-gray-300"
-                  />
-                  {editingTask.planningMetadata?.googleEventId ? 'Keep linked to Google Calendar' : 'Create Google Calendar event on save'}
-                </label>
-              )}
+              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-800/50 px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
+                Editing this task changes only the app task. External calendar events remain read-only.
+              </div>
             </div>
 
             <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-end gap-2">

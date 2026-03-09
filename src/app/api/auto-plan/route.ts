@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { getUserFromAccessToken } from '@/lib/server/auth';
+import { buildPlanningCalendarContext } from '@/lib/calendar/context';
 
 export async function POST(req: Request) {
   const startTime = Date.now();
@@ -12,8 +14,8 @@ export async function POST(req: Request) {
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!supabaseUrl || !supabaseAnon) {
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !anonKey) {
       return NextResponse.json({ error: 'Supabase is not configured' }, { status: 503 });
     }
 
@@ -24,7 +26,7 @@ export async function POST(req: Request) {
       const subRes = await fetch(`${supabaseUrl}/rest/v1/user_subscriptions?select=tier,status&limit=1`, {
         method: 'GET',
         headers: {
-          apikey: supabaseAnon,
+          apikey: anonKey,
           Authorization: `Bearer ${userToken}`,
         },
       });
@@ -50,6 +52,14 @@ export async function POST(req: Request) {
     const availableProjects = (projects && Array.isArray(projects) && projects.length > 0)
       ? projects.join(', ')
       : 'Work, Life';
+    const user = await getUserFromAccessToken(userToken);
+    const plannerTimeZone = preferences?.timezone || 'UTC';
+    const calendarContext = await buildPlanningCalendarContext({
+      accessToken: userToken,
+      userId: user.id,
+      timeZone: plannerTimeZone,
+      from: startDate || new Date().toISOString().slice(0, 10),
+    });
 
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
@@ -72,6 +82,8 @@ export async function POST(req: Request) {
         - Work days: ${preferences?.workDays || 'Mon-Fri'}
         - Constraints: "${preferences?.personalConstraints || 'None provided'}"
         - Additional notes: "${preferences?.planningNotes || 'None provided'}"
+      - Calendar Availability:
+        ${calendarContext.summary}
 
       ROLE: Expert Project Manager & Scheduler.
       GOAL: Create a weekly plan (Mon-Sun) from the notes.
@@ -94,6 +106,10 @@ export async function POST(req: Request) {
          - Place cognitively demanding tasks near the user's peak energy window.
          - Honor constraints and work days whenever possible.
          - If task is large, break it into logical sequential steps across days.
+      9. Calendar Safety:
+         - Calendar data is advisory context only.
+         - Do not assume you can move, create, edit, or delete calendar events.
+         - If a day looks busy, prefer free windows but still explain tradeoffs instead of treating calendar data as absolute authority.
 
       OUTPUT JSON format only (no markdown):
       {
@@ -151,12 +167,13 @@ export async function POST(req: Request) {
 
       return NextResponse.json(parsed);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       clearTimeout(timeoutId);
       console.error('AutoPlan Error:', error);
-      return NextResponse.json({ error: error.message || 'Failed to generate plan' }, { status: 500 });
+      const message = error instanceof Error ? error.message : 'Failed to generate plan';
+      return NextResponse.json({ error: message }, { status: 500 });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('AutoPlan Internal Error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

@@ -15,7 +15,7 @@ Run:
 
 - `sql/user_subscriptions_schema.sql`
 
-This creates `public.user_subscriptions` and an RLS policy for users to read their own status.
+This creates `public.user_subscriptions` and RLS policies for users to read and upsert their own status.
 
 ## 2) Environment variables
 
@@ -24,7 +24,6 @@ Required:
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-SUPABASE_SERVICE_ROLE_KEY=...
 
 PAYPAL_CLIENT_ID=...
 PAYPAL_SECRET=...
