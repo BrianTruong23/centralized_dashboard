@@ -73,7 +73,7 @@ const START_HOUR = 7;
 const END_HOUR = 21;
 const ROW_HEIGHT = 64;
 const MONTH_EVENT_PREVIEW_LIMIT = 3;
-const GOOGLE_EVENT_COLORS = ['#d97706', '#2563eb', '#0891b2', '#16a34a', '#9333ea', '#dc2626'];
+const GOOGLE_EVENT_COLORS = ['#c08457', '#7c8ea3', '#8f9b7a'];
 
 function parseLocalDateTime(dateKey: string, time?: string): Date {
   const [year, month, day] = dateKey.split('-').map(Number);
@@ -404,7 +404,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
     const entries: TimelineEntry[] = [];
 
     calendarEvents.forEach((event) => {
-      const eventColor = getStableColor(event.id, GOOGLE_EVENT_COLORS);
+      const eventColor = getStableColor(`${event.source.summary}:${event.title}`.toLowerCase(), GOOGLE_EVENT_COLORS);
       if (event.isAllDay && event.startDate && event.endDateExclusive) {
         let current = event.startDate;
         while (current < event.endDateExclusive) {
@@ -885,6 +885,10 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                           <button
                             key={entry.id}
                             type="button"
+                            draggable={entry.source === 'task' && !!entry.task}
+                            onDragStart={(event) => {
+                              if (entry.task) event.dataTransfer.setData('text/plain', entry.task.id);
+                            }}
                             onClick={() => {
                               if (entry.source === 'task' && entry.task) {
                                 openTaskEditor(entry.task);
