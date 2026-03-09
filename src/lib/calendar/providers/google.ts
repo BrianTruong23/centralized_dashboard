@@ -169,9 +169,11 @@ export async function fetchGoogleEvents(
   calendarId: string,
   window: CalendarFetchWindow
 ): Promise<GoogleCalendarEvent[]> {
+  const timeMin = `${window.from}T00:00:00Z`;
+  const timeMax = `${window.to}T23:59:59Z`;
   const params = new URLSearchParams({
-    timeMin: `${window.from}T00:00:00`,
-    timeMax: `${window.to}T23:59:59`,
+    timeMin,
+    timeMax,
     singleEvents: 'true',
     showDeleted: 'true',
     orderBy: 'startTime',
