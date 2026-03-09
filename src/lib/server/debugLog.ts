@@ -10,6 +10,10 @@ export async function writeDebugLog(fileName: string, event: string, details?: R
     details: details ?? null,
   });
 
-  await mkdir(LOG_DIR, { recursive: true });
-  await appendFile(path.join(LOG_DIR, fileName), `${line}\n`, 'utf8');
+  try {
+    await mkdir(LOG_DIR, { recursive: true });
+    await appendFile(path.join(LOG_DIR, fileName), `${line}\n`, 'utf8');
+  } catch {
+    // Debug logging must never break production request handling.
+  }
 }
