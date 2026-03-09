@@ -1141,6 +1141,8 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                           : `calc(${baseInset}px + (${usableWidth} + ${horizontalGap}px) * ${laneIndex})`;
                         const isCompact = laneCount >= 3;
                         const isMedium = laneCount === 2;
+                        const isShort = height < 82;
+                        const useDenseBody = isCompact || isShort;
                         const isSelected = selectedDetailEntryId === entry.id;
                         return (
                           <div
@@ -1186,13 +1188,9 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                             }
                             title={entry.isAllDay ? `${entry.title} (all day)` : `${entry.title} (${format(entry.start, 'HH:mm')} - ${format(entry.end, 'HH:mm')})`}
                           >
-                            <div className={clsx('flex items-start gap-2', isCompact && 'gap-1.5')}>
-                              <span
-                                className={clsx('shrink-0 rounded-full', isCompact ? 'mt-1 h-2 w-2' : 'mt-1 h-2.5 w-2.5')}
-                                style={{ backgroundColor: entry.source === 'task' ? entry.color : entry.color }}
-                              />
-                              <div className="min-w-0 flex-1">
-                                {!isCompact && (
+                            <div className={clsx('h-full w-full min-w-0', useDenseBody ? 'px-2 py-2' : 'px-3 py-2.5')}>
+                              <div className="min-w-0">
+                                {!useDenseBody && (
                                   <div className="mb-1 flex items-center gap-1.5">
                                     <span
                                       className={clsx(
@@ -1212,16 +1210,16 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                                     )}
                                   </div>
                                 )}
-                                <div className={clsx('truncate font-semibold leading-tight', isCompact ? 'text-[11px]' : 'text-xs')}>
+                                <div className={clsx('truncate font-semibold leading-tight', useDenseBody ? 'text-[11px]' : 'text-xs')}>
                                   {entry.title}
                                 </div>
                                 <div
                                   className={clsx(
                                     'truncate leading-tight text-slate-500 dark:text-slate-400',
-                                    isCompact ? 'mt-1 text-[10px]' : 'mt-1 text-[11px]'
+                                    useDenseBody ? 'mt-0.5 text-[10px]' : 'mt-1 text-[11px]'
                                   )}
                                 >
-                                  {isCompact
+                                  {useDenseBody
                                     ? `${entry.isAllDay ? 'All day' : format(entry.start, 'HH:mm')}${entry.source === 'task' ? '' : ' • Google'}`
                                     : isMedium
                                       ? `${formatEntryTime(entry)} • ${entry.source === 'task' ? 'Task' : 'Google'}`
