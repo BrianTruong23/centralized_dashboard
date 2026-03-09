@@ -38,6 +38,50 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
     return value.length === 5 ? `${value}:00` : value;
   };
 
+  const toDateInputValue = (value?: string): string => {
+    if (!value) return '';
+    const direct = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (direct) return `${direct[1]}-${direct[2]}-${direct[3]}`;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+  };
+
+  const hydrateEditForm = (source: Task): Task => {
+    const plannedDate =
+      toDateInputValue(
+        source.scheduled_on ||
+        source.scheduled_date ||
+        source.scheduled_start ||
+        source.start_time
+      ) || undefined;
+
+    const deadlineDate = toDateInputValue(source.deadline) || undefined;
+    const startTime =
+      toTimeInputValue(
+        source.scheduled_time ||
+        source.scheduled_start ||
+        source.start_time ||
+        source.due_time
+      ) || undefined;
+    const endTime =
+      toTimeInputValue(
+        source.scheduled_end ||
+        source.end_time
+      ) || undefined;
+
+    return {
+      ...source,
+      deadline: deadlineDate,
+      scheduled_on: plannedDate,
+      scheduled_date: plannedDate,
+      scheduled_time: startTime,
+      due_time: source.due_time || startTime,
+      scheduled_end: endTime,
+      end_time: endTime,
+    };
+  };
+
   const buildTimestamp = (dateKey?: string, timeValue?: string): string | undefined => {
     const normalizedTime = normalizeTimeValue(timeValue);
     if (!dateKey || !normalizedTime) return undefined;
@@ -129,7 +173,13 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
   const handleEditSave = () => {
     const normalizedScheduledTime = normalizeTimeValue(editForm.scheduled_time || editForm.due_time);
     const normalizedEndTime = normalizeTimeValue(editForm.end_time);
-    const scheduleDate = editForm.scheduled_on || editForm.scheduled_date || editForm.deadline;
+    const scheduleDate = toDateInputValue(
+      editForm.scheduled_on ||
+      editForm.scheduled_date ||
+      editForm.scheduled_start ||
+      editForm.start_time ||
+      editForm.deadline
+    );
     const startTimestamp = buildTimestamp(scheduleDate, normalizedScheduledTime);
     const endTimestamp = buildTimestamp(scheduleDate, normalizedEndTime);
     const derivedEstimatedMinutes =
@@ -156,7 +206,7 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
   };
 
   const handleEditCancel = () => {
-    setEditForm(task);
+    setEditForm(hydrateEditForm(task));
     setIsEditing(false);
   };
 
@@ -242,7 +292,12 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
               <label className="text-xs text-gray-500 block mb-1">Planned Day</label>
               <input
                 type="date"
-                value={editForm.scheduled_on || editForm.scheduled_date || ''}
+                value={toDateInputValue(
+                  editForm.scheduled_on ||
+                  editForm.scheduled_date ||
+                  editForm.scheduled_start ||
+                  editForm.start_time
+                )}
                 onChange={(e) => setEditForm({ ...editForm, scheduled_on: e.target.value || undefined, scheduled_date: e.target.value || undefined })}
                 className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none text-gray-500"
               />
@@ -330,7 +385,7 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
       <button
         type="button"
         onClick={() => {
-          setEditForm(task);
+          setEditForm(hydrateEditForm(task));
           setIsEditing(true);
         }}
         className="flex-1 min-w-0 pt-0.5 text-left"
