@@ -48,6 +48,7 @@ import {
   awaitAuthBootstrap,
   getAccessToken,
   getAuthBootstrapSnapshot,
+  SESSION_KEY,
   subscribeAuthBootstrap,
   supabase,
   type AuthBootstrapSnapshot,
