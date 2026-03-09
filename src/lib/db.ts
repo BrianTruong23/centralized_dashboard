@@ -10,7 +10,9 @@ import { Task } from '@/types/task';
 
 function requireToken(): string {
   const token = getAccessToken();
-  if (!token) throw new Error('Not authenticated');
+  if (!token) {
+    throw new Error('Your Minismo session is still restoring after reload. Wait a moment and try again.');
+  }
   return token;
 }
 

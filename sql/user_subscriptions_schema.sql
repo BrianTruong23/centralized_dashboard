@@ -33,3 +33,16 @@ create policy "user can read own subscription"
   on public.user_subscriptions
   for select
   using (auth.uid() = user_id);
+
+drop policy if exists "user can insert own subscription" on public.user_subscriptions;
+create policy "user can insert own subscription"
+  on public.user_subscriptions
+  for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists "user can update own subscription" on public.user_subscriptions;
+create policy "user can update own subscription"
+  on public.user_subscriptions
+  for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

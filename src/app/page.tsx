@@ -43,7 +43,7 @@ import { ActivityLogModal } from '@/components/ActivityLogModal';
 import { SettingsModal } from '@/components/SettingsModal';
 import { TaskStatus, TaskPriority, TaskCategory } from '@/types/task';
 import clsx from 'clsx';
-import { supabase, authReady, SESSION_KEY } from '@/lib/supabase';
+import { supabase, authReady, SESSION_KEY, ensureSupabaseSession, getAccessToken } from '@/lib/supabase';
 import Link from 'next/link';
 import { formatDateKey } from '@/lib/dateKey';
 import { usePremium } from '@/hooks/usePremium';
@@ -234,6 +234,8 @@ export default function Home() {
     if (stored === 'kanban' || stored === 'calendar' || stored === 'inbox') return stored;
     return 'inbox';
   });
+  const [calendarSetupMessage, setCalendarSetupMessage] = useState<string | null>(null);
+  const [isFinalizingCalendarConnect, setIsFinalizingCalendarConnect] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [notesRefreshToken, setNotesRefreshToken] = useState(0);
 
@@ -308,6 +310,84 @@ export default function Home() {
   }, [planningPreferences]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const url = new URL(window.location.href);
+    const status = url.searchParams.get('calendar_status');
+    const message = url.searchParams.get('calendar_message');
+    const requestedView = url.searchParams.get('view');
+    const calendarCode = url.searchParams.get('calendar_code');
+
+    const moveToInbox = () => {
+      setInboxDisplayView('inbox');
+      setCurrentView('inbox');
+      try {
+        localStorage.setItem('inbox_display_view', 'inbox');
+      } catch {
+        // ignore storage errors
+      }
+    };
+
+    const clearCalendarParams = () => {
+      url.searchParams.delete('calendar_status');
+      url.searchParams.delete('calendar_message');
+      url.searchParams.delete('calendar_code');
+      url.searchParams.delete('view');
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    };
+
+    const finalizeCalendarConnect = async () => {
+      moveToInbox();
+
+      if (status === 'error') {
+        setCalendarSetupMessage(message || 'Google Calendar connection failed.');
+        clearCalendarParams();
+        return;
+      }
+
+      if (!calendarCode) {
+        if (requestedView === 'inbox') {
+          clearCalendarParams();
+        }
+        return;
+      }
+
+      setIsFinalizingCalendarConnect(true);
+      setCalendarSetupMessage('Finishing Google Calendar connection...');
+
+      try {
+        if (!supabase) throw new Error('Supabase not configured');
+        await authReady;
+        const accessToken = await ensureSupabaseSession();
+        if (!accessToken) {
+          throw new Error('Your Minismo session was not restored after returning from Google. Sign in again, then reconnect Google Calendar.');
+        }
+
+        const res = await fetch('/api/calendar/google/finalize', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ code: calendarCode }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || 'Failed to finish Google Calendar connection.');
+
+        setCalendarSetupMessage('Google Calendar connected. Open Calendar mode from Inbox to view your events.');
+      } catch (error: unknown) {
+        setCalendarSetupMessage(error instanceof Error ? error.message : 'Google Calendar connection failed.');
+      } finally {
+        setIsFinalizingCalendarConnect(false);
+        clearCalendarParams();
+      }
+    };
+
+    if (!status && !message && !requestedView && !calendarCode) return;
+    void finalizeCalendarConnect();
+  }, []);
+
+  useEffect(() => {
     if (currentView === 'inbox' || currentView === 'kanban' || currentView === 'calendar') {
       setInboxDisplayView(currentView);
       try {
@@ -369,13 +449,16 @@ export default function Home() {
 
     // Listen for auth changes
     const { data: authListener } = supabase?.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_OUT') {
+            setUser(null);
+            localStorage.removeItem(SESSION_KEY);
+            return;
+        }
+
         if (session?.user) {
             setUser(session.user);
             // Persist session to local storage for next load
             localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-        } else {
-            setUser(null);
-            localStorage.removeItem(SESSION_KEY);
         }
     }) || { data: { subscription: { unsubscribe: () => {} } } };
 
@@ -390,6 +473,10 @@ export default function Home() {
       if (!user || onboardingChecked) return;
 
       try {
+        const token = await ensureSupabaseSession();
+        if (!token && !getAccessToken()) {
+          return;
+        }
         const status = await db.getOnboardingStatus(user.id);
         setOnboardingChecked(true);
 
@@ -400,6 +487,9 @@ export default function Home() {
       } catch (error: any) {
         console.error('Error checking onboarding status:', error);
         if (error.details) console.error('Error details:', error.details);
+        if (error instanceof Error && error.message.includes('session is still restoring')) {
+          return;
+        }
         setOnboardingChecked(true);
       }
     };
@@ -960,6 +1050,19 @@ export default function Home() {
              )}
                 </div>
         </header>
+
+        {calendarSetupMessage && (
+          <div
+            className={clsx(
+              "mx-auto mb-4 max-w-4xl rounded-xl border px-4 py-3 text-sm",
+              isFinalizingCalendarConnect
+                ? "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200"
+                : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200"
+            )}
+          >
+            {calendarSetupMessage}
+          </div>
+        )}
 
         <div className={clsx("mx-auto", currentView === 'calendar' ? "max-w-[1400px]" : "max-w-4xl")}>
             {currentView === 'calendar' ? (

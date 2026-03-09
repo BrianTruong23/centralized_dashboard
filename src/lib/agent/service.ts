@@ -5,6 +5,7 @@ import { executeApprovedActions } from './executor';
 import { createSupabaseAgentTools } from './supabaseTools';
 import { AgentPreference, AgentProposal, AgentRunRecord, ProposedAction } from './types';
 import { analyzeInboxCleanup, CleanupReview } from './inboxCleanup';
+import { buildPlanningCalendarContext } from '@/lib/calendar/context';
 
 function env(name: string): string {
   const value = process.env[name];
@@ -571,13 +572,20 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
   const inboxTasks = cleanTasks.filter((task) => task.inbox === true || !task.project_id);
   const intent = inferIntentFromRequest(requestText);
   const tasksById = new Map(cleanTasks.map((task) => [task.id, task.title]));
+  const today = new Date().toISOString().slice(0, 10);
+  const calendarContext = await buildPlanningCalendarContext({
+    accessToken: userToken,
+    userId,
+    timeZone: preferences.timezone || 'UTC',
+    from: today,
+  });
 
   let rawProposal: AgentProposal;
   if (intent === 'schedule') {
     const proposal = createProposal(requestText, 'schedule', tasks, preferences);
     rawProposal = {
       ...proposal,
-      analysis_summary: formatWeekPlanSummary(proposal, tasksById),
+      analysis_summary: `${formatWeekPlanSummary(proposal, tasksById)}\n\nCalendar context:\n${calendarContext.summary}`,
     };
   } else if (intent === 'declutter' || intent === 'cleanup') {
     const apiKey = process.env.OPENROUTER_API_KEY;
@@ -607,7 +615,6 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
   } else if (intent === 'prioritize') {
     const ranked = rankTasksForPriority(cleanTasks, new Date());
     const top = ranked.slice(0, 5);
-    const today = new Date().toISOString().slice(0, 10);
     const proposedActions: ProposedAction[] = [];
     top.forEach((task, index) => {
       proposedActions.push({
@@ -643,7 +650,7 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
 
     rawProposal = {
       intent,
-      analysis_summary: formatPrioritiesSummary(top),
+      analysis_summary: `${formatPrioritiesSummary(top)}\n\nCalendar context:\n${calendarContext.summary}`,
       questions: top.length === 0 ? ['Add or unarchive tasks so I can suggest your next actions.'] : [],
       proposed_actions: proposedActions,
     };
@@ -652,7 +659,7 @@ export async function proposeAgentRun(userToken: string, requestText: string): P
       ? buildInboxAdvisorProposal(requestText, inboxTasks, cleanTasks)
       : {
           intent,
-          analysis_summary: 'I can help you plan your week, declutter inbox, or suggest the next tasks to work on. Try one of those prompts and I will generate actionable steps.',
+          analysis_summary: `I can help you plan your week, declutter inbox, or suggest the next tasks to work on. Calendar input is advisory only.\n\nCalendar context:\n${calendarContext.summary}`,
           questions: [],
           proposed_actions: [],
         };
