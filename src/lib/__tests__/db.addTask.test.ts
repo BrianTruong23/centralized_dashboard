@@ -73,7 +73,7 @@ describe('db.addTask', () => {
 
   test('throws when no token cached', async () => {
     mockToken = null;
-    await expect(db.addTask(task)).rejects.toThrow('Not authenticated');
+    await expect(db.addTask(task)).rejects.toThrow('session is still restoring');
     expect(mockFetch).not.toHaveBeenCalled();
   });
 

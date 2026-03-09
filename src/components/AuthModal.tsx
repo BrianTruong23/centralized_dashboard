@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase, resolveAuthReady } from '@/lib/supabase';
+import { useState } from 'react';
+import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 
@@ -36,11 +36,6 @@ export function AuthModal({ isOpen, onAuthSuccess }: AuthModalProps) {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Ensure authReady is resolved so hooks (useTasks/useProjects) don't hang
-  useEffect(() => {
-    resolveAuthReady();
-  }, []);
-
   if (!isOpen) return null;
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -74,7 +69,6 @@ export function AuthModal({ isOpen, onAuthSuccess }: AuthModalProps) {
         if (error) throw error;
         if (data.session) {
           localStorage.setItem('app_auth_session', JSON.stringify(data.session));
-          resolveAuthReady();
           onAuthSuccess(data.session.user);
         }
       }

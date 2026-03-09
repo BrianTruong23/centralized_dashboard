@@ -9,12 +9,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!supabaseUrl || !supabaseAnon) {
-      return NextResponse.json({ error: 'Supabase is not configured' }, { status: 503 });
-    }
-
     const { tasks } = await req.json();
     if (!tasks || !Array.isArray(tasks)) {
       return NextResponse.json({ error: 'Tasks array is required' }, { status: 400 });

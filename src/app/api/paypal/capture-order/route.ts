@@ -24,13 +24,13 @@ async function getPaypalAccessToken(baseUrl: string, clientId: string, secret: s
 
 async function getUserFromAccessToken(accessToken: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!supabaseUrl || !supabaseAnon) {
+  if (!supabaseUrl || !anonKey) {
     throw new Error('Supabase auth is not configured');
   }
 
-  const authClient = createClient(supabaseUrl, supabaseAnon, {
+  const authClient = createClient(supabaseUrl, anonKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
@@ -39,19 +39,19 @@ async function getUserFromAccessToken(accessToken: string) {
   return data.user;
 }
 
-async function upsertProSubscription(userId: string, paypalOrderId: string) {
+async function upsertProSubscription(userToken: string, userId: string, paypalOrderId: string) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('Supabase service role is not configured');
+  if (!supabaseUrl || !anonKey) {
+    throw new Error('Supabase anon key is not configured');
   }
 
   const res = await fetch(`${supabaseUrl}/rest/v1/user_subscriptions?on_conflict=user_id`, {
     method: 'POST',
     headers: {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: anonKey,
+      Authorization: `Bearer ${userToken}`,
       'Content-Type': 'application/json',
       Prefer: 'resolution=merge-duplicates,return=minimal',
     },
@@ -120,12 +120,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Payment was not completed', details: captureJson }, { status: 400 });
     }
 
-    await upsertProSubscription(user.id, orderId);
+    await upsertProSubscription(token, user.id, orderId);
 
     return NextResponse.json({ ok: true, isPro: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('[paypal/capture-order] error:', err);
-    const message = err?.message || 'Failed to complete upgrade';
+    const message = err instanceof Error ? err.message : 'Failed to complete upgrade';
     const status = message === 'Unauthorized' ? 401 : 500;
     return NextResponse.json({ error: message }, { status });
   }

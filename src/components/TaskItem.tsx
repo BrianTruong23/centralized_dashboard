@@ -21,6 +21,104 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
 
   const project = projects.find(p => p.id === task.project_id);
 
+  const toTimeInputValue = (value?: string): string => {
+    if (!value) return '';
+    const looksLikeTimestamp = value.includes('T') || value.endsWith('Z');
+    if (!looksLikeTimestamp) {
+      const timeMatch = value.match(/(\d{2}):(\d{2})/);
+      if (timeMatch) return `${timeMatch[1]}:${timeMatch[2]}`;
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
+  };
+
+  const normalizeTimeValue = (value?: string): string | undefined => {
+    if (!value) return undefined;
+    return value.length === 5 ? `${value}:00` : value;
+  };
+
+  const buildTimestamp = (dateKey?: string, timeValue?: string): string | undefined => {
+    const normalizedTime = normalizeTimeValue(timeValue);
+    if (!dateKey || !normalizedTime) return undefined;
+    const [year, month, day] = dateKey.slice(0, 10).split('-').map(Number);
+    const [hours, minutes, seconds] = normalizedTime.split(':').map(Number);
+    if (!year || !month || !day) return undefined;
+    return new Date(year, month - 1, day, hours || 0, minutes || 0, seconds || 0, 0).toISOString();
+  };
+
+  const formatTimeLabel = (value?: string): string | null => {
+    if (!value) return null;
+    const looksLikeTimestamp = value.includes('T') || value.endsWith('Z');
+    if (!looksLikeTimestamp) {
+      const timeMatch = value.match(/(\d{2}):(\d{2})/);
+      if (timeMatch) {
+        const hours = Number(timeMatch[1]);
+        const minutes = timeMatch[2];
+        const period = hours >= 12 ? 'PM' : 'AM';
+        const twelveHour = hours % 12 || 12;
+        return `${twelveHour}:${minutes} ${period}`;
+      }
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
+
+  const formatTimeRangeFromDate = (value?: string): string | null => {
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
+
+  const getScheduledWindowLabel = (): string | null => {
+    if (!hasPlannedSchedule) return null;
+
+    const explicitStart = formatTimeLabel(task.scheduled_start || task.start_time || task.scheduled_time);
+    const explicitEnd = formatTimeLabel(task.scheduled_end || task.end_time);
+    if (explicitStart && explicitEnd) return `${explicitStart} - ${explicitEnd}`;
+    if (explicitStart && task.estimatedMinutes > 0) {
+      const startSource = task.scheduled_start
+        ? new Date(task.scheduled_start)
+        : task.start_time
+          ? new Date(task.start_time)
+          : (task.scheduled_on || task.scheduled_date)
+            ? new Date(`${(task.scheduled_on || task.scheduled_date)!.slice(0, 10)}T${(task.scheduled_time || '09:00:00').slice(0, 8)}`)
+          : null;
+      if (startSource && !Number.isNaN(startSource.getTime())) {
+        const computedEnd = new Date(startSource.getTime() + task.estimatedMinutes * 60 * 1000);
+        const computedEndLabel = formatTimeRangeFromDate(computedEnd.toISOString());
+        if (computedEndLabel) return `${explicitStart} - ${computedEndLabel}`;
+      }
+      return explicitStart;
+    }
+    return explicitStart;
+  };
+
+  const hasPlannedSchedule = Boolean(
+    task.scheduled_on ||
+    task.scheduled_date ||
+    task.scheduled_start ||
+    task.scheduled_end ||
+    task.start_time ||
+    task.end_time ||
+    task.scheduled_time
+  );
+
+  const scheduledWindowLabel = getScheduledWindowLabel();
+  const deadlineHasExplicitTime = Boolean(task.due_time) || Boolean(task.deadline && /T\d{2}:\d{2}/.test(task.deadline));
+  const deadlineTimeLabel = !hasPlannedSchedule
+    ? (deadlineHasExplicitTime ? formatTimeLabel(task.due_time || task.deadline) : null)
+    : null;
+
   const toggleStatus = () => {
     onUpdate({
       ...task,
@@ -29,7 +127,31 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
   };
 
   const handleEditSave = () => {
-    onUpdate(editForm);
+    const normalizedScheduledTime = normalizeTimeValue(editForm.scheduled_time || editForm.due_time);
+    const normalizedEndTime = normalizeTimeValue(editForm.end_time);
+    const scheduleDate = editForm.scheduled_on || editForm.scheduled_date || editForm.deadline;
+    const startTimestamp = buildTimestamp(scheduleDate, normalizedScheduledTime);
+    const endTimestamp = buildTimestamp(scheduleDate, normalizedEndTime);
+    const derivedEstimatedMinutes =
+      startTimestamp && endTimestamp
+        ? Math.max(
+            Math.round((new Date(endTimestamp).getTime() - new Date(startTimestamp).getTime()) / 60000),
+            0
+          ) || editForm.estimatedMinutes
+        : editForm.estimatedMinutes;
+
+    onUpdate({
+      ...editForm,
+      estimatedMinutes: derivedEstimatedMinutes,
+      scheduled_on: scheduleDate,
+      scheduled_date: scheduleDate,
+      scheduled_time: normalizedScheduledTime,
+      due_time: normalizedScheduledTime,
+      scheduled_start: startTimestamp,
+      scheduled_end: endTimestamp,
+      start_time: startTimestamp,
+      end_time: endTimestamp,
+    });
     setIsEditing(false);
   };
 
@@ -116,6 +238,32 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
               />
             </div>
 
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Planned Day</label>
+              <input
+                type="date"
+                value={editForm.scheduled_on || editForm.scheduled_date || ''}
+                onChange={(e) => setEditForm({ ...editForm, scheduled_on: e.target.value || undefined, scheduled_date: e.target.value || undefined })}
+                className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none text-gray-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">Start Time</label>
+              <input
+                type="time"
+                value={toTimeInputValue(editForm.scheduled_time || editForm.scheduled_start || editForm.start_time)}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    scheduled_time: e.target.value || undefined,
+                    due_time: e.target.value || undefined,
+                  })
+                }
+                className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none text-gray-500"
+              />
+            </div>
+
             {/* Removed old Category dropdown */}
 
             <div>
@@ -142,6 +290,16 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
                 className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none"
                 min={0}
                 step={5}
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-500 block mb-1">End Time</label>
+              <input
+                type="time"
+                value={toTimeInputValue(editForm.scheduled_end || editForm.end_time)}
+                onChange={(e) => setEditForm({ ...editForm, scheduled_end: e.target.value || undefined, end_time: e.target.value || undefined })}
+                className="w-full text-xs bg-gray-50 dark:bg-gray-800 rounded px-2 py-1.5 border-none outline-none text-gray-500"
               />
             </div>
         </div>
@@ -171,7 +329,10 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
 
       <button
         type="button"
-        onClick={() => setIsEditing(true)}
+        onClick={() => {
+          setEditForm(task);
+          setIsEditing(true);
+        }}
         className="flex-1 min-w-0 pt-0.5 text-left"
         title="Edit task"
       >
@@ -221,9 +382,19 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
           {task.deadline && (
              <>
                <span className="w-0.5 h-0.5 rounded-full bg-gray-300" />
-            <span className="flex items-center gap-1 text-red-400">
+               <span className="flex items-center gap-1 text-red-400">
                  {formatDateDisplay(task.deadline)}
-            </span>
+                 {deadlineTimeLabel ? ` ${deadlineTimeLabel}` : ''}
+               </span>
+             </>
+          )}
+
+          {scheduledWindowLabel && (
+             <>
+               <span className="w-0.5 h-0.5 rounded-full bg-gray-300" />
+               <span className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                 {scheduledWindowLabel}
+               </span>
              </>
           )}
         </div>

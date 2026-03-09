@@ -17,6 +17,13 @@ export const UpcomingTaskList = ({
   onDeleteTask,
   projects = [],
 }: UpcomingTaskListProps) => {
+  const getSortDate = (task: Task): number | null => {
+    const value = task.scheduled_on || task.scheduled_date || task.scheduled_start || task.start_time || task.deadline;
+    if (!value) return null;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+  };
+
   if (tasks.length === 0) {
     return (
       <div className="text-center py-12 text-gray-400 dark:text-gray-500">
@@ -26,13 +33,11 @@ export const UpcomingTaskList = ({
   }
 
   const sortedTasks = [...tasks].sort((a, b) => {
-    if (a.deadline && b.deadline) {
-      const dateA = new Date(a.deadline).getTime();
-      const dateB = new Date(b.deadline).getTime();
-      if (dateA !== dateB) return dateA - dateB;
-    }
-    if (a.deadline && !b.deadline) return -1;
-    if (!a.deadline && b.deadline) return 1;
+    const dateA = getSortDate(a);
+    const dateB = getSortDate(b);
+    if (dateA !== null && dateB !== null && dateA !== dateB) return dateA - dateB;
+    if (dateA !== null && dateB === null) return -1;
+    if (dateA === null && dateB !== null) return 1;
     return b.priority - a.priority;
   });
 

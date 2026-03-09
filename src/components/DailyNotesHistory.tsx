@@ -156,19 +156,41 @@ export function DailyNotesHistory({ userId, refreshToken = 0 }: DailyNotesHistor
     setEditingContent('');
   };
 
+  const generateSummary = async (content: string) => {
+    const res = await fetch('/api/summarize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ noteContent: content, projects: [] }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error(data?.error || 'Failed to generate summary');
+    }
+
+    const data = await res.json();
+    return typeof data.summary === 'string' ? data.summary : '';
+  };
+
   const saveEdit = async () => {
     if (!editingNoteId) return;
     setIsSavingEdit(true);
     try {
-      await notesDb.updateNote(editingNoteId, { content: editingContent });
+      const refreshedSummary = editingContent.trim()
+        ? await generateSummary(editingContent)
+        : '';
+      const updatedNote = await notesDb.updateNote(editingNoteId, {
+        content: editingContent,
+        summary: refreshedSummary,
+      });
       setPastNotes((prev) =>
-        prev.map((n) => (n.id === editingNoteId ? { ...n, content: editingContent } : n))
+        prev.map((n) => (n.id === editingNoteId ? updatedNote : n))
       );
       setEditingNoteId(null);
       setEditingContent('');
     } catch (err) {
       console.error('Failed to update note', err);
-      alert('Failed to update note');
+      alert(err instanceof Error ? err.message : 'Failed to update note');
     } finally {
       setIsSavingEdit(false);
     }

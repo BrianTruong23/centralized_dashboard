@@ -43,7 +43,16 @@ import { ActivityLogModal } from '@/components/ActivityLogModal';
 import { SettingsModal } from '@/components/SettingsModal';
 import { TaskStatus, TaskPriority, TaskCategory } from '@/types/task';
 import clsx from 'clsx';
-import { supabase, authReady, SESSION_KEY } from '@/lib/supabase';
+import {
+  awaitAuthenticatedSession,
+  awaitAuthBootstrap,
+  getAccessToken,
+  getAuthBootstrapSnapshot,
+  SESSION_KEY,
+  subscribeAuthBootstrap,
+  supabase,
+  type AuthBootstrapSnapshot,
+} from '@/lib/supabase';
 import Link from 'next/link';
 import { formatDateKey } from '@/lib/dateKey';
 import { usePremium } from '@/hooks/usePremium';
@@ -84,6 +93,14 @@ function toDateKey(value?: string): string | null {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
   return formatDateKey(parsed);
+}
+
+function plannedDateKey(task: Task): string | null {
+  return toDateKey(task.scheduled_on || task.scheduled_date || task.scheduled_start || task.start_time);
+}
+
+function effectiveDateKey(task: Task): string | null {
+  return plannedDateKey(task) || toDateKey(task.deadline);
 }
 
 // Sortable queue item for plan mode
@@ -213,19 +230,7 @@ export default function Home() {
   const [showPlan, setShowPlan] = useState(false);
   const [dayPlan, setDayPlan] = useState<Task[]>([]);
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
-  const [user, setUser] = useState<any>(() => {
-    // Optimistic load from cache to speed up dashboard display
-    if (typeof window !== 'undefined') {
-        try {
-            const raw = localStorage.getItem(SESSION_KEY);
-            if (raw) {
-                const cached = JSON.parse(raw);
-                if (cached?.user) return cached.user;
-            }
-        } catch { /* ignore */ }
-    }
-    return null;
-  });
+  const [user, setUser] = useState<any>(null);
 
   const [currentView, setCurrentView] = useState('today');
   const [inboxDisplayView, setInboxDisplayView] = useState<'inbox' | 'kanban' | 'calendar'>(() => {
@@ -234,6 +239,9 @@ export default function Home() {
     if (stored === 'kanban' || stored === 'calendar' || stored === 'inbox') return stored;
     return 'inbox';
   });
+  const [calendarSetupMessage, setCalendarSetupMessage] = useState<string | null>(null);
+  const [isFinalizingCalendarConnect, setIsFinalizingCalendarConnect] = useState(false);
+  const [authSnapshot, setAuthSnapshot] = useState<AuthBootstrapSnapshot>(() => getAuthBootstrapSnapshot());
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [notesRefreshToken, setNotesRefreshToken] = useState(0);
 
@@ -308,6 +316,92 @@ export default function Home() {
   }, [planningPreferences]);
 
   useEffect(() => {
+    return subscribeAuthBootstrap((snapshot) => {
+      setAuthSnapshot(snapshot);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const url = new URL(window.location.href);
+    const status = url.searchParams.get('calendar_status');
+    const message = url.searchParams.get('calendar_message');
+    const requestedView = url.searchParams.get('view');
+    const calendarCode = url.searchParams.get('calendar_code');
+
+    const moveToRequestedInboxView = () => {
+      const nextView = requestedView === 'calendar' ? 'calendar' : 'inbox';
+      setInboxDisplayView(nextView);
+      setCurrentView(nextView);
+      try {
+        localStorage.setItem('inbox_display_view', nextView);
+      } catch {
+        // ignore storage errors
+      }
+    };
+
+    const clearCalendarParams = () => {
+      url.searchParams.delete('calendar_status');
+      url.searchParams.delete('calendar_message');
+      url.searchParams.delete('calendar_code');
+      url.searchParams.delete('view');
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    };
+
+    const finalizeCalendarConnect = async () => {
+      moveToRequestedInboxView();
+
+      if (status === 'error') {
+        setCalendarSetupMessage(message || 'Google Calendar connection failed.');
+        clearCalendarParams();
+        return;
+      }
+
+      if (!calendarCode) {
+        if (requestedView === 'inbox') {
+          clearCalendarParams();
+        }
+        return;
+      }
+
+      setIsFinalizingCalendarConnect(true);
+      setCalendarSetupMessage('Restoring your Minismo session and finishing Google Calendar connection...');
+
+      try {
+        if (!supabase) throw new Error('Supabase not configured');
+        const session = await awaitAuthenticatedSession(12_000);
+        if (!session?.access_token) {
+          throw new Error(
+            'Google returned successfully, but Minismo could not finish restoring your authenticated session within the expected time. Automatic recovery was attempted but no active Supabase access token became available. Confirm you are still signed in, then try Connect Google Calendar again.'
+          );
+        }
+
+        const res = await fetch('/api/calendar/google/finalize', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ code: calendarCode }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || 'Failed to finish Google Calendar connection.');
+
+        setCalendarSetupMessage('Google Calendar connected.');
+      } catch (error: unknown) {
+        setCalendarSetupMessage(error instanceof Error ? error.message : 'Google Calendar connection failed.');
+      } finally {
+        setIsFinalizingCalendarConnect(false);
+        clearCalendarParams();
+      }
+    };
+
+    if (!status && !message && !requestedView && !calendarCode) return;
+    void finalizeCalendarConnect();
+  }, []);
+
+  useEffect(() => {
     if (currentView === 'inbox' || currentView === 'kanban' || currentView === 'calendar') {
       setInboxDisplayView(currentView);
       try {
@@ -351,37 +445,23 @@ export default function Home() {
   useEffect(() => {
     const fetchUser = async () => {
         if (!supabase) return;
-        await authReady;
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) { setUser(user); return; }
-        } catch { /* network error */ }
-        // Fallback: read cached user when Supabase is unreachable
-        try {
-          const raw = localStorage.getItem(SESSION_KEY);
-          if (raw) {
-            const cached = JSON.parse(raw);
-            if (cached?.user) setUser(cached.user);
-          }
-        } catch { /* ignore */ }
+        const snapshot = await awaitAuthBootstrap();
+        if (snapshot.state === 'authenticated' && snapshot.user) {
+          setUser(snapshot.user);
+          return;
+        }
+        setUser(null);
     };
     fetchUser();
-
-    // Listen for auth changes
-    const { data: authListener } = supabase?.auth.onAuthStateChange((event, session) => {
-        if (session?.user) {
-            setUser(session.user);
-            // Persist session to local storage for next load
-            localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-        } else {
-            setUser(null);
-            localStorage.removeItem(SESSION_KEY);
-        }
-    }) || { data: { subscription: { unsubscribe: () => {} } } };
-
-    return () => {
-        authListener?.subscription.unsubscribe();
-    };
+    return subscribeAuthBootstrap((snapshot) => {
+      if (snapshot.state === 'signed_out' || snapshot.state === 'restore_failed') {
+        setUser(null);
+        return;
+      }
+      if (snapshot.state === 'authenticated' && snapshot.user) {
+        setUser(snapshot.user);
+      }
+    });
   }, []);
 
   // Check if onboarding is needed for new users
@@ -390,6 +470,10 @@ export default function Home() {
       if (!user || onboardingChecked) return;
 
       try {
+        const session = await awaitAuthenticatedSession(10_000);
+        if (!session?.access_token && !getAccessToken()) {
+          return;
+        }
         const status = await db.getOnboardingStatus(user.id);
         setOnboardingChecked(true);
 
@@ -400,12 +484,18 @@ export default function Home() {
       } catch (error: any) {
         console.error('Error checking onboarding status:', error);
         if (error.details) console.error('Error details:', error.details);
+        if (
+          error instanceof Error &&
+          (error.message.includes('session is still restoring') || error.message.includes('Auth bootstrap timed out'))
+        ) {
+          return;
+        }
         setOnboardingChecked(true);
       }
     };
 
     checkOnboarding();
-  }, [user, onboardingChecked]);
+  }, [user, onboardingChecked, authSnapshot.state]);
 
   const handleOnboardingComplete = async (preferences: OnboardingPreferences) => {
     if (!user) return;
@@ -624,7 +714,7 @@ export default function Home() {
   useEffect(() => {
     if (currentView !== 'today' || !showPlan) return;
     const todayKey = formatDateKey(new Date());
-    const candidates = tasks.filter((t) => t.status !== 'done' && toDateKey(t.deadline) === todayKey);
+    const candidates = tasks.filter((t) => t.status !== 'done' && effectiveDateKey(t) === todayKey);
     setDayPlan((prev) => {
       const prevIds = new Set(prev.map((t) => t.id));
       const ordered = prev
@@ -697,12 +787,12 @@ export default function Home() {
 
     if (currentView === 'today') {
         const todayStr = formatDateKey(new Date());
-        return result.filter(t => toDateKey(t.deadline) === todayStr);
+        return result.filter(t => effectiveDateKey(t) === todayStr);
     }
     if (currentView === 'upcoming') {
         const todayStr = formatDateKey(new Date());
         return result.filter(t => {
-             const key = toDateKey(t.deadline);
+             const key = effectiveDateKey(t);
              if (!key) return false;
              return key > todayStr;
         });
@@ -750,7 +840,11 @@ export default function Home() {
     }
   };
 
-  if (!isLoaded) {
+  const isAuthBootstrapping = authSnapshot.state === 'booting' || authSnapshot.state === 'restoring_session';
+  const isAuthenticated = authSnapshot.state === 'authenticated' && !!user;
+  const shouldShowAuthModal = !isAuthBootstrapping && !isAuthenticated;
+
+  if (!isLoaded || isAuthBootstrapping) {
     return <LoadingScreen />;
   }
 
@@ -764,7 +858,7 @@ export default function Home() {
     <div className="flex h-screen bg-[#fafafa] dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans overflow-hidden">
       
       {/* Auth Modal Blocking */}
-      {!user && (
+      {shouldShowAuthModal && (
          <AuthModal 
             isOpen={true} 
             onAuthSuccess={(u) => setUser(u)} 
@@ -800,7 +894,7 @@ export default function Home() {
 
        {/* CreateTaskModal rendered once at the bottom of the component */}
 
-      <main className={`flex-1 overflow-y-auto p-4 md:p-8 ${!user ? 'blur-sm pointer-events-none select-none' : ''}`}>
+      <main className={`flex-1 overflow-y-auto p-4 md:p-8 ${shouldShowAuthModal ? 'blur-sm pointer-events-none select-none' : ''}`}>
         <header className={clsx(
           "flex flex-col md:flex-row md:items-start justify-between gap-4 md:gap-0 mx-auto relative",
           currentView === 'calendar' ? "max-w-[1400px]" : "max-w-4xl",
@@ -960,6 +1054,19 @@ export default function Home() {
              )}
                 </div>
         </header>
+
+        {(calendarSetupMessage || authSnapshot.state === 'restoring_session') && (
+          <div
+            className={clsx(
+              "mx-auto mb-4 max-w-4xl rounded-xl border px-4 py-3 text-sm",
+              isFinalizingCalendarConnect || authSnapshot.state === 'restoring_session'
+                ? "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200"
+                : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200"
+            )}
+          >
+            {calendarSetupMessage || 'Restoring your Minismo session...'}
+          </div>
+        )}
 
         <div className={clsx("mx-auto", currentView === 'calendar' ? "max-w-[1400px]" : "max-w-4xl")}>
             {currentView === 'calendar' ? (
@@ -1173,9 +1280,10 @@ export default function Home() {
                             {(() => {
                                 const upcomingTasks = tasks.filter(t => {
                                     if (t.status === 'done') return false;
-                                    if (!t.deadline) return false;
+                                    const key = effectiveDateKey(t);
+                                    if (!key) return false;
                                     const todayStr = formatDateKey(new Date());
-                                    return t.deadline > todayStr;
+                                    return key > todayStr;
                                 }).slice(0, 3);
                                 
                                 if (upcomingTasks.length === 0) return null;
@@ -1220,8 +1328,11 @@ export default function Home() {
                             {(() => {
                                 const inboxTasks = tasks.filter(t => t.status !== 'done');
                                 const todayStr = formatDateKey(new Date());
-                                const overdue = inboxTasks.filter(t => t.deadline && t.deadline < todayStr).length;
-                                const noDate = inboxTasks.filter(t => !t.deadline).length;
+                                const overdue = inboxTasks.filter(t => {
+                                  const dueKey = toDateKey(t.deadline);
+                                  return !!dueKey && dueKey < todayStr;
+                                }).length;
+                                const noDate = inboxTasks.filter(t => !effectiveDateKey(t) && !t.deadline).length;
                                 const noPriority = inboxTasks.filter(t => !t.priority || t.priority >= 5).length;
                                 
                                 return (
@@ -1266,15 +1377,17 @@ export default function Home() {
                                 const upcomingTasks = filteredTasks;
                                 const todayStr = formatDateKey(new Date());
                                 const thisWeek = upcomingTasks.filter(t => {
-                                    if (!t.deadline) return false;
-                                    const taskDate = new Date(t.deadline);
+                                    const key = effectiveDateKey(t);
+                                    if (!key) return false;
+                                    const taskDate = new Date(`${key}T00:00:00`);
                                     const weekFromNow = new Date();
                                     weekFromNow.setDate(weekFromNow.getDate() + 7);
                                     return taskDate <= weekFromNow;
                                 }).length;
                                 const thisMonth = upcomingTasks.filter(t => {
-                                    if (!t.deadline) return false;
-                                    const taskDate = new Date(t.deadline);
+                                    const key = effectiveDateKey(t);
+                                    if (!key) return false;
+                                    const taskDate = new Date(`${key}T00:00:00`);
                                     const monthFromNow = new Date();
                                     monthFromNow.setMonth(monthFromNow.getMonth() + 1);
                                     return taskDate <= monthFromNow;
@@ -1436,12 +1549,16 @@ export default function Home() {
           setActiveFocusTask(null);
         }}
       />
-      <AiAssistant
-        userId={user?.id}
-        tasks={tasks}
-        onUpdateTask={updateTask}
-      />
-      <AmbientSound />
+      {isAuthenticated && (
+        <>
+          <AiAssistant
+            userId={user?.id}
+            tasks={tasks}
+            onUpdateTask={updateTask}
+          />
+          <AmbientSound />
+        </>
+      )}
       
       <SettingsModal 
          isOpen={isSettingsOpen}
