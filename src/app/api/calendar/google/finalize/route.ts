@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   } catch (error: unknown) {
     const rawMessage = error instanceof Error ? error.message : 'Failed to finalize calendar connection';
     const message = rawMessage === 'Unauthorized'
-      ? 'Your Minismo session was still restoring after returning from Google. Wait a moment and reconnect Google Calendar.'
+      ? 'Google returned successfully, but Minismo could not find your active Supabase session after the reload. Your account UI may still appear from cached data, but the access token needed to save the calendar connection was unavailable. Refresh once, confirm you are still signed in, then click Connect Google Calendar again.'
       : rawMessage;
     console.error('[calendar/google/finalize] connect failed:', error);
     return NextResponse.json({ error: message }, { status: rawMessage === 'Unauthorized' ? 401 : 500 });

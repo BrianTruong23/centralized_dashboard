@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase, resolveAuthReady } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { Loader2 } from 'lucide-react';
 import { User } from '@supabase/supabase-js';
 
@@ -69,7 +69,6 @@ export function AuthModal({ isOpen, onAuthSuccess }: AuthModalProps) {
         if (error) throw error;
         if (data.session) {
           localStorage.setItem('app_auth_session', JSON.stringify(data.session));
-          resolveAuthReady();
           onAuthSuccess(data.session.user);
         }
       }
