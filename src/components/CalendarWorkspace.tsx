@@ -298,6 +298,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
   const [editDraft, setEditDraft] = useState<TaskEditDraft | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
+  const [selectedDetailEntryId, setSelectedDetailEntryId] = useState<string | null>(null);
   const [showUnscheduledTasks, setShowUnscheduledTasks] = useState(false);
 
   const days = useMemo(() => {
@@ -966,6 +967,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                                 return;
                               }
                               setSelectedDayKey(dayKey);
+                              setSelectedDetailEntryId(entry.id);
                             }}
                             className={clsx(
                               'flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors',
@@ -1007,7 +1009,10 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                         {hiddenCount > 0 && (
                           <button
                             type="button"
-                            onClick={() => setSelectedDayKey(dayKey)}
+                            onClick={() => {
+                              setSelectedDayKey(dayKey);
+                              setSelectedDetailEntryId(null);
+                            }}
                             className="w-full rounded-xl border border-dashed border-gray-200 px-2.5 py-2 text-left text-[11px] font-medium text-gray-500 transition-colors hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:bg-gray-800"
                           >
                             +{hiddenCount} more
@@ -1085,7 +1090,12 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                               if (entry.task) e.dataTransfer.setData('text/plain', entry.task.id);
                             }}
                             onClick={() => {
-                              if (entry.source === 'task' && entry.task) openTaskEditor(entry.task);
+                              if (entry.source === 'task' && entry.task) {
+                                openTaskEditor(entry.task);
+                                return;
+                              }
+                              setSelectedDayKey(dayKey);
+                              setSelectedDetailEntryId(entry.id);
                             }}
                             className={clsx(
                               'absolute overflow-hidden rounded-2xl px-2.5 py-2 text-xs shadow-sm',
@@ -1140,7 +1150,10 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
       {selectedDayKey && (
         <div
           className="fixed inset-0 z-[250] flex items-center justify-center bg-black/30 p-4 backdrop-blur-sm"
-          onClick={() => setSelectedDayKey(null)}
+          onClick={() => {
+            setSelectedDayKey(null);
+            setSelectedDetailEntryId(null);
+          }}
         >
           <div
             className="flex h-[min(78vh,720px)] w-full max-w-2xl flex-col overflow-hidden rounded-[28px] border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900"
@@ -1158,7 +1171,10 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedDayKey(null)}
+                onClick={() => {
+                  setSelectedDayKey(null);
+                  setSelectedDetailEntryId(null);
+                }}
                 className="rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-200"
               >
                 <X size={18} />
@@ -1192,6 +1208,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                       onClick={() => {
                         if (entry.source === 'task' && entry.task) {
                           setSelectedDayKey(null);
+                          setSelectedDetailEntryId(null);
                           openTaskEditor(entry.task);
                         }
                       }}
@@ -1199,7 +1216,8 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                         'w-full rounded-2xl border px-4 py-3 text-left transition-colors',
                         entry.source === 'task'
                           ? 'border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-950 dark:hover:border-gray-600'
-                          : 'dark:border-gray-700'
+                          : 'dark:border-gray-700',
+                        selectedDetailEntryId === entry.id && 'ring-2 ring-[var(--accent-solid)] ring-offset-2 dark:ring-offset-gray-900'
                       )}
                       style={
                         entry.source === 'task'
