@@ -1022,7 +1022,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                             className={clsx(
                               'flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors',
                               entry.source === 'task'
-                                ? 'bg-gray-900 text-white hover:bg-gray-800 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-white'
+                                ? 'border border-slate-200/95 bg-white text-slate-800 shadow-[0_8px_18px_-14px_rgba(15,23,42,0.45)] hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:border-slate-600'
                                 : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800'
                             )}
                             style={
@@ -1048,7 +1048,7 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
                               <div
                                 className={clsx(
                                   'mt-0.5 text-[10px]',
-                                  entry.source === 'task' ? 'text-white/70 dark:text-gray-600' : 'text-gray-500 dark:text-gray-400'
+                                  entry.source === 'task' ? 'text-slate-500 dark:text-slate-400' : 'text-gray-500 dark:text-gray-400'
                                 )}
                               >
                                 {entry.source === 'task' ? 'Task' : 'Google Calendar'}
