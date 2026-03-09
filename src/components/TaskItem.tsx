@@ -63,8 +63,20 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
     });
   };
 
+  const hasPlannedSchedule = Boolean(
+    task.scheduled_on ||
+    task.scheduled_date ||
+    task.scheduled_start ||
+    task.scheduled_end ||
+    task.start_time ||
+    task.end_time ||
+    task.scheduled_time
+  );
+
   const getScheduledWindowLabel = (): string | null => {
-    const explicitStart = formatTimeLabel(task.scheduled_start || task.start_time || task.scheduled_time || task.due_time);
+    if (!hasPlannedSchedule) return null;
+
+    const explicitStart = formatTimeLabel(task.scheduled_start || task.start_time || task.scheduled_time);
     const explicitEnd = formatTimeLabel(task.scheduled_end || task.end_time);
     if (explicitStart && explicitEnd) return `${explicitStart} - ${explicitEnd}`;
     if (explicitStart && task.estimatedMinutes > 0) {
@@ -73,9 +85,7 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
         : task.start_time
           ? new Date(task.start_time)
           : (task.scheduled_on || task.scheduled_date)
-            ? new Date(`${(task.scheduled_on || task.scheduled_date)!.slice(0, 10)}T${(task.scheduled_time || task.due_time || '09:00:00').slice(0, 8)}`)
-            : task.deadline
-              ? new Date(`${task.deadline.slice(0, 10)}T${(task.scheduled_time || task.due_time || '09:00:00').slice(0, 8)}`)
+            ? new Date(`${(task.scheduled_on || task.scheduled_date)!.slice(0, 10)}T${(task.scheduled_time || '09:00:00').slice(0, 8)}`)
           : null;
       if (startSource && !Number.isNaN(startSource.getTime())) {
         const computedEnd = new Date(startSource.getTime() + task.estimatedMinutes * 60 * 1000);
@@ -88,6 +98,9 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
   };
 
   const scheduledWindowLabel = getScheduledWindowLabel();
+  const deadlineTimeLabel = !hasPlannedSchedule
+    ? formatTimeLabel(task.due_time || task.deadline)
+    : null;
 
   const toggleStatus = () => {
     onUpdate({
@@ -299,7 +312,10 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
 
       <button
         type="button"
-        onClick={() => setIsEditing(true)}
+        onClick={() => {
+          setEditForm(task);
+          setIsEditing(true);
+        }}
         className="flex-1 min-w-0 pt-0.5 text-left"
         title="Edit task"
       >
@@ -349,9 +365,10 @@ export const TaskItem = ({ task, onUpdate, onDelete, projects = [] }: TaskItemPr
           {task.deadline && (
              <>
                <span className="w-0.5 h-0.5 rounded-full bg-gray-300" />
-            <span className="flex items-center gap-1 text-red-400">
+               <span className="flex items-center gap-1 text-red-400">
                  {formatDateDisplay(task.deadline)}
-            </span>
+                 {deadlineTimeLabel ? ` ${deadlineTimeLabel}` : ''}
+               </span>
              </>
           )}
 
