@@ -12,7 +12,7 @@ import { FocusSessionModal } from '@/components/FocusSessionModal';
 import { pickNextTask, generateDayPlan, filterTasksDueToday } from '@/lib/scheduler';
 import { Task } from '@/types/task';
 import { AuthModal } from '@/components/AuthModal';
-import { Zap, CalendarRange, Loader2, Filter, ChevronUp, ChevronDown, Play, Sparkles, Trash2, GripVertical } from 'lucide-react';
+import { Zap, CalendarRange, Loader2, Filter, ChevronUp, ChevronDown, Play, Sparkles, Trash2, GripVertical, X } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -400,6 +400,14 @@ export default function Home() {
     if (!status && !message && !requestedView && !calendarCode) return;
     void finalizeCalendarConnect();
   }, []);
+
+  useEffect(() => {
+    if (calendarSetupMessage !== 'Google Calendar connected.') return;
+    const timeout = window.setTimeout(() => {
+      setCalendarSetupMessage(null);
+    }, 5000);
+    return () => window.clearTimeout(timeout);
+  }, [calendarSetupMessage]);
 
   useEffect(() => {
     if (currentView === 'inbox' || currentView === 'kanban' || currentView === 'calendar') {
@@ -1064,7 +1072,19 @@ export default function Home() {
                 : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200"
             )}
           >
-            {calendarSetupMessage || 'Restoring your Minismo session...'}
+            <div className="flex items-start justify-between gap-3">
+              <span>{calendarSetupMessage || 'Restoring your Minismo session...'}</span>
+              {calendarSetupMessage && !isFinalizingCalendarConnect && authSnapshot.state !== 'restoring_session' && (
+                <button
+                  type="button"
+                  onClick={() => setCalendarSetupMessage(null)}
+                  className="mt-0.5 shrink-0 rounded-md p-0.5 opacity-70 transition hover:opacity-100"
+                  aria-label="Dismiss calendar setup message"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
           </div>
         )}
 
