@@ -677,6 +677,14 @@ export const CalendarWorkspace = ({ tasks, projects, onUpdateTask }: CalendarWor
   const handleDropTask = async (taskId: string, dayKey: string, hour: number) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
+    const existingRange = getTaskTimeRange(task);
+    const existingDayKey = existingRange?.dayKey;
+    const existingHour = existingRange?.start.getHours();
+
+    if (existingDayKey === dayKey) {
+      if (viewMode === 'month') return;
+      if (existingHour === hour) return;
+    }
 
     const newTime = `${String(hour).padStart(2, '0')}:00:00`;
     const startAt = parseLocalDateTime(dayKey, newTime);
