@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Task } from '@/types/task';
 import { loadTasks, saveTasks } from '@/lib/storage';
-import { supabase, authReady, SESSION_KEY } from '@/lib/supabase';
+import { awaitAuthenticatedSession, awaitAuthBootstrap, supabase } from '@/lib/supabase';
 import { db } from '@/lib/db';
 
 export const useTasks = () => {
@@ -31,38 +31,14 @@ export const useTasks = () => {
           setIsLoaded(true);
         }, 8000);
 
-        await authReady;
-
-        const { data: { session }, error } = await supabase.auth.getSession();
-
         if (timeoutId) {
           clearTimeout(timeoutId);
           timeoutId = null;
         }
 
-        if (error) {
-          console.warn('[useTasks] Auth session error, using local storage:', error);
-          const stored = loadTasks();
-          setTasks(stored);
-          setIsLoaded(true);
-          return;
-        }
-
-        // If Supabase is down, getSession() returns null even though we have
-        // cached tokens. Fall back to the cached user so DB ops are attempted.
-        let resolvedUser = session?.user ?? null;
-        if (!resolvedUser) {
-          try {
-            const raw = localStorage.getItem(SESSION_KEY);
-            if (raw) {
-              const cached = JSON.parse(raw);
-              if (cached?.user) {
-                resolvedUser = cached.user;
-                console.log('[useTasks] No in-memory session, using cached user:', cached.user.id);
-              }
-            }
-          } catch { /* ignore */ }
-        }
+        const bootstrap = await awaitAuthBootstrap();
+        const session = await awaitAuthenticatedSession(10_000);
+        const resolvedUser = session?.user ?? bootstrap.user ?? null;
 
         setUserAndRef(resolvedUser);
         console.log('[useTasks] Auth resolved. user:', resolvedUser?.id ?? 'NULL');

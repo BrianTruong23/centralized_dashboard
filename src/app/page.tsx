@@ -43,7 +43,16 @@ import { ActivityLogModal } from '@/components/ActivityLogModal';
 import { SettingsModal } from '@/components/SettingsModal';
 import { TaskStatus, TaskPriority, TaskCategory } from '@/types/task';
 import clsx from 'clsx';
-import { supabase, authReady, SESSION_KEY, ensureSupabaseSession, getAccessToken } from '@/lib/supabase';
+import {
+  awaitAuthenticatedSession,
+  awaitAuthBootstrap,
+  getAccessToken,
+  getAuthBootstrapSnapshot,
+  SESSION_KEY,
+  subscribeAuthBootstrap,
+  supabase,
+  type AuthBootstrapSnapshot,
+} from '@/lib/supabase';
 import Link from 'next/link';
 import { formatDateKey } from '@/lib/dateKey';
 import { usePremium } from '@/hooks/usePremium';
@@ -236,6 +245,7 @@ export default function Home() {
   });
   const [calendarSetupMessage, setCalendarSetupMessage] = useState<string | null>(null);
   const [isFinalizingCalendarConnect, setIsFinalizingCalendarConnect] = useState(false);
+  const [authSnapshot, setAuthSnapshot] = useState<AuthBootstrapSnapshot>(() => getAuthBootstrapSnapshot());
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [notesRefreshToken, setNotesRefreshToken] = useState(0);
 
@@ -310,6 +320,12 @@ export default function Home() {
   }, [planningPreferences]);
 
   useEffect(() => {
+    return subscribeAuthBootstrap((snapshot) => {
+      setAuthSnapshot(snapshot);
+    });
+  }, []);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const url = new URL(window.location.href);
@@ -353,21 +369,22 @@ export default function Home() {
       }
 
       setIsFinalizingCalendarConnect(true);
-      setCalendarSetupMessage('Finishing Google Calendar connection...');
+      setCalendarSetupMessage('Restoring your Minismo session and finishing Google Calendar connection...');
 
       try {
         if (!supabase) throw new Error('Supabase not configured');
-        await authReady;
-        const accessToken = await ensureSupabaseSession();
-        if (!accessToken) {
-          throw new Error('Your Minismo session was not restored after returning from Google. Sign in again, then reconnect Google Calendar.');
+        const session = await awaitAuthenticatedSession(12_000);
+        if (!session?.access_token) {
+          throw new Error(
+            'Google returned successfully, but Minismo could not finish restoring your authenticated session within the expected time. Automatic recovery was attempted but no active Supabase access token became available. Confirm you are still signed in, then try Connect Google Calendar again.'
+          );
         }
 
         const res = await fetch('/api/calendar/google/finalize', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({ code: calendarCode }),
         });
@@ -431,12 +448,11 @@ export default function Home() {
   useEffect(() => {
     const fetchUser = async () => {
         if (!supabase) return;
-        await authReady;
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) { setUser(user); return; }
-        } catch { /* network error */ }
-        // Fallback: read cached user when Supabase is unreachable
+        const snapshot = await awaitAuthBootstrap();
+        if (snapshot.user) {
+          setUser(snapshot.user);
+          return;
+        }
         try {
           const raw = localStorage.getItem(SESSION_KEY);
           if (raw) {
@@ -446,25 +462,15 @@ export default function Home() {
         } catch { /* ignore */ }
     };
     fetchUser();
-
-    // Listen for auth changes
-    const { data: authListener } = supabase?.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_OUT') {
-            setUser(null);
-            localStorage.removeItem(SESSION_KEY);
-            return;
-        }
-
-        if (session?.user) {
-            setUser(session.user);
-            // Persist session to local storage for next load
-            localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-        }
-    }) || { data: { subscription: { unsubscribe: () => {} } } };
-
-    return () => {
-        authListener?.subscription.unsubscribe();
-    };
+    return subscribeAuthBootstrap((snapshot) => {
+      if (snapshot.state === 'signed_out') {
+        setUser(null);
+        return;
+      }
+      if (snapshot.user) {
+        setUser(snapshot.user);
+      }
+    });
   }, []);
 
   // Check if onboarding is needed for new users
@@ -473,8 +479,8 @@ export default function Home() {
       if (!user || onboardingChecked) return;
 
       try {
-        const token = await ensureSupabaseSession();
-        if (!token && !getAccessToken()) {
+        const session = await awaitAuthenticatedSession(10_000);
+        if (!session?.access_token && !getAccessToken()) {
           return;
         }
         const status = await db.getOnboardingStatus(user.id);
@@ -487,7 +493,10 @@ export default function Home() {
       } catch (error: any) {
         console.error('Error checking onboarding status:', error);
         if (error.details) console.error('Error details:', error.details);
-        if (error instanceof Error && error.message.includes('session is still restoring')) {
+        if (
+          error instanceof Error &&
+          (error.message.includes('session is still restoring') || error.message.includes('Auth bootstrap timed out'))
+        ) {
           return;
         }
         setOnboardingChecked(true);
@@ -495,7 +504,7 @@ export default function Home() {
     };
 
     checkOnboarding();
-  }, [user, onboardingChecked]);
+  }, [user, onboardingChecked, authSnapshot.state]);
 
   const handleOnboardingComplete = async (preferences: OnboardingPreferences) => {
     if (!user) return;
@@ -1051,16 +1060,16 @@ export default function Home() {
                 </div>
         </header>
 
-        {calendarSetupMessage && (
+        {(calendarSetupMessage || authSnapshot.state === 'restoring_session') && (
           <div
             className={clsx(
               "mx-auto mb-4 max-w-4xl rounded-xl border px-4 py-3 text-sm",
-              isFinalizingCalendarConnect
+              isFinalizingCalendarConnect || authSnapshot.state === 'restoring_session'
                 ? "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200"
                 : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-200"
             )}
           >
-            {calendarSetupMessage}
+            {calendarSetupMessage || 'Restoring your Minismo session...'}
           </div>
         )}
 

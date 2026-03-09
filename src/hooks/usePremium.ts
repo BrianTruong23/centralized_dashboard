@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { authReady, supabase } from '@/lib/supabase';
+import { awaitAuthenticatedSession, supabase } from '@/lib/supabase';
 import { db } from '@/lib/db';
 
 interface PremiumState {
@@ -25,9 +25,7 @@ export function usePremium() {
       return;
     }
 
-    await authReady;
-
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await awaitAuthenticatedSession(10_000);
     if (!session?.user) {
       setState({ ...defaultState, loading: false });
       return;

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Project, CreateProjectInput } from '@/types/project';
-import { supabase, authReady } from '@/lib/supabase';
+import { awaitAuthenticatedSession, awaitAuthBootstrap, supabase } from '@/lib/supabase';
 import { db } from '@/lib/db';
 import { generateId } from '@/lib/utils';
 
@@ -37,18 +37,13 @@ export const useProjects = () => {
       return;
     }
 
-    // Eager load: wait for auth to be ready, then fetch via getSession().
-    // This is the same pattern useTasks uses — it works because authReady
-    // resolves after INITIAL_SESSION fires, guaranteeing the session is
-    // available. We cannot rely on onAuthStateChange alone because
-    // INITIAL_SESSION may fire before useEffect registers the listener.
     const eagerLoad = async () => {
       try {
-        await authReady;
+        const bootstrap = await awaitAuthBootstrap();
         if (!mounted) return;
 
-        const { data: { session } } = await supabase!.auth.getSession();
-        const user = session?.user || null;
+        const session = await awaitAuthenticatedSession(10_000);
+        const user = session?.user || bootstrap.user || null;
         userRef.current = user;
 
         if (user) {
