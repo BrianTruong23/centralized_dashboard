@@ -15,6 +15,7 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
       auth: {
         persistSession: true,
         autoRefreshToken: true,
+        storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
       },
     })
   : null;
@@ -139,7 +140,7 @@ function setSnapshot(
 
 export function persistStoredSession(session: Session) {
   try {
-    localStorage.setItem(
+    sessionStorage.setItem(
       SESSION_KEY,
       JSON.stringify({
         access_token: session.access_token,
@@ -155,7 +156,7 @@ export function persistStoredSession(session: Session) {
 
 export function clearStoredSession() {
   try {
-    localStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem(SESSION_KEY);
   } catch {
     // ignore SSR failures
   }
@@ -164,7 +165,7 @@ export function clearStoredSession() {
 export function readStoredSession(): StoredSession | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
+    const raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredSession;
     if (!parsed?.access_token || !parsed?.refresh_token) return null;
