@@ -169,7 +169,7 @@ export function GitHubSync({ userId, onSyncComplete }: GitHubSyncProps) {
           // Add to set to avoid duplicates in same sync batch
           syncedIssueNumbers.add(issue.number);
         } catch (err) {
-          console.error(`Failed to sync issue #${issue.number}:`, err);
+          console.error("Failed to sync issue #", issue.number, ":", err);
         }
       }
 

@@ -63,7 +63,7 @@ async function connectToDatabase(): Promise<Client> {
   const client = new Client({
     connectionString: dbUrl,
     ssl: {
-      rejectUnauthorized: false
+      rejectUnauthorized: true
     }
   });
 

@@ -133,7 +133,7 @@ STRICT CATEGORY RULE: You MUST ONLY use the categories provided in the JSON temp
       throw error;
     }
   } catch (error: any) {
-    console.error(`[API ${Date.now() - startTime}ms] ERROR:`, error);
+    console.error("[API ERROR]:", `Duration: ${Date.now() - startTime}ms`, error);
     return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
   }
 }

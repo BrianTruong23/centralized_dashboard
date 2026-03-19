@@ -228,7 +228,7 @@ export function AutoPlanModal({
                   console.log(`[AutoPlan] ✓ Project "${name}" created with id: ${project.id}`);
               }
           } catch (e: any) {
-              console.warn(`[AutoPlan] ✗ Failed to create project "${name}":`, e?.message);
+              console.warn("[AutoPlan] ✗ Failed to create project:", name, ":", e?.message);
           }
       }
       console.log(`[AutoPlan] Projects done. Now building task list...`);

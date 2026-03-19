@@ -50,7 +50,11 @@ export function decryptSecret(payload: string): string {
   if (!ivPart || !tagPart || !bodyPart) throw new Error('Invalid encrypted payload');
 
   const decipher = crypto.createDecipheriv('aes-256-gcm', getEncryptionKey(), fromBase64Url(ivPart));
-  decipher.setAuthTag(fromBase64Url(tagPart));
+  const authTagBuffer = fromBase64Url(tagPart);
+  if (authTagBuffer.length !== 16) { // AES-256-GCM typically uses a 16-byte (128-bit) authentication tag
+    throw new Error('Invalid authentication tag length');
+  }
+  decipher.setAuthTag(authTagBuffer);
   const decrypted = Buffer.concat([decipher.update(fromBase64Url(bodyPart)), decipher.final()]);
   return decrypted.toString('utf8');
 }

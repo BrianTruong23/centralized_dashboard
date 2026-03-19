@@ -494,7 +494,7 @@ export function DailyNotes({ userId, onAddTask, showHistory = false, projects = 
                 newProjectMap[name] = newProject.id;
             }
         } catch (e) {
-            console.error(`Failed to create project ${name}`, e);
+            console.error("Failed to create project", name, e);
         }
     }
 

@@ -12,7 +12,7 @@ export async function writeDebugLog(fileName: string, event: string, details?: R
 
   try {
     await mkdir(LOG_DIR, { recursive: true });
-    await appendFile(path.join(LOG_DIR, fileName), `${line}\n`, 'utf8');
+    await appendFile(path.join(LOG_DIR, path.basename(fileName)), `${line}\n`, 'utf8');
   } catch {
     // Debug logging must never break production request handling.
   }
