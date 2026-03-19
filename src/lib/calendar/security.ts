@@ -49,7 +49,7 @@ export function decryptSecret(payload: string): string {
   const [ivPart, tagPart, bodyPart] = payload.split('.');
   if (!ivPart || !tagPart || !bodyPart) throw new Error('Invalid encrypted payload');
 
-  const decipher = crypto.createDecipheriv('aes-256-gcm', getEncryptionKey(), fromBase64Url(ivPart));
+  const decipher = crypto.createDecipheriv('aes-256-gcm', getEncryptionKey(), fromBase64Url(ivPart), { authTagLength: 16 });
   decipher.setAuthTag(fromBase64Url(tagPart));
   const decrypted = Buffer.concat([decipher.update(fromBase64Url(bodyPart)), decipher.final()]);
   return decrypted.toString('utf8');
